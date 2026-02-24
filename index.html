@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Clonador de Instancias Moodle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Configuración básica de Tailwind para un look moderno -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-slate-950 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-100">
+
+  <div class="min-h-screen flex items-center justify-center px-4 py-10">
+    <div class="w-full max-w-5xl bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+      <!-- Header -->
+      <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold text-slate-50">Clonador de Instancias Moodle</h1>
+          <p class="text-sm text-slate-400 mt-1">
+            Configura una nueva instancia a partir de una existente (código, moodledata, base de datos, Nginx, Certbot, cron).
+          </p>
+        </div>
+        <div class="hidden md:flex items-center gap-2 text-xs text-slate-400">
+          <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30">
+            1
+          </span>
+          <span>Asistente CLI: <span class="font-mono text-slate-200">moodle-clone</span></span>
+        </div>
+      </div>
+
+      <div class="px-8 py-6 space-y-8">
+        <!-- Grid principal -->
+        <form id="clone-form" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+          <!-- Columna izquierda -->
+          <div class="space-y-6">
+
+            <!-- Origen -->
+            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+  <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
+    1. Origen
+  </h2>
+
+  <div class="space-y-4">
+    <div>
+      <label class="block text-xs font-medium text-slate-300 mb-1">
+        Instancia Moodle Origen
+      </label>
+      <select
+        name="source_instance"
+        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+      >
+        <option value="base_limpia">Base Limpia</option>
+        <option value="digit_institute" selected>Digit Institute</option>
+        <option value="hoppers">Hoppers</option>
+        <option value="refactika">Refactika</option>
+      </select>
+      <p class="mt-1 text-xs text-slate-500">
+        Selecciona la instancia que se usará como origen para la clonación
+        (código, <span class="font-mono">moodledata</span> y configuración).
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2 pt-2">
+      <input
+        id="maintenance_source"
+        type="checkbox"
+        name="maintenance_source"
+        class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
+        checked
+      />
+      <label for="maintenance_source" class="text-xs text-slate-300">
+        Poner instancia origen en modo mantenimiento durante la clonación (recomendado)
+      </label>
+    </div>
+  </div>
+</section>
+
+            <!-- Destino / Nueva instancia -->
+            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+              <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
+                2. Nueva instancia
+              </h2>
+
+              <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">
+                      Key de la instancia (nombre corto)
+                    </label>
+                    <input
+                      type="text"
+                      name="new_key"
+                      value="nuevaplataforma"
+                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                    <p class="mt-1 text-xs text-slate-500">
+                      Se usará para nombres de carpetas y base de datos (<span class="font-mono">moodle_nuevaplataforma</span>).
+                    </p>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">
+                      Dominio nuevo (FQDN)
+                    </label>
+                    <input
+                      type="text"
+                      name="new_domain"
+                      value="nuevaplataforma.awakelab.world"
+                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                    <p class="mt-1 text-xs text-slate-500">
+                      Ejemplo: <span class="font-mono">moodle-dev.awakelab.world</span>.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1">
+                    URL base (<span class="font-mono">$CFG-&gt;wwwroot</span>)
+                  </label>
+                  <input
+                    type="text"
+                    name="new_url"
+                    value="https://nuevaplataforma.awakelab.world"
+                    class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <p class="mt-1 text-xs text-slate-500">
+                    Debe coincidir con el dominio y el esquema (HTTP/HTTPS) reales del sitio.
+                  </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">
+                      Directorio Moodle destino
+                    </label>
+                    <input
+                      type="text"
+                      name="dest_dir"
+                      value="/var/www/moodle_nuevaplataforma"
+                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">
+                      Directorio MoodleData destino
+                    </label>
+                    <input
+                      type="text"
+                      name="dest_data"
+                      value="/var/moodledata_nuevaplataforma"
+                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Columna derecha -->
+          <div class="space-y-6">
+
+            <!-- Base de datos -->
+            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+              <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
+                3. Base de datos (RDS / Aurora MySQL)
+              </h2>
+
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1">
+                    Host RDS
+                  </label>
+                  <input
+                    type="text"
+                    name="db_host"
+                    value="aurora-moodle-cluster.cluster-cr2ks28gi5a2.eu-west-3.rds.amazonaws.com"
+                    class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <p class="mt-1 text-xs text-slate-500">
+                    Endpoint del clúster Aurora / MySQL.
+                  </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">
+                      Usuario BD
+                    </label>
+                    <input
+                      type="text"
+                      name="db_user"
+                      value="admin_moodle"
+                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">
+                      Contraseña BD
+                    </label>
+                    <input
+                      type="password"
+                      name="db_pass"
+                      value=""
+                      placeholder="••••••••"
+                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1">
+                    Nombre BD destino
+                  </label>
+                  <input
+                    type="text"
+                    name="dest_db"
+                    value="moodle_nuevaplataforma"
+                    class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <p class="mt-1 text-xs text-slate-500">
+                    Se creará si no existe (con <span class="font-mono">utf8mb4_unicode_ci</span>).
+                  </p>
+                </div>
+
+                <div class="flex items-center gap-2 pt-1">
+                  <input
+                    id="reuse_db_user"
+                    type="checkbox"
+                    name="reuse_db_user"
+                    class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
+                    checked
+                  />
+                  <label for="reuse_db_user" class="text-xs text-slate-300">
+                    Usar el mismo usuario de BD (<span class="font-mono">admin_moodle</span>) para todas las instancias
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <!-- Opciones avanzadas -->
+            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+              <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
+                4. Opciones de clonación
+              </h2>
+
+              <div class="space-y-3 text-xs text-slate-300">
+                <div class="flex items-start gap-2">
+                  <input
+                    id="opt_replace"
+                    type="checkbox"
+                    name="opt_replace"
+                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
+                    checked
+                  />
+                  <label for="opt_replace">
+                    Ejecutar <span class="font-mono">admin/tool/replace/cli/replace.php</span> para reemplazar la URL antigua
+                    (<span class="font-mono">{$CFG-&gt;wwwroot}</span> de origen) por la nueva.
+                  </label>
+                </div>
+
+                <div class="flex items-start gap-2">
+                  <input
+                    id="opt_purge"
+                    type="checkbox"
+                    name="opt_purge"
+                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
+                    checked
+                  />
+                  <label for="opt_purge">
+                    Ejecutar <span class="font-mono">admin/cli/purge_caches.php</span> en la instancia nueva.
+                  </label>
+                </div>
+
+                <div class="flex items-start gap-2">
+                  <input
+                    id="opt_nginx"
+                    type="checkbox"
+                    name="opt_nginx"
+                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
+                    checked
+                  />
+                  <label for="opt_nginx">
+                    Crear VirtualHost Nginx para el dominio nuevo y recargar Nginx.
+                  </label>
+                </div>
+
+                <div class="flex items-start gap-2">
+                  <input
+                    id="opt_certbot"
+                    type="checkbox"
+                    name="opt_certbot"
+                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
+                    checked
+                  />
+                  <label for="opt_certbot">
+                    Ejecutar <span class="font-mono">certbot --nginx -d &lt;dominio&gt; --redirect</span> para emitir certificado SSL.
+                  </label>
+                </div>
+
+                <div class="flex items-start gap-2">
+                  <input
+                    id="opt_cron"
+                    type="checkbox"
+                    name="opt_cron"
+                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
+                    checked
+                  />
+                  <label for="opt_cron">
+                    Crear entrada de cron para <span class="font-mono">www-data</span>:
+                    <span class="font-mono">*/1 * * * * /usr/bin/php &lt;dir&gt;/admin/cli/cron.php</span>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <!-- Resumen / acciones -->
+            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+              <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-3">
+                5. Acciones
+              </h2>
+
+              <div class="flex flex-wrap items-center gap-3">
+                <button
+                  id="clone-btn"
+                  type="button"
+                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+                >
+                  Clonar instancia Moodle
+                </button>
+
+                <button
+                  id="dry-run-btn"
+                  type="button"
+                  class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                >
+                  Simular (dry-run)
+                </button>
+              </div>
+
+              <div class="mt-4 space-y-3">
+                <div id="ui-status" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
+                  Listo para ejecutar.
+                </div>
+                <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                  <div class="mb-2 flex items-center justify-between text-xs">
+                    <span id="phase-text" class="text-slate-300">Fase: esperando ejecución</span>
+                    <span id="progress-percent" class="font-mono text-slate-200">0%</span>
+                  </div>
+                  <div class="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div id="progress-bar" class="h-full w-0 rounded-full bg-primary-500 transition-all duration-500"></div>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1">Salida del proceso</label>
+                  <pre id="job-output" class="h-56 overflow-auto rounded-lg border border-slate-800 bg-black/60 p-3 text-[11px] leading-5 text-emerald-300 whitespace-pre-wrap">(sin ejecución aún)</pre>
+                </div>
+              </div>
+            </section>
+
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const form = document.getElementById('clone-form');
+      const cloneBtn = document.getElementById('clone-btn');
+      const dryRunBtn = document.getElementById('dry-run-btn');
+      const statusEl = document.getElementById('ui-status');
+      const phaseEl = document.getElementById('phase-text');
+      const progressEl = document.getElementById('progress-percent');
+      const progressBarEl = document.getElementById('progress-bar');
+      const outputEl = document.getElementById('job-output');
+
+      let pollTimer = null;
+      let currentJobId = null;
+      let lastProgress = 0;
+      let lastPhase = 'Fase: esperando ejecución';
+
+      const phaseRules = [
+        { regex: /Starting clone job/i, progress: 5, phase: 'Fase: inicializando proceso' },
+        { regex: /Enabling maintenance mode on source/i, progress: 10, phase: 'Fase: activando mantenimiento en origen' },
+        { regex: /Copying code to /i, progress: 20, phase: 'Fase: copiando código Moodle' },
+        { regex: /Copying moodledata to /i, progress: 35, phase: 'Fase: copiando moodledata' },
+        { regex: /Dumping database /i, progress: 50, phase: 'Fase: exportando BD origen' },
+        { regex: /Sanitizing dump /i, progress: 58, phase: 'Fase: sanitizando dump SQL' },
+        { regex: /Ensuring destination database /i, progress: 66, phase: 'Fase: preparando BD destino' },
+        { regex: /Importing dump into /i, progress: 74, phase: 'Fase: importando BD destino' },
+        { regex: /Patching .*config.php/i, progress: 82, phase: 'Fase: actualizando config.php' },
+        { regex: /Creating Nginx vhost /i, progress: 88, phase: 'Fase: configurando Nginx' },
+        { regex: /Replacing URLs in DB:/i, progress: 92, phase: 'Fase: reemplazando URLs en BD' },
+        { regex: /Purging caches /i, progress: 95, phase: 'Fase: limpiando cachés' },
+        { regex: /Ensuring cron entry /i, progress: 97, phase: 'Fase: configurando cron' },
+        { regex: /Dry-run enabled\./i, progress: 100, phase: 'Fase: simulación completada' },
+        { regex: /Clone completed\./i, progress: 100, phase: 'Fase: clonación completada' }
+      ];
+
+      function setButtons(disabled) {
+        cloneBtn.disabled = disabled;
+        dryRunBtn.disabled = disabled;
+        cloneBtn.classList.toggle('opacity-60', disabled);
+        dryRunBtn.classList.toggle('opacity-60', disabled);
+      }
+
+      function setStatus(message, tone) {
+        statusEl.textContent = message;
+        statusEl.classList.remove('text-amber-300', 'text-red-300', 'text-emerald-300', 'border-amber-600/40', 'border-red-600/40', 'border-emerald-600/40');
+
+        if (tone === 'running') {
+          statusEl.classList.add('text-amber-300', 'border-amber-600/40');
+        } else if (tone === 'error') {
+          statusEl.classList.add('text-red-300', 'border-red-600/40');
+        } else if (tone === 'success') {
+          statusEl.classList.add('text-emerald-300', 'border-emerald-600/40');
+        }
+      }
+
+      function setProgress(progress, phase, tone) {
+        const safeProgress = Math.max(0, Math.min(100, Math.round(progress)));
+        lastProgress = safeProgress;
+        lastPhase = phase;
+        progressEl.textContent = `${safeProgress}%`;
+        phaseEl.textContent = phase;
+        progressBarEl.style.width = `${safeProgress}%`;
+
+        progressBarEl.classList.remove('bg-primary-500', 'bg-emerald-500', 'bg-red-500');
+        if (tone === 'success') {
+          progressBarEl.classList.add('bg-emerald-500');
+        } else if (tone === 'error') {
+          progressBarEl.classList.add('bg-red-500');
+        } else {
+          progressBarEl.classList.add('bg-primary-500');
+        }
+      }
+
+      function inferProgress(output, status) {
+        let progress = lastProgress;
+        let phase = lastPhase;
+
+        if (status === 'queued') {
+          progress = Math.max(progress, 5);
+          phase = 'Fase: encolado';
+        } else if (status === 'running') {
+          progress = Math.max(progress, 8);
+          phase = phase || 'Fase: en ejecución';
+        }
+
+        for (const rule of phaseRules) {
+          if (rule.regex.test(output)) {
+            if (rule.progress >= progress) {
+              progress = rule.progress;
+              phase = rule.phase;
+            }
+          }
+        }
+
+        if (status === 'success') {
+          progress = 100;
+          if (!phase || phase === 'Fase: en ejecución') {
+            phase = 'Fase: finalizado correctamente';
+          }
+        }
+
+        if (status === 'failed') {
+          progress = Math.min(progress || 50, 99);
+          if (!phase || phase === 'Fase: en ejecución') {
+            phase = 'Fase: error durante el proceso';
+          }
+        }
+
+        return { progress, phase };
+      }
+
+      function buildPayload(dryRun) {
+        const fd = new FormData(form);
+        return {
+          source_instance: String(fd.get('source_instance') || '').trim(),
+          maintenance_source: fd.get('maintenance_source') === 'on',
+          new_key: String(fd.get('new_key') || '').trim(),
+          new_domain: String(fd.get('new_domain') || '').trim(),
+          new_url: String(fd.get('new_url') || '').trim(),
+          dest_dir: String(fd.get('dest_dir') || '').trim(),
+          dest_data: String(fd.get('dest_data') || '').trim(),
+          db_host: String(fd.get('db_host') || '').trim(),
+          db_user: String(fd.get('db_user') || '').trim(),
+          db_pass: String(fd.get('db_pass') || ''),
+          dest_db: String(fd.get('dest_db') || '').trim(),
+          opt_replace: fd.get('opt_replace') === 'on',
+          opt_purge: fd.get('opt_purge') === 'on',
+          opt_nginx: fd.get('opt_nginx') === 'on',
+          opt_certbot: fd.get('opt_certbot') === 'on',
+          opt_cron: fd.get('opt_cron') === 'on',
+          dry_run: dryRun
+        };
+      }
+
+      async function pollJob(jobId) {
+        const res = await fetch(`/api/jobs/${jobId}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Error consultando el job.');
+        }
+
+        const output = data.output || '(sin salida aún)';
+        outputEl.textContent = output;
+        outputEl.scrollTop = outputEl.scrollHeight;
+
+        const inferred = inferProgress(output, data.status);
+
+        if (data.status === 'queued' || data.status === 'running') {
+          setStatus(`Job ${jobId} en ejecución...`, 'running');
+          setProgress(inferred.progress, inferred.phase, 'running');
+          return;
+        }
+
+        clearInterval(pollTimer);
+        pollTimer = null;
+        setButtons(false);
+
+        if (data.status === 'success') {
+          setStatus(`Job ${jobId} finalizado correctamente.`, 'success');
+          setProgress(100, inferred.phase || 'Fase: finalizado correctamente', 'success');
+        } else {
+          setStatus(`Job ${jobId} terminó con error (exit ${data.exit_code ?? 'N/A'}).`, 'error');
+          setProgress(inferred.progress, inferred.phase, 'error');
+        }
+      }
+
+      async function runClone(dryRun) {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+
+        currentJobId = null;
+        outputEl.textContent = '';
+        setButtons(true);
+        setStatus(dryRun ? 'Iniciando simulación...' : 'Iniciando clonación...', 'running');
+        setProgress(2, 'Fase: validando parámetros', 'running');
+
+        try {
+          const payload = buildPayload(dryRun);
+          const res = await fetch('/api/clone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            if (res.status === 409 && data.running_job_id) {
+              throw new Error(`Ya hay otro proceso en ejecución (job ${data.running_job_id}).`);
+            }
+            throw new Error(data.error || 'Error al enviar el formulario.');
+          }
+
+          currentJobId = data.job_id;
+          setStatus(`Job ${currentJobId} encolado.`, 'running');
+          setProgress(5, 'Fase: encolado', 'running');
+
+          await pollJob(currentJobId);
+          pollTimer = setInterval(() => {
+            pollJob(currentJobId).catch((err) => {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              setButtons(false);
+              setStatus(`Error consultando estado: ${err.message}`, 'error');
+              setProgress(lastProgress || 50, 'Fase: error consultando estado', 'error');
+            });
+          }, 1500);
+        } catch (err) {
+          setButtons(false);
+          setStatus(err.message || 'Error inesperado.', 'error');
+          setProgress(lastProgress || 5, 'Fase: fallo al iniciar', 'error');
+          if (!outputEl.textContent.trim()) {
+            outputEl.textContent = '(sin salida: la ejecución no llegó a iniciar)';
+          }
+        }
+      }
+
+      cloneBtn.addEventListener('click', function () {
+        runClone(false);
+      });
+
+      dryRunBtn.addEventListener('click', function () {
+        runClone(true);
+      });
+
+      const newKeyInput = form.querySelector('input[name="new_key"]');
+      const domainInput = form.querySelector('input[name="new_domain"]');
+      const urlInput = form.querySelector('input[name="new_url"]');
+      const dirInput = form.querySelector('input[name="dest_dir"]');
+      const dataInput = form.querySelector('input[name="dest_data"]');
+      const dbInput = form.querySelector('input[name="dest_db"]');
+
+      function suggestFromKey() {
+        const key = (newKeyInput.value || '').trim();
+        if (!key) return;
+        domainInput.value = `${key}.awakelab.world`;
+        urlInput.value = `https://${key}.awakelab.world`;
+        dirInput.value = `/var/www/moodle_${key}`;
+        dataInput.value = `/var/moodledata_${key}`;
+        dbInput.value = `moodle_${key}`;
+      }
+
+      newKeyInput.addEventListener('blur', suggestFromKey);
+    })();
+  </script>
+
+
+</body>
+</html>
