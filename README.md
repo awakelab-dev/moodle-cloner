@@ -28,3 +28,7 @@ Por defecto propone:
 
 ## Modo WEB
 - El archivo index.html puede ser desplegado en un webserver para correr el script `moodle-clone-web.sh` 
+- Login protegido por sesión:
+  - Configura credenciales fijas en `.env` con `APP_LOGIN_USER` y `APP_LOGIN_PASSWORD`
+  - Define `APP_SECRET_KEY` para firmar la cookie de sesión
+  - Sin sesión activa, la UI principal redirige a `/login`

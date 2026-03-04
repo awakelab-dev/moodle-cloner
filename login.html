@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aulacloner | Iniciar sesión</title>
+  <style>
+    :root {
+      --awk-primary: #294560;
+      --awk-primary-hover: #2f455e;
+      --awk-secondary: #35b3ba;
+      --awk-white: #ffffff;
+      --awk-bg-soft: #f0f2f2;
+      --awk-border: #999999;
+      --awk-muted: rgba(175, 175, 175, 0.8);
+      --panel-bg: #ffffff;
+      --text-main: #294560;
+      --input-border: #999999;
+      --danger: #c62828;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      background-color: var(--awk-bg-soft);
+      width: 100%;
+      min-height: 100vh;
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--text-main);
+      overflow-x: hidden;
+    }
+
+    body {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: url("./assets/login-background.png") center center / 100% 100% no-repeat;
+    }
+
+    body>* {
+      position: relative;
+      z-index: 1;
+    }
+
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--panel-bg);
+      border-radius: 8px;
+      border: 0.5pt solid var(--awk-border);
+      box-shadow:
+        0 20px 56px rgba(0, 0, 0, 0.32),
+        inset 0 0 0 0.5pt rgba(153, 153, 153, 0.35);
+      backdrop-filter: blur(3px);
+      padding: 28px 28px 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .brand img {
+      width: 210px;
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--awk-primary);
+    }
+
+    .field input {
+      width: 100%;
+      border: 0.5pt solid var(--input-border);
+      border-radius: 8px;
+      padding: 11px 12px;
+      font-size: 14px;
+      color: var(--awk-primary);
+      background-color: var(--awk-white);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .field input::placeholder {
+      color: var(--awk-muted);
+    }
+
+    .field input:focus {
+      outline: none;
+      border-color: var(--awk-secondary);
+      box-shadow: 0 0 0 2px rgba(53, 179, 186, 0.25);
+    }
+
+    .submit-btn {
+      width: 100%;
+      border: 0.5pt solid var(--awk-secondary);
+      border-radius: 8px;
+      margin-top: 10px;
+      padding: 11px 14px;
+      background: var(--awk-secondary);
+      color: var(--awk-white);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.02s ease;
+    }
+
+    .submit-btn:hover {
+      background: var(--awk-primary-hover);
+      border-color: var(--awk-primary-hover);
+    }
+
+    .submit-btn:active {
+      transform: translateY(1px);
+    }
+
+    .submit-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    .error-message {
+      min-height: 18px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--danger);
+    }
+
+    .card-footer {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 0.5pt solid var(--awk-border);
+      text-align: center;
+      font-size: 12px;
+      color: var(--awk-primary);
+    }
+
+    .powered-by {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 12px;
+      color: rgba(255, 255, 255, 0.85);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+      font-size: 15px;
+      line-height: 1;
+      user-select: none;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .powered-by img {
+      height: 62px;
+      width: auto;
+      filter: brightness(0) invert(1);
+      margin-bottom: 1px;
+    }
+
+    .powered-by small {
+      display: block;
+      font-size: 12px;
+      margin-top: 2px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+  </style>
+</head>
+
+<body>
+
+  <main class="login-card" aria-label="Formulario de inicio de sesión">
+    <div class="brand">
+      <img src="./assets/aulacloner-logo-login.svg" alt="Aulacloner" />
+    </div>
+
+    <form id="login-form" autocomplete="off">
+      <div class="field">
+        <label for="username">Nombre Usuario</label>
+        <input id="username" name="username" type="text" placeholder="User name" required />
+      </div>
+
+      <div class="field">
+        <label for="password">Contraseña</label>
+        <input id="password" name="password" type="password" placeholder="Password" required />
+      </div>
+
+      <button id="login-btn" class="submit-btn" type="submit">Iniciar sesión</button>
+      <div id="error-message" class="error-message" aria-live="polite"></div>
+    </form>
+
+    <footer class="card-footer">Contacta a tu administrador para acceder</footer>
+  </main>
+
+  <div class="powered-by">
+    <img src="./assets/awakelab-logo-v2.svg" alt="Awakelab Logo" />
+    <small>Powered by Awakelab.world</small>
+  </div>
+
+  <script>
+    (function () {
+      const form = document.getElementById("login-form");
+      const loginBtn = document.getElementById("login-btn");
+      const errorMessage = document.getElementById("error-message");
+
+      async function checkActiveSession() {
+        try {
+          const res = await fetch("./api/session", { cache: "no-store" });
+          if (res.ok) {
+            window.location.replace("./");
+          }
+        } catch (err) {
+          // Ignorar y permitir login manual.
+        }
+      }
+
+      function setLoading(isLoading) {
+        loginBtn.disabled = isLoading;
+        loginBtn.textContent = isLoading ? "Validando..." : "Iniciar sesión";
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        errorMessage.textContent = "";
+        setLoading(true);
+
+        const payload = {
+          username: String(form.username.value || "").trim(),
+          password: String(form.password.value || "")
+        };
+
+        try {
+          const res = await fetch("./api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json().catch(function () { return {}; });
+
+          if (!res.ok) {
+            errorMessage.textContent = data.error || "No fue posible iniciar sesión.";
+            setLoading(false);
+            return;
+          }
+
+          window.location.replace("./");
+        } catch (err) {
+          errorMessage.textContent = "Error de conexión con el servidor.";
+          setLoading(false);
+        }
+      });
+
+      checkActiveSession();
+    })();
+  </script>
+</body>
+
+</html>
