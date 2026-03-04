@@ -33,5 +33,22 @@
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
     "typescript-eslint": "^8.56.1"
-  }
+  },
+  "name": "boton-sepe",
+  "version": "1.0.0",
+  "main": "descargar_sepe.js",
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/awakelab-dev/moodle-cloner.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/awakelab-dev/moodle-cloner/issues"
+  },
+  "homepage": "https://github.com/awakelab-dev/moodle-cloner#readme",
+  "description": ""
 }
