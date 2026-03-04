@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procesador Archivos SEPE</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 2rem;
+        }
+
+        #btn-procesar {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        #btn-procesar:hover:not(:disabled) {
+            background-color: #2980b9;
+        }
+
+        #btn-procesar:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        #btn-procesar:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+
+        #tabla-contenedor {
+            margin-top: 2rem;
+            width: 100%;
+            overflow-x: auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th,
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+            white-space: nowrap;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background-color: #f1f5f9;
+        }
+
+        .mensaje-estado {
+            margin-top: 1rem;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Gestor de Descargas SEPE</h1>
+
+    <button id="btn-procesar">Descargar y Procesar</button>
+    <div id="estado" class="mensaje-estado"></div>
+
+    <div id="tabla-contenedor"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnProcesar = document.getElementById('btn-procesar');
+            const tablaContenedor = document.getElementById('tabla-contenedor');
+            const mensajeEstado = document.getElementById('estado');
+
+            // Cargar datos al iniiciar
+            loadDataFromDB();
+
+            btnProcesar.addEventListener('click', async () => {
+                // 1. Cambiar estado visual del botón antes del fetch
+                const textoOriginal = btnProcesar.innerText;
+                btnProcesar.innerText = 'Procesando...';
+                btnProcesar.disabled = true;
+                mensajeEstado.innerText = 'Iniciando navegador headless. Esto puede tardar más de un minuto debido a los tiempos de carga del SEPE.';
+                tablaContenedor.innerHTML = ''; // Limpiar tabla anterior si la hay
+
+                try {
+                    // 2. Hacer la solicitud al backend
+                    const response = await fetch('/api/procesar-sepe');
+                    const result = await response.json();
+
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Error desconocido del servidor');
+                    }
+
+                    mensajeEstado.innerText = '¡Proceso completado! Se han rellenado los registros en la Base de Datos. Mostrando los últimos registros (extraídos de MongoDB):';
+                    mensajeEstado.style.color = '#27ae60';
+
+                    // 3. Renderizar la tabla consultando a Mongo
+                    await loadDataFromDB();
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    mensajeEstado.innerText = `Ocurrió un error: ${error.message}`;
+                    mensajeEstado.style.color = '#e74c3c';
+                } finally {
+                    // 4. Restaurar el estado del botón
+                    btnProcesar.innerText = textoOriginal;
+                    btnProcesar.disabled = false;
+                }
+            });
+
+            async function loadDataFromDB() {
+                try {
+                    const response = await fetch('/api/registros');
+                    const result = await response.json();
+
+                    if (result.success && result.data.length > 0) {
+                        renderTabla(result.data);
+                    } else if (result.success && result.data.length === 0) {
+                        tablaContenedor.innerHTML = '<p style="padding: 20px; text-align: center;">No hay datos guardados aún en la base de datos.</p>';
+                    }
+                } catch (e) {
+                    console.error('Error obteniendo registros de mongo', e);
+                }
+            }
+
+            function renderTabla(datos) {
+                if (!datos || datos.length === 0) {
+                    tablaContenedor.innerHTML = '<p style="padding: 20px; text-align: center;">No hay datos para mostrar.</p>';
+                    return;
+                }
+
+                // Generamos tabla genérica basada en las claves del primer objeto JSON
+                const cabeceras = Object.keys(datos[0]);
+
+                const tabla = document.createElement('table');
+
+                // --- THEAD ---
+                const thead = document.createElement('thead');
+                const rowHead = document.createElement('tr');
+                cabeceras.forEach(cabecera => {
+                    const th = document.createElement('th');
+                    th.innerText = cabecera;
+                    rowHead.appendChild(th);
+                });
+                thead.appendChild(rowHead);
+                tabla.appendChild(thead);
+
+                // --- TBODY ---
+                const tbody = document.createElement('tbody');
+                datos.forEach(filaData => {
+                    const tr = document.createElement('tr');
+
+                    cabeceras.forEach(cabecera => {
+                        const td = document.createElement('td');
+                        td.innerText = filaData[cabecera] !== undefined ? filaData[cabecera] : '';
+                        tr.appendChild(td);
+                    });
+
+                    tbody.appendChild(tr);
+                });
+                tabla.appendChild(tbody);
+
+                tablaContenedor.appendChild(tabla);
+            }
+        });
+    </script>
+</body>
+
+</html>

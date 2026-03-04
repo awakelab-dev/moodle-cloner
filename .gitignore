@@ -1,0 +1,7 @@
+node_modules/
+dist/
+descargas/
+.env
+error_log.txt
+*.xlsx
+.DS_Store
