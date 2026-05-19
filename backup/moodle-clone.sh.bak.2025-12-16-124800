@@ -1,0 +1,302 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Moodle Cloner - clones a Moodle instance on the same server with MySQL (RDS), Nginx and Certbot
+# - Copies code and moodledata
+# - Dumps/imports DB with sanitization for Aurora/MySQL (removes GTID_PURGED and SQL_LOG_BIN statements)
+# - Updates config.php without exposing DB password on command line (reads from env)
+# - Creates/updates Nginx vhost, obtains Let's Encrypt certificate (optional)
+# - Runs admin/tool/replace and purge_caches
+# - Adds cron entry for the new instance
+
+# -------- Utilities --------
+log()  { printf "[INFO] %s\n" "$*"; }
+warn() { printf "[WARN] %s\n" "$*"; }
+err()  { printf "[ERROR] %s\n" "$*"; }
+
+confirm() {
+  local prompt="${1:-Are you sure?}"; local default="${2:-Y}"; local yn
+  if [[ "$default" =~ ^[Yy]$ ]]; then
+    read -r -p "$prompt [Y/n]: " yn || true
+    [[ -z "${yn:-}" || "$yn" =~ ^[Yy]$ ]]
+  else
+    read -r -p "$prompt [y/N]: " yn || true
+    [[ "${yn:-}" =~ ^[Yy]$ ]]
+  fi
+}
+
+prompt_def() {
+  local varname="$1"; local message="$2"; local def="$3"; local val
+  read -r -p "$message [$def]: " val || true
+  if [[ -z "${val:-}" ]]; then val="$def"; fi
+  printf -v "$varname" '%s' "$val"
+}
+
+require_cmd() {
+  local missing=()
+  for c in "$@"; do command -v "$c" >/dev/null 2>&1 || missing+=("$c"); done
+  if ((${#missing[@]})); then
+    err "Missing required commands: ${missing[*]}"
+    err "Install them and re-run."
+    exit 1
+  fi
+}
+
+cleanup() {
+  if [[ "${SRC_MAINT_ENABLED:-0}" == "1" && "${REVERT_SRC_MAINT:-0}" == "1" ]]; then
+    log "Disabling maintenance mode on source (cleanup)…"
+    sudo -u www-data /usr/bin/php "$SRC_DIR/admin/cli/maintenance.php" --disable || warn "Could not disable maintenance on source"
+  fi
+}
+trap cleanup EXIT
+
+# -------- Defaults --------
+SRC_DIR_DEF="/var/www/moodle_digitinstitute"
+SRC_DATA_DEF="/var/moodledata_digitinstitute"
+SRC_VHOST_DEF="/etc/nginx/sites-available/moodle_digitinstitute"
+PHP_CLI="/usr/bin/php"
+
+# -------- Pre-flight --------
+require_cmd rsync sed grep awk mysql mysqldump "$PHP_CLI" nginx
+if command -v certbot >/dev/null 2>&1; then HAS_CERTBOT=1; else HAS_CERTBOT=0; fi
+
+# -------- Gather inputs --------
+log "Collecting inputs…"
+prompt_def SRC_DIR   "Source Moodle dir"   "$SRC_DIR_DEF"
+prompt_def SRC_DATA  "Source MoodleData"   "$SRC_DATA_DEF"
+prompt_def SRC_VHOST "Source Nginx vhost"  "$SRC_VHOST_DEF"
+
+# New instance key and domain (generic defaults)
+prompt_def NEW_KEY    "New instance key (used for dirs/db), e.g. nuevaplataforma" "nuevaplataforma"
+NEW_DOMAIN_DEF="${NEW_KEY}.awakelab.world"
+prompt_def NEW_DOMAIN "New domain (FQDN)" "$NEW_DOMAIN_DEF"
+
+DEST_DIR="/var/www/moodle_${NEW_KEY}"
+DEST_DATA="/var/moodledata_${NEW_KEY}"
+DEST_DB="moodle_${NEW_KEY}"
+NEW_URL_DEF="https://${NEW_DOMAIN}"
+prompt_def NEW_URL "New base URL (wwwroot)" "$NEW_URL_DEF"
+
+# Parse minimal settings from source config.php without including it
+CONFIG_FILE="$SRC_DIR/config.php"
+if [[ ! -f "$CONFIG_FILE" ]]; then err "config.php not found at $CONFIG_FILE"; exit 1; fi
+
+parse_cfg() {
+  local key="$1"
+  awk -v k="$key" '
+    $0 ~ "\\$CFG->"k"\\s*=\\s*\x27" {
+      match($0, /\x27([^\x27]*)\x27/ , m); if (m[1] != "") { print m[1]; exit }
+    }
+  ' "$CONFIG_FILE"
+}
+
+SRC_DBHOST="$(parse_cfg dbhost)"
+SRC_DBNAME="$(parse_cfg dbname)"
+SRC_DBUSER="$(parse_cfg dbuser)"
+SRC_WWWROOT="$(parse_cfg wwwroot)"
+
+# Recommend maintenance on source
+if confirm "Enable maintenance mode on source ($SRC_DIR)?" Y; then
+  log "Enabling maintenance mode on source…"
+  sudo -u www-data "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --enable
+  SRC_MAINT_ENABLED=1
+else
+  SRC_MAINT_ENABLED=0
+fi
+
+# DB connection inputs (default from source)
+DB_HOST_DEF="${SRC_DBHOST:-localhost}"
+DB_USER_DEF="${SRC_DBUSER:-admin_moodle}"
+prompt_def DB_HOST "RDS host" "$DB_HOST_DEF"
+prompt_def DB_USER "DB user for dump/import and (try) create DB" "$DB_USER_DEF"
+
+# Read DB password without echo; store in env; do not pass on command line
+read -rs -p "Password for DB user $DB_USER: " DB_PASS; echo
+export DB_PASS
+
+# Confirm summary
+cat <<SUM
+--- Summary ---
+Source:           $SRC_DIR
+Source data:      $SRC_DATA
+Source vhost:     $SRC_VHOST
+Source wwwroot:   ${SRC_WWWROOT:-unknown}
+New key:          $NEW_KEY
+New domain:       $NEW_DOMAIN
+New URL:          $NEW_URL
+Dest dir:         $DEST_DIR
+Dest moodledata:  $DEST_DATA
+Dest database:    $DEST_DB
+RDS host:         $DB_HOST
+DB user:          $DB_USER
+Maintenance on source now: $SRC_MAINT_ENABLED
+----------------
+SUM
+
+confirm "Proceed with cloning?" Y || { warn "Aborted by user"; exit 1; }
+
+# -------- Copy code --------
+log "Copying code to $DEST_DIR …"
+sudo rsync -a "$SRC_DIR/" "$DEST_DIR/"
+sudo chown -R www-data:www-data "$DEST_DIR"
+
+# -------- Copy moodledata --------
+log "Copying moodledata to $DEST_DATA … (may take time)"
+sudo mkdir -p "$DEST_DATA"
+sudo rsync -a "$SRC_DATA/" "$DEST_DATA/"
+sudo chown -R www-data:www-data "$DEST_DATA"
+sudo find "$DEST_DATA" -type d -exec chmod 770 {} \;
+sudo find "$DEST_DATA" -type f -exec chmod 660 {} \;
+
+# -------- Database dump (sanitized) --------
+TMP_DIR="$(mktemp -d)"
+DUMP_ORIG="$TMP_DIR/${SRC_DBNAME}.sql"
+DUMP_SAN="$TMP_DIR/${SRC_DBNAME}.sanitized.sql"
+
+log "Dumping database $SRC_DBNAME from $DB_HOST …"
+(
+  export MYSQL_PWD="$DB_PASS"
+  mysqldump \
+    -h "$DB_HOST" -u "$DB_USER" \
+    --single-transaction --quick --set-gtid-purged=OFF \
+    "$SRC_DBNAME" > "$DUMP_ORIG"
+)
+
+log "Sanitizing dump to remove privileged statements…"
+sed '/SQL_LOG_BIN/d; /GTID_PURGED/d' "$DUMP_ORIG" > "$DUMP_SAN"
+
+# -------- Create destination DB (if possible) --------
+log "Ensuring destination database $DEST_DB exists…"
+set +e
+(
+  export MYSQL_PWD="$DB_PASS"
+  mysql -h "$DB_HOST" -u "$DB_USER" -e "CREATE DATABASE IF NOT EXISTS ${DEST_DB} DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+)
+CREATE_RC=$?
+set -e
+if [[ $CREATE_RC -ne 0 ]]; then
+  warn "Could not create database with user $DB_USER. You can create it manually and rerun import."
+  read -r -p "Press Enter to continue if DB already exists, or Ctrl+C to abort…" _
+fi
+
+# -------- Import --------
+log "Importing dump into $DEST_DB …"
+(
+  export MYSQL_PWD="$DB_PASS"
+  mysql -h "$DB_HOST" -u "$DB_USER" "$DEST_DB" < "$DUMP_SAN"
+)
+
+# -------- Patch config.php via robust helper script --------
+log "Patching $DEST_DIR/config.php …"
+PATCH_PHP="$TMP_DIR/config_patch.php"
+cat > "$PATCH_PHP" <<'PHP'
+<?php
+$conf = $argv[1] ?? null;
+$orig = $argv[2] ?? null;
+if (!$conf) { fwrite(STDERR, "Usage: php config_patch.php <dest_config.php> [source_config.php]\n"); exit(2); }
+
+$keys = ['wwwroot','dataroot','dirroot','dbhost','dbname','dbuser','dbpass'];
+$map = [];
+foreach ($keys as $k) { $map[$k] = getenv(strtoupper($k)) ?: ''; }
+
+if ($map['dbpass'] === '' && $orig && is_readable($orig)) {
+    $s = file_get_contents($orig);
+    if ($s !== false && preg_match("/\\$CFG->dbpass\\s*=\\s*'([^']*)';/m", $s, $m)) {
+        $map['dbpass'] = $m[1];
+    }
+}
+
+$c = file_get_contents($conf);
+if ($c === false) { fwrite(STDERR, "Cannot read $conf\n"); exit(1); }
+
+foreach ($map as $k => $v) {
+    if ($v === '') continue;
+    $pattern = "~(\\$CFG->" . preg_quote($k, "~") . "\\s*=\\s*)'[^'\\\\]*';~m";
+    $replace = '$1\''.addslashes($v).'\';';
+    $count = 0;
+    $c2 = preg_replace($pattern, $replace, $c, 1, $count);
+    if ($count === 0) {
+        $ins = "\n$"."CFG->$k = '".addslashes($v)."';\n";
+        $icount = 0;
+        $c2 = preg_replace('~\n\s*require_once\(.*lib\/setup\\.php.*\);~m', $ins.'$0', $c, 1, $icount);
+        if ($icount === 0) { $c2 = $c . $ins; }
+    }
+    $c = $c2;
+}
+
+if (file_put_contents($conf, $c) === false) { fwrite(STDERR, "Cannot write $conf\n"); exit(1);} 
+PHP
+
+sudo env NEW_URL="$NEW_URL" DEST_DATA="$DEST_DATA" DEST_DIR="$DEST_DIR" DB_HOST="$DB_HOST" DEST_DB="$DEST_DB" DB_USER="$DB_USER" DB_PASS="$DB_PASS" \
+  "$PHP_CLI" "$PATCH_PHP" "$DEST_DIR/config.php" "$SRC_DIR/config.php"
+
+# -------- Nginx vhost --------
+NEW_VHOST="/etc/nginx/sites-available/${NEW_DOMAIN}"
+log "Creating Nginx vhost at $NEW_VHOST …"
+sudo cp "$SRC_VHOST" "$NEW_VHOST"
+sudo sed -i "s/server_name\s\+.*;/server_name ${NEW_DOMAIN};/" "$NEW_VHOST" || true
+sudo sed -i "s#${SRC_DIR}#${DEST_DIR}#g" "$NEW_VHOST" || true
+if grep -qE "^\s*root\s+" "$NEW_VHOST"; then
+  sudo sed -i "s#^\s*root\s\+.*;#    root ${DEST_DIR};#" "$NEW_VHOST" || true
+fi
+
+sudo ln -sfn "$NEW_VHOST" "/etc/nginx/sites-enabled/${NEW_DOMAIN}"
+sudo nginx -t
+sudo systemctl reload nginx
+
+# -------- Certbot (optional) --------
+if [[ "$HAS_CERTBOT" == "1" ]] && confirm "Obtain/renew Let's Encrypt certificate for ${NEW_DOMAIN} now?" Y; then
+  if confirm "Use HTTP->HTTPS redirect?" Y; then REDIR="--redirect"; else REDIR=""; fi
+  read -r -p "Contact email for Let's Encrypt (used for expiry notices): " LE_EMAIL || true
+  if [[ -n "${LE_EMAIL:-}" ]]; then EMAIL_ARGS=("-m" "$LE_EMAIL" "--agree-tos"); else EMAIL_ARGS=("--register-unsafely-without-email"); fi
+  sudo certbot --nginx -d "$NEW_DOMAIN" ${REDIR} "${EMAIL_ARGS[@]}" --non-interactive || warn "Certbot failed; you can run it later."
+else
+  warn "Skipping Certbot (not installed or user chose No)."
+fi
+
+# -------- Replace URLs in DB --------
+if [[ -n "${SRC_WWWROOT:-}" && "$SRC_WWWROOT" != "$NEW_URL" ]]; then
+  log "Replacing URLs in DB: $SRC_WWWROOT -> $NEW_URL …"
+  pushd "$DEST_DIR" >/dev/null
+  sudo -u www-data "$PHP_CLI" admin/tool/replace/cli/replace.php --search="$SRC_WWWROOT" --replace="$NEW_URL"
+  popd >/dev/null
+else
+  warn "Source wwwroot unknown or equal to NEW_URL; skipping replace."
+fi
+
+# -------- Purge caches --------
+log "Purging caches …"
+pushd "$DEST_DIR" >/dev/null
+sudo -u www-data "$PHP_CLI" admin/cli/purge_caches.php || true
+popd >/dev/null
+
+# -------- Cron entry --------
+log "Ensuring cron entry for www-data …"
+CRON_LINE="*/1 * * * * /usr/bin/php ${DEST_DIR}/admin/cli/cron.php >/dev/null 2>&1"
+set +e
+if sudo crontab -u www-data -l 2>/dev/null | grep -Fq "${DEST_DIR}/admin/cli/cron.php"; then
+  log "Cron entry already present for this instance."
+else
+  ( sudo crontab -u www-data -l 2>/dev/null; echo "$CRON_LINE" ) | sudo crontab -u www-data -
+  log "Cron entry added."
+fi
+set -e
+
+# -------- Maintenance choices at the end --------
+if confirm "Disable maintenance mode on NEW instance now?" Y; then
+  sudo -u www-data "$PHP_CLI" "$DEST_DIR/admin/cli/maintenance.php" --disable || true
+fi
+if [[ "$SRC_MAINT_ENABLED" == "1" ]] && confirm "Disable maintenance mode on SOURCE instance now?" Y; then
+  REVERT_SRC_MAINT=1
+else
+  REVERT_SRC_MAINT=0
+fi
+
+log "Clone completed. New site should be available at: $NEW_URL"
+log "Nginx vhost: $NEW_VHOST"
+log "Moodle code: $DEST_DIR"
+log "Moodledata:  $DEST_DATA"
+log "Database:    $DEST_DB on $DB_HOST (user $DB_USER)"
+
+# Clean temp
+rm -rf "$TMP_DIR"
