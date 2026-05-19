@@ -102,6 +102,38 @@
               </h2>
 
               <div class="space-y-4">
+                <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Destino de instalación
+                      </label>
+                      <select
+                        name="deploy_target"
+                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="remote" selected>Servidor remoto (SSH)</option>
+                        <option value="local">Servidor local</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Host remoto (IP)
+                      </label>
+                      <input
+                        type="text"
+                        name="remote_host"
+                        value="51.44.30.62"
+                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                  <p class="text-xs text-slate-500">
+                    Para destino remoto se usa siempre la llave SSH <span class="font-mono">~/.ssh/id_ed25519</span>.
+                  </p>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label class="block text-xs font-medium text-slate-300 mb-1">
@@ -157,7 +189,7 @@
                     <input
                       type="text"
                       name="dest_dir"
-                      value="/var/www/moodle_nuevaplataforma"
+                      value="/var/www/html/moodle/nuevaplataforma"
                       class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
                   </div>
@@ -169,7 +201,7 @@
                     <input
                       type="text"
                       name="dest_data"
-                      value="/var/moodledata_nuevaplataforma"
+                      value="/var/www/data/moodle/nuevaplataforma"
                       class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
                   </div>
@@ -184,78 +216,130 @@
             <!-- Base de datos -->
             <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
               <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
-                3. Base de datos (RDS / Aurora MySQL)
+                3. Base de datos (origen y destino)
               </h2>
 
-              <div class="space-y-4">
-                <div>
-                  <label class="block text-xs font-medium text-slate-300 mb-1">
-                    Host RDS
-                  </label>
-                  <input
-                    type="text"
-                    name="db_host"
-                    value="aurora-moodle-cluster.cluster-cr2ks28gi5a2.eu-west-3.rds.amazonaws.com"
-                    class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                  <p class="mt-1 text-xs text-slate-500">
-                    Endpoint del clúster Aurora / MySQL.
+              <div class="space-y-5">
+                <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 space-y-4">
+                  <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Conexión BD origen (opcional)</h3>
+                  <p class="text-xs text-slate-500">
+                    Si host/usuario/nombre se dejan vacíos, se leen desde <span class="font-mono">config.php</span> del Moodle origen.
+                    Si la contraseña queda vacía, se reutiliza la contraseña de BD destino.
                   </p>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Host BD origen
+                      </label>
+                      <input
+                        type="text"
+                        name="source_db_host"
+                        value=""
+                        placeholder="(opcional)"
+                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Usuario BD origen
+                      </label>
+                      <input
+                        type="text"
+                        name="source_db_user"
+                        value=""
+                        placeholder="(opcional)"
+                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Contraseña BD origen
+                      </label>
+                      <input
+                        type="password"
+                        name="source_db_pass"
+                        value=""
+                        placeholder="(opcional)"
+                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Nombre BD origen
+                      </label>
+                      <input
+                        type="text"
+                        name="source_db_name"
+                        value=""
+                        placeholder="(opcional)"
+                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 space-y-4">
+                  <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Conexión BD destino (obligatoria)</h3>
+
                   <div>
                     <label class="block text-xs font-medium text-slate-300 mb-1">
-                      Usuario BD
+                      Host BD destino
                     </label>
                     <input
                       type="text"
-                      name="db_user"
-                      value="admin_moodle"
+                      name="target_db_host"
+                      value="aurora-moodle-cluster.cluster-cr2ks28gi5a2.eu-west-3.rds.amazonaws.com"
                       class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Usuario BD destino
+                      </label>
+                      <input
+                        type="text"
+                        name="target_db_user"
+                        value="admin_moodle"
+                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Contraseña BD destino
+                      </label>
+                      <input
+                        type="password"
+                        name="target_db_pass"
+                        value=""
+                        placeholder="••••••••"
+                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
 
                   <div>
                     <label class="block text-xs font-medium text-slate-300 mb-1">
-                      Contraseña BD
+                      Nombre BD destino
                     </label>
                     <input
-                      type="password"
-                      name="db_pass"
-                      value=""
-                      placeholder="••••••••"
+                      type="text"
+                      name="dest_db"
+                      value="moodle_nuevaplataforma"
                       class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
+                    <p class="mt-1 text-xs text-slate-500">
+                      Se creará si no existe (con <span class="font-mono">utf8mb4_unicode_ci</span>).
+                    </p>
                   </div>
-                </div>
-
-                <div>
-                  <label class="block text-xs font-medium text-slate-300 mb-1">
-                    Nombre BD destino
-                  </label>
-                  <input
-                    type="text"
-                    name="dest_db"
-                    value="moodle_nuevaplataforma"
-                    class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                  <p class="mt-1 text-xs text-slate-500">
-                    Se creará si no existe (con <span class="font-mono">utf8mb4_unicode_ci</span>).
-                  </p>
-                </div>
-
-                <div class="flex items-center gap-2 pt-1">
-                  <input
-                    id="reuse_db_user"
-                    type="checkbox"
-                    name="reuse_db_user"
-                    class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
-                    checked
-                  />
-                  <label for="reuse_db_user" class="text-xs text-slate-300">
-                    Usar el mismo usuario de BD (<span class="font-mono">admin_moodle</span>) para todas las instancias
-                  </label>
                 </div>
               </div>
             </section>
@@ -498,6 +582,7 @@
 
       function buildPayload(dryRun) {
         const fd = new FormData(form);
+        const deployTarget = String(fd.get('deploy_target') || 'local').trim();
         return {
           source_instance: String(fd.get('source_instance') || '').trim(),
           maintenance_source: fd.get('maintenance_source') === 'on',
@@ -506,9 +591,15 @@
           new_url: String(fd.get('new_url') || '').trim(),
           dest_dir: String(fd.get('dest_dir') || '').trim(),
           dest_data: String(fd.get('dest_data') || '').trim(),
-          db_host: String(fd.get('db_host') || '').trim(),
-          db_user: String(fd.get('db_user') || '').trim(),
-          db_pass: String(fd.get('db_pass') || ''),
+          deploy_target: deployTarget,
+          remote_host: deployTarget === 'remote' ? String(fd.get('remote_host') || '').trim() : '',
+          source_db_host: String(fd.get('source_db_host') || '').trim(),
+          source_db_user: String(fd.get('source_db_user') || '').trim(),
+          source_db_pass: String(fd.get('source_db_pass') || ''),
+          source_db_name: String(fd.get('source_db_name') || '').trim(),
+          target_db_host: String(fd.get('target_db_host') || '').trim(),
+          target_db_user: String(fd.get('target_db_user') || '').trim(),
+          target_db_pass: String(fd.get('target_db_pass') || ''),
           dest_db: String(fd.get('dest_db') || '').trim(),
           opt_replace: fd.get('opt_replace') === 'on',
           opt_purge: fd.get('opt_purge') === 'on',
@@ -618,18 +709,44 @@
       const dirInput = form.querySelector('input[name="dest_dir"]');
       const dataInput = form.querySelector('input[name="dest_data"]');
       const dbInput = form.querySelector('input[name="dest_db"]');
+      const deployTargetInput = form.querySelector('select[name="deploy_target"]');
+      const remoteHostInput = form.querySelector('input[name="remote_host"]');
 
       function suggestFromKey() {
         const key = (newKeyInput.value || '').trim();
         if (!key) return;
+
+        const deployTarget = (deployTargetInput.value || 'local').trim();
+
         domainInput.value = `${key}.awakelab.world`;
         urlInput.value = `https://${key}.awakelab.world`;
-        dirInput.value = `/var/www/moodle_${key}`;
-        dataInput.value = `/var/moodledata_${key}`;
+        if (deployTarget === 'remote') {
+          dirInput.value = `/var/www/html/moodle/${key}`;
+          dataInput.value = `/var/www/data/moodle/${key}`;
+        } else {
+          dirInput.value = `/var/www/moodle_${key}`;
+          dataInput.value = `/var/moodledata_${key}`;
+        }
         dbInput.value = `moodle_${key}`;
       }
 
+      function updateDeployTargetUi() {
+        const deployTarget = (deployTargetInput.value || 'local').trim();
+        const isRemote = deployTarget === 'remote';
+        remoteHostInput.disabled = !isRemote;
+        remoteHostInput.classList.toggle('opacity-60', !isRemote);
+        if (isRemote && !remoteHostInput.value.trim()) {
+          remoteHostInput.value = '51.44.30.62';
+        }
+      }
+
+      deployTargetInput.addEventListener('change', function () {
+        updateDeployTargetUi();
+        suggestFromKey();
+      });
+
       newKeyInput.addEventListener('blur', suggestFromKey);
+      updateDeployTargetUi();
     })();
   </script>
 

@@ -18,6 +18,8 @@ SCRIPT_FILE = ROOT / "moodle-clone-web.sh"
 HOST = os.getenv("APP_HOST", "0.0.0.0")
 PORT = int(os.getenv("APP_PORT", "8787"))
 MAX_LOG_CHARS = 250_000
+DEFAULT_REMOTE_HOST = "51.44.30.62"
+REMOTE_SSH_KEY = str(Path.home() / ".ssh" / "id_ed25519")
 
 SOURCE_INSTANCES: Dict[str, Dict[str, str]] = {
     "base_limpia": {
@@ -60,8 +62,9 @@ def is_safe_path(value: str) -> bool:
 
 def sanitize_preview(payload: Dict[str, Any]) -> Dict[str, Any]:
     clean = dict(payload)
-    if "db_pass" in clean:
-        clean["db_pass"] = "***"
+    for key in ("db_pass", "target_db_pass", "source_db_pass"):
+        if key in clean:
+            clean[key] = "***"
     return clean
 
 
@@ -75,9 +78,17 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     new_url = str(payload.get("new_url", "")).strip()
     dest_dir = str(payload.get("dest_dir", "")).strip()
     dest_data = str(payload.get("dest_data", "")).strip()
-    db_host = str(payload.get("db_host", "")).strip()
-    db_user = str(payload.get("db_user", "")).strip()
-    db_pass = str(payload.get("db_pass", ""))
+    deploy_target = str(payload.get("deploy_target", "local")).strip().lower()
+    remote_host = str(payload.get("remote_host", DEFAULT_REMOTE_HOST)).strip()
+
+    source_db_host = str(payload.get("source_db_host", "")).strip()
+    source_db_user = str(payload.get("source_db_user", "")).strip()
+    source_db_pass = str(payload.get("source_db_pass", ""))
+    source_db_name = str(payload.get("source_db_name", "")).strip()
+
+    target_db_host = str(payload.get("target_db_host", payload.get("db_host", ""))).strip()
+    target_db_user = str(payload.get("target_db_user", payload.get("db_user", ""))).strip()
+    target_db_pass = str(payload.get("target_db_pass", payload.get("db_pass", "")))
     dest_db = str(payload.get("dest_db", "")).strip()
 
     if source_instance not in SOURCE_INSTANCES:
@@ -98,14 +109,39 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not is_safe_path(dest_data):
         raise ValueError("Directorio moodledata inválido.")
 
-    if not re.fullmatch(r"[A-Za-z0-9._-]+", db_host):
-        raise ValueError("Host DB inválido.")
+    if deploy_target not in ("local", "remote"):
+        raise ValueError("Destino inválido. Usa 'local' o 'remote'.")
 
-    if not re.fullmatch(r"[A-Za-z0-9._$-]+", db_user):
-        raise ValueError("Usuario DB inválido.")
+    if deploy_target == "remote":
+        if not remote_host:
+            remote_host = DEFAULT_REMOTE_HOST
 
-    if not db_pass:
-        raise ValueError("La contraseña de BD es obligatoria.")
+        if not re.fullmatch(r"[A-Za-z0-9.-]+", remote_host):
+            raise ValueError("Host remoto inválido.")
+
+        if not dest_dir.startswith("/var/www/html/moodle/"):
+            raise ValueError("En remoto, el directorio Moodle debe iniciar con /var/www/html/moodle/.")
+
+        if not dest_data.startswith("/var/www/data/moodle/"):
+            raise ValueError("En remoto, el directorio moodledata debe iniciar con /var/www/data/moodle/.")
+
+    if source_db_host and not re.fullmatch(r"[A-Za-z0-9._-]+", source_db_host):
+        raise ValueError("Host DB origen inválido.")
+
+    if source_db_user and not re.fullmatch(r"[A-Za-z0-9._$-]+", source_db_user):
+        raise ValueError("Usuario DB origen inválido.")
+
+    if source_db_name and not re.fullmatch(r"[A-Za-z0-9_]+", source_db_name):
+        raise ValueError("Nombre DB origen inválido (solo letras, números y _).")
+
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", target_db_host):
+        raise ValueError("Host DB destino inválido.")
+
+    if not re.fullmatch(r"[A-Za-z0-9._$-]+", target_db_user):
+        raise ValueError("Usuario DB destino inválido.")
+
+    if not target_db_pass:
+        raise ValueError("La contraseña de BD destino es obligatoria.")
 
     if not re.fullmatch(r"[A-Za-z0-9_]+", dest_db):
         raise ValueError("Nombre de BD destino inválido (solo letras, números y _).")
@@ -117,9 +153,15 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "new_url": new_url,
         "dest_dir": dest_dir,
         "dest_data": dest_data,
-        "db_host": db_host,
-        "db_user": db_user,
-        "db_pass": db_pass,
+        "deploy_target": deploy_target,
+        "remote_host": remote_host if deploy_target == "remote" else "",
+        "source_db_host": source_db_host,
+        "source_db_user": source_db_user,
+        "source_db_pass": source_db_pass,
+        "source_db_name": source_db_name,
+        "target_db_host": target_db_host,
+        "target_db_user": target_db_user,
+        "target_db_pass": target_db_pass,
         "dest_db": dest_db,
         "maintenance_source": bool(payload.get("maintenance_source", True)),
         "opt_replace": bool(payload.get("opt_replace", True)),
@@ -167,9 +209,19 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "DEST_DIR": payload["dest_dir"],
             "DEST_DATA": payload["dest_data"],
             "DEST_DB": payload["dest_db"],
-            "DB_HOST": payload["db_host"],
-            "DB_USER": payload["db_user"],
-            "DB_PASS": payload["db_pass"],
+            "DEPLOY_TARGET": payload["deploy_target"],
+            "REMOTE_HOST": payload["remote_host"],
+            "REMOTE_SSH_KEY": REMOTE_SSH_KEY,
+            "SRC_DB_HOST_OVERRIDE": payload["source_db_host"],
+            "SRC_DB_USER_OVERRIDE": payload["source_db_user"],
+            "SRC_DB_PASS_OVERRIDE": payload["source_db_pass"],
+            "SRC_DBNAME_OVERRIDE": payload["source_db_name"],
+            "TARGET_DB_HOST": payload["target_db_host"],
+            "TARGET_DB_USER": payload["target_db_user"],
+            "TARGET_DB_PASS": payload["target_db_pass"],
+            "DB_HOST": payload["target_db_host"],
+            "DB_USER": payload["target_db_user"],
+            "DB_PASS": payload["target_db_pass"],
             "ENABLE_SRC_MAINT": bool_to_env(payload["maintenance_source"]),
             "ENABLE_REPLACE": bool_to_env(payload["opt_replace"]),
             "ENABLE_PURGE": bool_to_env(payload["opt_purge"]),

@@ -37,6 +37,10 @@ require_safe_db_name() {
   fi
 }
 
+quote_shell() {
+  printf '%q' "$1"
+}
+
 cleanup() {
   if [[ "${SRC_MAINT_ENABLED:-0}" == "1" && "${REVERT_SRC_MAINT:-0}" == "1" ]]; then
     log "Disabling maintenance mode on source (cleanup)…"
@@ -49,8 +53,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
+remote_exec() {
+  local cmd="$1"
+  if [[ -z "${REMOTE_SSH_TARGET:-}" ]]; then
+    err "Remote host not configured."
+    exit 1
+  fi
+  ssh "${SSH_OPTS[@]}" "$REMOTE_SSH_TARGET" "$cmd"
+}
+
+remote_bash() {
+  local script="$1"
+  remote_exec "bash -lc $(quote_shell "$script")"
+}
+
+remote_sudo_bash() {
+  local script="$1"
+  remote_exec "sudo bash -lc $(quote_shell "$script")"
+}
+
 PHP_CLI="${PHP_CLI:-/usr/bin/php}"
-require_cmd rsync sed grep awk mysql mysqldump "$PHP_CLI" nginx
+require_cmd rsync sed grep awk mysql mysqldump "$PHP_CLI"
 if command -v certbot >/dev/null 2>&1; then HAS_CERTBOT=1; else HAS_CERTBOT=0; fi
 
 # Required inputs
@@ -58,19 +81,33 @@ SRC_DIR="${SRC_DIR:-}"
 SRC_DATA="${SRC_DATA:-}"
 SRC_VHOST="${SRC_VHOST:-}"
 NEW_KEY="${NEW_KEY:-}"
-DB_PASS="${DB_PASS:-}"
 
 require_non_empty SRC_DIR
 require_non_empty SRC_DATA
 require_non_empty SRC_VHOST
 require_non_empty NEW_KEY
-require_non_empty DB_PASS
+
+DEPLOY_TARGET="${DEPLOY_TARGET:-local}"
+DEPLOY_TARGET="${DEPLOY_TARGET,,}"
+REMOTE_HOST="${REMOTE_HOST:-51.44.30.62}"
+REMOTE_SSH_KEY="${REMOTE_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+REMOTE_SSH_USER="${REMOTE_SSH_USER:-ubuntu}"
+
+if [[ "$DEPLOY_TARGET" != "local" && "$DEPLOY_TARGET" != "remote" ]]; then
+  err "DEPLOY_TARGET must be 'local' or 'remote'."
+  exit 1
+fi
 
 # Derived / overridable inputs
 NEW_DOMAIN="${NEW_DOMAIN:-${NEW_KEY}.awakelab.world}"
 NEW_URL="${NEW_URL:-https://${NEW_DOMAIN}}"
-DEST_DIR="${DEST_DIR:-/var/www/moodle_${NEW_KEY}}"
-DEST_DATA="${DEST_DATA:-/var/moodledata_${NEW_KEY}}"
+if [[ "$DEPLOY_TARGET" == "remote" ]]; then
+  DEST_DIR="${DEST_DIR:-/var/www/html/moodle/${NEW_KEY}}"
+  DEST_DATA="${DEST_DATA:-/var/www/data/moodle/${NEW_KEY}}"
+else
+  DEST_DIR="${DEST_DIR:-/var/www/moodle_${NEW_KEY}}"
+  DEST_DATA="${DEST_DATA:-/var/moodledata_${NEW_KEY}}"
+fi
 DEST_DB="${DEST_DB:-moodle_${NEW_KEY}}"
 
 ENABLE_SRC_MAINT="${ENABLE_SRC_MAINT:-1}"
@@ -83,6 +120,37 @@ DISABLE_NEW_MAINT="${DISABLE_NEW_MAINT:-1}"
 DISABLE_SRC_MAINT_AFTER="${DISABLE_SRC_MAINT_AFTER:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 
+SSH_OPTS=()
+REMOTE_SSH_TARGET=""
+RSYNC_SSH=""
+if [[ "$DEPLOY_TARGET" == "remote" ]]; then
+  require_cmd ssh
+  [[ -f "$REMOTE_SSH_KEY" ]] || { err "SSH key not found at $REMOTE_SSH_KEY"; exit 1; }
+
+  if [[ ! "$REMOTE_HOST" =~ ^[A-Za-z0-9.-]+$ ]]; then
+    err "Invalid REMOTE_HOST '$REMOTE_HOST'."
+    exit 1
+  fi
+
+  if [[ "$DEST_DIR" != /var/www/html/moodle/* ]]; then
+    err "For remote deploy, DEST_DIR must start with /var/www/html/moodle/"
+    exit 1
+  fi
+
+  if [[ "$DEST_DATA" != /var/www/data/moodle/* ]]; then
+    err "For remote deploy, DEST_DATA must start with /var/www/data/moodle/"
+    exit 1
+  fi
+
+  REMOTE_SSH_TARGET="${REMOTE_SSH_USER}@${REMOTE_HOST}"
+  SSH_OPTS=(-i "$REMOTE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+  RSYNC_SSH="ssh -i $REMOTE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+fi
+
+if bool_true "$ENABLE_NGINX" && [[ "$DEPLOY_TARGET" == "local" ]]; then
+  require_cmd nginx
+fi
+
 CONFIG_FILE="$SRC_DIR/config.php"
 [[ -f "$CONFIG_FILE" ]] || { err "config.php not found at $CONFIG_FILE"; exit 1; }
 
@@ -93,9 +161,9 @@ parse_cfg() {
   ' "$CONFIG_FILE"
 }
 
-SRC_DBHOST="$(parse_cfg dbhost)"
+SRC_DBHOST_CFG="$(parse_cfg dbhost)"
 SRC_DBNAME="${SRC_DBNAME_OVERRIDE:-$(parse_cfg dbname)}"
-SRC_DBUSER="$(parse_cfg dbuser)"
+SRC_DBUSER_CFG="$(parse_cfg dbuser)"
 SRC_WWWROOT="$(parse_cfg wwwroot)"
 
 if [[ -z "${SRC_DBNAME:-}" ]]; then
@@ -107,10 +175,19 @@ if [[ -z "${SRC_WWWROOT:-}" ]]; then
   warn "Could not read source wwwroot from $CONFIG_FILE (URL replace may be skipped)."
 fi
 
-DB_HOST="${DB_HOST:-${SRC_DBHOST:-localhost}}"
-DB_USER="${DB_USER:-${SRC_DBUSER:-admin_moodle}}"
-require_non_empty DB_HOST
-require_non_empty DB_USER
+SOURCE_DB_HOST="${SRC_DB_HOST_OVERRIDE:-${SRC_DBHOST_CFG:-localhost}}"
+SOURCE_DB_USER="${SRC_DB_USER_OVERRIDE:-${SRC_DBUSER_CFG:-admin_moodle}}"
+TARGET_DB_HOST="${TARGET_DB_HOST:-${DB_HOST:-${SRC_DBHOST_CFG:-localhost}}}"
+TARGET_DB_USER="${TARGET_DB_USER:-${DB_USER:-${SRC_DBUSER_CFG:-admin_moodle}}}"
+TARGET_DB_PASS="${TARGET_DB_PASS:-${DB_PASS:-}}"
+SOURCE_DB_PASS="${SRC_DB_PASS_OVERRIDE:-${TARGET_DB_PASS}}"
+
+require_non_empty SOURCE_DB_HOST
+require_non_empty SOURCE_DB_USER
+require_non_empty SOURCE_DB_PASS
+require_non_empty TARGET_DB_HOST
+require_non_empty TARGET_DB_USER
+require_non_empty TARGET_DB_PASS
 require_safe_db_name "$DEST_DB"
 
 if bool_true "$ENABLE_SRC_MAINT"; then
@@ -138,11 +215,15 @@ Source wwwroot:   ${SRC_WWWROOT:-unknown}
 New key:          $NEW_KEY
 New domain:       $NEW_DOMAIN
 New URL:          $NEW_URL
+Deploy target:    $DEPLOY_TARGET
+Remote host:      ${REMOTE_HOST:-n/a}
 Dest dir:         $DEST_DIR
 Dest moodledata:  $DEST_DATA
 Dest database:    $DEST_DB
-RDS host:         $DB_HOST
-DB user:          $DB_USER
+Source DB host:    $SOURCE_DB_HOST
+Source DB user:    $SOURCE_DB_USER
+Target DB host:    $TARGET_DB_HOST
+Target DB user:    $TARGET_DB_USER
 Dry-run:          $DRY_RUN
 Maintenance on source now: $SRC_MAINT_ENABLED
 ----------------
@@ -154,25 +235,15 @@ if bool_true "$DRY_RUN"; then
   exit 0
 fi
 
-log "Copying code to $DEST_DIR …"
-sudo rsync -a "$SRC_DIR/" "$DEST_DIR/"
-sudo chown -R www-data:www-data "$DEST_DIR"
-
-log "Copying moodledata to $DEST_DATA … (may take time)"
-sudo mkdir -p "$DEST_DATA"
-sudo rsync -a "$SRC_DATA/" "$DEST_DATA/"
-sudo chown -R www-data:www-data "$DEST_DATA"
-sudo find "$DEST_DATA" -type d -exec chmod 770 {} \;
-sudo find "$DEST_DATA" -type f -exec chmod 660 {} \;
-
 TMP_DIR="$(mktemp -d)"
 DUMP_ORIG="$TMP_DIR/${SRC_DBNAME}.sql"
 DUMP_SAN="$TMP_DIR/${SRC_DBNAME}.sanitized.sql"
+PATCH_PHP="$TMP_DIR/config_patch.php"
 
-log "Dumping database $SRC_DBNAME from $DB_HOST …"
+log "Dumping database $SRC_DBNAME from $SOURCE_DB_HOST …"
 (
-  export MYSQL_PWD="$DB_PASS"
-  mysqldump -h "$DB_HOST" -u "$DB_USER" \
+  export MYSQL_PWD="$SOURCE_DB_PASS"
+  mysqldump -h "$SOURCE_DB_HOST" -u "$SOURCE_DB_USER" \
     --single-transaction --quick --set-gtid-purged=OFF \
     "$SRC_DBNAME" > "$DUMP_ORIG"
 )
@@ -180,21 +251,19 @@ log "Dumping database $SRC_DBNAME from $DB_HOST …"
 log "Sanitizing dump to remove privileged statements…"
 sed '/SQL_LOG_BIN/d; /GTID_PURGED/d' "$DUMP_ORIG" > "$DUMP_SAN"
 
-log "Ensuring destination database $DEST_DB exists…"
+log "Ensuring destination database $DEST_DB exists on $TARGET_DB_HOST…"
 (
-  export MYSQL_PWD="$DB_PASS"
-  mysql -h "$DB_HOST" -u "$DB_USER" \
+  export MYSQL_PWD="$TARGET_DB_PASS"
+  mysql -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" \
     -e "CREATE DATABASE IF NOT EXISTS ${DEST_DB} DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 )
 
-log "Importing dump into $DEST_DB …"
+log "Importing dump into $DEST_DB on $TARGET_DB_HOST …"
 (
-  export MYSQL_PWD="$DB_PASS"
-  mysql -h "$DB_HOST" -u "$DB_USER" "$DEST_DB" < "$DUMP_SAN"
+  export MYSQL_PWD="$TARGET_DB_PASS"
+  mysql -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" "$DEST_DB" < "$DUMP_SAN"
 )
 
-log "Patching $DEST_DIR/config.php …"
-PATCH_PHP="$TMP_DIR/config_patch.php"
 cat > "$PATCH_PHP" <<'PHP'
 <?php
 $conf = $argv[1] ?? null;
@@ -221,20 +290,69 @@ foreach ($map as $k => $v) {
 if (file_put_contents($conf, $c) === false) { fwrite(STDERR, "Cannot write $conf\n"); exit(1); }
 PHP
 
-sudo env \
-  WWWROOT="$NEW_URL" \
-  DATAROOT="$DEST_DATA" \
-  DIRROOT="$DEST_DIR" \
-  DBHOST="$DB_HOST" \
-  DBNAME="$DEST_DB" \
-  DBUSER="$DB_USER" \
-  DBPASS="$DB_PASS" \
-  "$PHP_CLI" "$PATCH_PHP" "$DEST_DIR/config.php"
+if [[ "$DEPLOY_TARGET" == "local" ]]; then
+  log "Copying code to $DEST_DIR …"
+  sudo rsync -a "$SRC_DIR/" "$DEST_DIR/"
+  sudo chown -R www-data:www-data "$DEST_DIR"
+
+  log "Copying moodledata to $DEST_DATA … (may take time)"
+  sudo mkdir -p "$DEST_DATA"
+  sudo rsync -a "$SRC_DATA/" "$DEST_DATA/"
+  sudo chown -R www-data:www-data "$DEST_DATA"
+  sudo find "$DEST_DATA" -type d -exec chmod 770 {} \;
+  sudo find "$DEST_DATA" -type f -exec chmod 660 {} \;
+
+  log "Patching $DEST_DIR/config.php …"
+  sudo env \
+    WWWROOT="$NEW_URL" \
+    DATAROOT="$DEST_DATA" \
+    DIRROOT="$DEST_DIR" \
+    DBHOST="$TARGET_DB_HOST" \
+    DBNAME="$DEST_DB" \
+    DBUSER="$TARGET_DB_USER" \
+    DBPASS="$TARGET_DB_PASS" \
+    "$PHP_CLI" "$PATCH_PHP" "$DEST_DIR/config.php"
+else
+  log "Testing SSH connectivity to $REMOTE_SSH_TARGET …"
+  remote_exec "true"
+
+  log "Preparing remote directories on $REMOTE_SSH_TARGET …"
+  remote_sudo_bash "mkdir -p $(quote_shell "$DEST_DIR") $(quote_shell "$DEST_DATA")"
+
+  STAGE_DIR="$TMP_DIR/stage_moodle"
+  sudo mkdir -p "$STAGE_DIR"
+
+  log "Staging Moodle code locally before remote sync …"
+  sudo rsync -a "$SRC_DIR/" "$STAGE_DIR/"
+
+  log "Patching staged config.php for remote destination …"
+  sudo env \
+    WWWROOT="$NEW_URL" \
+    DATAROOT="$DEST_DATA" \
+    DIRROOT="$DEST_DIR" \
+    DBHOST="$TARGET_DB_HOST" \
+    DBNAME="$DEST_DB" \
+    DBUSER="$TARGET_DB_USER" \
+    DBPASS="$TARGET_DB_PASS" \
+    "$PHP_CLI" "$PATCH_PHP" "$STAGE_DIR/config.php"
+
+  log "Copying code to remote $REMOTE_SSH_TARGET:$DEST_DIR …"
+  sudo rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" "$STAGE_DIR/" "${REMOTE_SSH_TARGET}:${DEST_DIR}/"
+
+  log "Copying moodledata to remote $REMOTE_SSH_TARGET:$DEST_DATA … (may take time)"
+  sudo rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" "$SRC_DATA/" "${REMOTE_SSH_TARGET}:${DEST_DATA}/"
+
+  remote_sudo_bash "chown -R www-data:www-data $(quote_shell "$DEST_DIR") $(quote_shell "$DEST_DATA")"
+  remote_sudo_bash "find $(quote_shell "$DEST_DATA") -type d -exec chmod 770 {} \\;"
+  remote_sudo_bash "find $(quote_shell "$DEST_DATA") -type f -exec chmod 660 {} \\;"
+fi
 
 if bool_true "$ENABLE_NGINX"; then
   NEW_VHOST="/etc/nginx/sites-available/${NEW_DOMAIN}"
+  VHOST_TMP="$TMP_DIR/${NEW_DOMAIN}.nginx"
   log "Creating Nginx vhost at $NEW_VHOST …"
-  sudo tee "$NEW_VHOST" > /dev/null <<NGINX
+
+  cat > "$VHOST_TMP" <<NGINX
 server {
     listen 80;
     server_name ${NEW_DOMAIN};
@@ -266,33 +384,68 @@ server {
 }
 NGINX
 
-  sudo ln -sfn "$NEW_VHOST" "/etc/nginx/sites-enabled/${NEW_DOMAIN}"
-  sudo nginx -t
-  sudo systemctl reload nginx
+  if [[ "$DEPLOY_TARGET" == "local" ]]; then
+    sudo install -m 644 "$VHOST_TMP" "$NEW_VHOST"
+    sudo ln -sfn "$NEW_VHOST" "/etc/nginx/sites-enabled/${NEW_DOMAIN}"
+    sudo nginx -t
+    sudo systemctl reload nginx
+  else
+    REMOTE_VHOST_TMP="/tmp/${NEW_DOMAIN}.nginx.$$"
+    rsync -a -e "$RSYNC_SSH" "$VHOST_TMP" "${REMOTE_SSH_TARGET}:${REMOTE_VHOST_TMP}"
+    remote_sudo_bash "mv $(quote_shell "$REMOTE_VHOST_TMP") $(quote_shell "$NEW_VHOST")"
+    remote_sudo_bash "ln -sfn $(quote_shell "$NEW_VHOST") $(quote_shell "/etc/nginx/sites-enabled/${NEW_DOMAIN}")"
+    remote_sudo_bash "nginx -t"
+    remote_sudo_bash "systemctl reload nginx"
+  fi
 else
   warn "Skipping Nginx setup."
 fi
 
-if bool_true "$ENABLE_CERTBOT" && [[ "$HAS_CERTBOT" == "1" ]]; then
+if bool_true "$ENABLE_CERTBOT"; then
   CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
-  if [[ -n "$CERTBOT_EMAIL" ]]; then
-    sudo certbot --nginx -d "$NEW_DOMAIN" --non-interactive --agree-tos --redirect -m "$CERTBOT_EMAIL" || warn "Certbot failed; run it later."
+  if [[ "$DEPLOY_TARGET" == "local" ]]; then
+    if [[ "$HAS_CERTBOT" == "1" ]]; then
+      if [[ -n "$CERTBOT_EMAIL" ]]; then
+        sudo certbot --nginx -d "$NEW_DOMAIN" --non-interactive --agree-tos --redirect -m "$CERTBOT_EMAIL" || warn "Certbot failed; run it later."
+      else
+        sudo certbot --nginx -d "$NEW_DOMAIN" --non-interactive --agree-tos --redirect --register-unsafely-without-email || warn "Certbot failed; run it later."
+      fi
+    else
+      warn "Skipping Certbot (disabled or not installed)."
+    fi
   else
-    sudo certbot --nginx -d "$NEW_DOMAIN" --non-interactive --agree-tos --redirect --register-unsafely-without-email || warn "Certbot failed; run it later."
+    if remote_bash "command -v certbot >/dev/null 2>&1"; then
+      if [[ -n "$CERTBOT_EMAIL" ]]; then
+        remote_sudo_bash "certbot --nginx -d $(quote_shell "$NEW_DOMAIN") --non-interactive --agree-tos --redirect -m $(quote_shell "$CERTBOT_EMAIL")" || warn "Certbot failed on remote host; run it later."
+      else
+        remote_sudo_bash "certbot --nginx -d $(quote_shell "$NEW_DOMAIN") --non-interactive --agree-tos --redirect --register-unsafely-without-email" || warn "Certbot failed on remote host; run it later."
+      fi
+    else
+      warn "Skipping Certbot on remote host (not installed)."
+    fi
   fi
 else
-  warn "Skipping Certbot (disabled or not installed)."
+  warn "Skipping Certbot (disabled)."
 fi
 
 if bool_true "$ENABLE_REPLACE"; then
   if [[ -n "${SRC_WWWROOT:-}" && "$SRC_WWWROOT" != "$NEW_URL" ]]; then
     log "Replacing URLs in DB: $SRC_WWWROOT -> $NEW_URL …"
-    pushd "$DEST_DIR" >/dev/null
-    set +e
-    sudo -u www-data "$PHP_CLI" admin/tool/replace/cli/replace.php --non-interactive --search="$SRC_WWWROOT" --replace="$NEW_URL"
-    REPLACE_RC=$?
-    set -e
-    popd >/dev/null
+
+    if [[ "$DEPLOY_TARGET" == "local" ]]; then
+      pushd "$DEST_DIR" >/dev/null
+      set +e
+      sudo -u www-data "$PHP_CLI" admin/tool/replace/cli/replace.php --non-interactive --search="$SRC_WWWROOT" --replace="$NEW_URL"
+      REPLACE_RC=$?
+      set -e
+      popd >/dev/null
+    else
+      set +e
+      remote_bash "cd $(quote_shell "$DEST_DIR") && sudo -u www-data $(quote_shell "$PHP_CLI") admin/tool/replace/cli/replace.php --non-interactive --search=$(quote_shell "$SRC_WWWROOT") --replace=$(quote_shell "$NEW_URL")"
+      REPLACE_RC=$?
+      set -e
+    fi
+
     if [[ $REPLACE_RC -ne 0 ]]; then
       warn "URL replace failed with exit code $REPLACE_RC. Continuing clone without blocking."
     fi
@@ -305,9 +458,13 @@ fi
 
 if bool_true "$ENABLE_PURGE"; then
   log "Purging caches …"
-  pushd "$DEST_DIR" >/dev/null
-  sudo -u www-data "$PHP_CLI" admin/cli/purge_caches.php || true
-  popd >/dev/null
+  if [[ "$DEPLOY_TARGET" == "local" ]]; then
+    pushd "$DEST_DIR" >/dev/null
+    sudo -u www-data "$PHP_CLI" admin/cli/purge_caches.php || true
+    popd >/dev/null
+  else
+    remote_bash "cd $(quote_shell "$DEST_DIR") && sudo -u www-data $(quote_shell "$PHP_CLI") admin/cli/purge_caches.php || true"
+  fi
 else
   warn "Skipping cache purge."
 fi
@@ -315,18 +472,31 @@ fi
 if bool_true "$ENABLE_CRON"; then
   log "Ensuring cron entry for www-data …"
   CRON_LINE="*/1 * * * * /usr/bin/php ${DEST_DIR}/admin/cli/cron.php >/dev/null 2>&1"
-  if sudo crontab -u www-data -l 2>/dev/null | grep -Fq "${DEST_DIR}/admin/cli/cron.php"; then
-    log "Cron entry already present for this instance."
+  if [[ "$DEPLOY_TARGET" == "local" ]]; then
+    if sudo crontab -u www-data -l 2>/dev/null | grep -Fq "${DEST_DIR}/admin/cli/cron.php"; then
+      log "Cron entry already present for this instance."
+    else
+      ( sudo crontab -u www-data -l 2>/dev/null; echo "$CRON_LINE" ) | sudo crontab -u www-data -
+      log "Cron entry added."
+    fi
   else
-    ( sudo crontab -u www-data -l 2>/dev/null; echo "$CRON_LINE" ) | sudo crontab -u www-data -
-    log "Cron entry added."
+    if remote_sudo_bash "crontab -u www-data -l 2>/dev/null | grep -Fq $(quote_shell "${DEST_DIR}/admin/cli/cron.php")"; then
+      log "Cron entry already present for this instance on remote host."
+    else
+      remote_sudo_bash "( crontab -u www-data -l 2>/dev/null; printf '%s\n' $(quote_shell "$CRON_LINE") ) | crontab -u www-data -"
+      log "Cron entry added on remote host."
+    fi
   fi
 else
   warn "Skipping cron setup."
 fi
 
 if bool_true "$DISABLE_NEW_MAINT"; then
-  sudo -u www-data "$PHP_CLI" "$DEST_DIR/admin/cli/maintenance.php" --disable || true
+  if [[ "$DEPLOY_TARGET" == "local" ]]; then
+    sudo -u www-data "$PHP_CLI" "$DEST_DIR/admin/cli/maintenance.php" --disable || true
+  else
+    remote_bash "sudo -u www-data $(quote_shell "$PHP_CLI") $(quote_shell "$DEST_DIR/admin/cli/maintenance.php") --disable || true"
+  fi
 fi
 
 if [[ "${SRC_MAINT_ENABLED:-0}" == "1" ]] && bool_true "$DISABLE_SRC_MAINT_AFTER"; then
@@ -338,4 +508,4 @@ fi
 log "Clone completed. New site should be available at: $NEW_URL"
 log "Moodle code: $DEST_DIR"
 log "Moodledata:  $DEST_DATA"
-log "Database:    $DEST_DB on $DB_HOST (user $DB_USER)"
+log "Database:    $DEST_DB on $TARGET_DB_HOST (user $TARGET_DB_USER)"
