@@ -63,6 +63,19 @@
   <div class="space-y-4">
     <div>
       <label class="block text-xs font-medium text-slate-300 mb-1">
+        Modo de origen
+      </label>
+      <select
+        name="source_mode"
+        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+      >
+        <option value="local" selected>Instancia local (preconfigurada)</option>
+        <option value="remote">Servidor remoto por SSH</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-slate-300 mb-1">
         Instancia Moodle Origen
       </label>
       <select
@@ -78,6 +91,76 @@
         Selecciona la instancia que se usará como origen para la clonación
         (código, <span class="font-mono">moodledata</span> y configuración).
       </p>
+    </div>
+
+    <div id="remote-source-fields" class="hidden rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Origen remoto (SSH)</h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Host origen</label>
+          <input
+            type="text"
+            name="source_host"
+            value=""
+            placeholder="ej: 10.0.0.15"
+            class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Usuario SSH origen</label>
+          <input
+            type="text"
+            name="source_ssh_user"
+            value="ubuntu"
+            class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Llave SSH origen (ruta absoluta en este servidor)</label>
+        <input
+          type="text"
+          name="source_ssh_key"
+          value="~/.ssh/id_ed25519"
+          class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Directorio Moodle origen</label>
+          <input
+            type="text"
+            name="source_dir"
+            value=""
+            placeholder="/var/www/moodle_x"
+            class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Directorio moodledata origen</label>
+          <input
+            type="text"
+            name="source_data"
+            value=""
+            placeholder="/var/moodledata_x"
+            class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Vhost origen (ruta)</label>
+        <input
+          type="text"
+          name="source_vhost"
+          value=""
+          placeholder="/etc/nginx/sites-available/moodle.example.com"
+          class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
+      </div>
     </div>
 
     <div class="flex items-center gap-2 pt-2">
@@ -583,8 +666,16 @@
       function buildPayload(dryRun) {
         const fd = new FormData(form);
         const deployTarget = String(fd.get('deploy_target') || 'local').trim();
+        const sourceMode = String(fd.get('source_mode') || 'local').trim();
         return {
+          source_mode: sourceMode,
           source_instance: String(fd.get('source_instance') || '').trim(),
+          source_host: sourceMode === 'remote' ? String(fd.get('source_host') || '').trim() : '',
+          source_ssh_user: sourceMode === 'remote' ? String(fd.get('source_ssh_user') || '').trim() : '',
+          source_ssh_key: sourceMode === 'remote' ? String(fd.get('source_ssh_key') || '').trim() : '',
+          source_dir: sourceMode === 'remote' ? String(fd.get('source_dir') || '').trim() : '',
+          source_data: sourceMode === 'remote' ? String(fd.get('source_data') || '').trim() : '',
+          source_vhost: sourceMode === 'remote' ? String(fd.get('source_vhost') || '').trim() : '',
           maintenance_source: fd.get('maintenance_source') === 'on',
           new_key: String(fd.get('new_key') || '').trim(),
           new_domain: String(fd.get('new_domain') || '').trim(),
@@ -711,6 +802,9 @@
       const dbInput = form.querySelector('input[name="dest_db"]');
       const deployTargetInput = form.querySelector('select[name="deploy_target"]');
       const remoteHostInput = form.querySelector('input[name="remote_host"]');
+      const sourceModeInput = form.querySelector('select[name="source_mode"]');
+      const sourceInstanceInput = form.querySelector('select[name="source_instance"]');
+      const remoteSourceFields = document.getElementById('remote-source-fields');
 
       function suggestFromKey() {
         const key = (newKeyInput.value || '').trim();
@@ -740,13 +834,26 @@
         }
       }
 
+      function updateSourceModeUi() {
+        const sourceMode = (sourceModeInput.value || 'local').trim();
+        const isRemoteSource = sourceMode === 'remote';
+        remoteSourceFields.classList.toggle('hidden', !isRemoteSource);
+        sourceInstanceInput.disabled = isRemoteSource;
+        sourceInstanceInput.classList.toggle('opacity-60', isRemoteSource);
+      }
+
       deployTargetInput.addEventListener('change', function () {
         updateDeployTargetUi();
         suggestFromKey();
       });
 
+      sourceModeInput.addEventListener('change', function () {
+        updateSourceModeUi();
+      });
+
       newKeyInput.addEventListener('blur', suggestFromKey);
       updateDeployTargetUi();
+      updateSourceModeUi();
     })();
   </script>
 

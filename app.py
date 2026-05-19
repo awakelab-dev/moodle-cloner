@@ -20,6 +20,7 @@ PORT = int(os.getenv("APP_PORT", "8787"))
 MAX_LOG_CHARS = 250_000
 DEFAULT_REMOTE_HOST = "51.44.30.62"
 REMOTE_SSH_KEY = str(Path.home() / ".ssh" / "id_ed25519")
+DEFAULT_SOURCE_SSH_USER = "ubuntu"
 
 SOURCE_INSTANCES: Dict[str, Dict[str, str]] = {
     "base_limpia": {
@@ -72,7 +73,14 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Payload inválido.")
 
+    source_mode = str(payload.get("source_mode", "local")).strip().lower()
     source_instance = str(payload.get("source_instance", "")).strip()
+    source_host = str(payload.get("source_host", "")).strip()
+    source_ssh_user = str(payload.get("source_ssh_user", DEFAULT_SOURCE_SSH_USER)).strip()
+    source_ssh_key = str(payload.get("source_ssh_key", REMOTE_SSH_KEY)).strip()
+    source_dir = str(payload.get("source_dir", "")).strip()
+    source_data = str(payload.get("source_data", "")).strip()
+    source_vhost = str(payload.get("source_vhost", "")).strip()
     new_key = str(payload.get("new_key", "")).strip()
     new_domain = str(payload.get("new_domain", "")).strip()
     new_url = str(payload.get("new_url", "")).strip()
@@ -91,8 +99,25 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     target_db_pass = str(payload.get("target_db_pass", payload.get("db_pass", "")))
     dest_db = str(payload.get("dest_db", "")).strip()
 
-    if source_instance not in SOURCE_INSTANCES:
-        raise ValueError("Instancia origen no válida.")
+    if source_mode not in ("local", "remote"):
+        raise ValueError("Modo de origen inválido. Usa 'local' o 'remote'.")
+
+    if source_mode == "local":
+        if source_instance not in SOURCE_INSTANCES:
+            raise ValueError("Instancia origen no válida.")
+    else:
+        if not re.fullmatch(r"[A-Za-z0-9.-]+", source_host):
+            raise ValueError("Host origen inválido.")
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", source_ssh_user):
+            raise ValueError("Usuario SSH origen inválido.")
+        if not source_ssh_key.startswith("/"):
+            raise ValueError("Ruta de llave SSH origen inválida.")
+        if not is_safe_path(source_dir):
+            raise ValueError("Directorio Moodle origen inválido.")
+        if not is_safe_path(source_data):
+            raise ValueError("Directorio moodledata origen inválido.")
+        if not is_safe_path(source_vhost):
+            raise ValueError("Ruta de vhost origen inválida.")
 
     if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}", new_key):
         raise ValueError("new_key inválido. Usa letras, números, '_' o '-'.")
@@ -148,6 +173,13 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     validated = {
         "source_instance": source_instance,
+        "source_mode": source_mode,
+        "source_host": source_host,
+        "source_ssh_user": source_ssh_user,
+        "source_ssh_key": source_ssh_key,
+        "source_dir": source_dir,
+        "source_data": source_data,
+        "source_vhost": source_vhost,
         "new_key": new_key,
         "new_domain": new_domain,
         "new_url": new_url,
@@ -195,14 +227,26 @@ def update_job(job_id: str, **changes: Any) -> None:
 
 
 def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
-    source_cfg = SOURCE_INSTANCES[payload["source_instance"]]
+    if payload["source_mode"] == "local":
+        source_cfg = SOURCE_INSTANCES[payload["source_instance"]]
+        src_dir = source_cfg["src_dir"]
+        src_data = source_cfg["src_data"]
+        src_vhost = source_cfg["src_vhost"]
+    else:
+        src_dir = payload["source_dir"]
+        src_data = payload["source_data"]
+        src_vhost = payload["source_vhost"]
 
     env = os.environ.copy()
     env.update(
         {
-            "SRC_DIR": source_cfg["src_dir"],
-            "SRC_DATA": source_cfg["src_data"],
-            "SRC_VHOST": source_cfg["src_vhost"],
+            "SRC_DIR": src_dir,
+            "SRC_DATA": src_data,
+            "SRC_VHOST": src_vhost,
+            "SOURCE_MODE": payload["source_mode"],
+            "SOURCE_HOST": payload["source_host"],
+            "SOURCE_SSH_USER": payload["source_ssh_user"],
+            "SOURCE_SSH_KEY": payload["source_ssh_key"],
             "NEW_KEY": payload["new_key"],
             "NEW_DOMAIN": payload["new_domain"],
             "NEW_URL": payload["new_url"],

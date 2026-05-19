@@ -62,6 +62,15 @@ remote_exec() {
   ssh "${SSH_OPTS[@]}" "$REMOTE_SSH_TARGET" "$cmd"
 }
 
+source_exec() {
+  local cmd="$1"
+  if [[ "${SOURCE_MODE:-local}" == "remote" ]]; then
+    ssh "${SOURCE_SSH_OPTS[@]}" "$SOURCE_SSH_TARGET" "$cmd"
+  else
+    bash -lc "$cmd"
+  fi
+}
+
 remote_bash() {
   local script="$1"
   remote_exec "bash -lc $(quote_shell "$script")"
@@ -81,11 +90,20 @@ SRC_DIR="${SRC_DIR:-}"
 SRC_DATA="${SRC_DATA:-}"
 SRC_VHOST="${SRC_VHOST:-}"
 NEW_KEY="${NEW_KEY:-}"
+SOURCE_MODE="${SOURCE_MODE:-local}"
+SOURCE_HOST="${SOURCE_HOST:-}"
+SOURCE_SSH_USER="${SOURCE_SSH_USER:-ubuntu}"
+SOURCE_SSH_KEY="${SOURCE_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 
 require_non_empty SRC_DIR
 require_non_empty SRC_DATA
 require_non_empty SRC_VHOST
 require_non_empty NEW_KEY
+
+if [[ "$SOURCE_MODE" != "local" && "$SOURCE_MODE" != "remote" ]]; then
+  err "SOURCE_MODE must be 'local' or 'remote'."
+  exit 1
+fi
 
 DEPLOY_TARGET="${DEPLOY_TARGET:-local}"
 DEPLOY_TARGET="${DEPLOY_TARGET,,}"
@@ -123,6 +141,9 @@ DRY_RUN="${DRY_RUN:-0}"
 SSH_OPTS=()
 REMOTE_SSH_TARGET=""
 RSYNC_SSH=""
+SOURCE_SSH_OPTS=()
+SOURCE_SSH_TARGET=""
+SOURCE_RSYNC_SSH=""
 if [[ "$DEPLOY_TARGET" == "remote" ]]; then
   require_cmd ssh
   [[ -f "$REMOTE_SSH_KEY" ]] || { err "SSH key not found at $REMOTE_SSH_KEY"; exit 1; }
@@ -147,18 +168,38 @@ if [[ "$DEPLOY_TARGET" == "remote" ]]; then
   RSYNC_SSH="ssh -i $REMOTE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 fi
 
+if [[ "$SOURCE_MODE" == "remote" ]]; then
+  require_cmd ssh
+  [[ -f "$SOURCE_SSH_KEY" ]] || { err "Source SSH key not found at $SOURCE_SSH_KEY"; exit 1; }
+  if [[ ! "$SOURCE_HOST" =~ ^[A-Za-z0-9.-]+$ ]]; then
+    err "Invalid SOURCE_HOST '$SOURCE_HOST'."
+    exit 1
+  fi
+  SOURCE_SSH_TARGET="${SOURCE_SSH_USER}@${SOURCE_HOST}"
+  SOURCE_SSH_OPTS=(-i "$SOURCE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+  SOURCE_RSYNC_SSH="ssh -i $SOURCE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+fi
+
 if bool_true "$ENABLE_NGINX" && [[ "$DEPLOY_TARGET" == "local" ]]; then
   require_cmd nginx
 fi
 
 CONFIG_FILE="$SRC_DIR/config.php"
-[[ -f "$CONFIG_FILE" ]] || { err "config.php not found at $CONFIG_FILE"; exit 1; }
+if [[ "$SOURCE_MODE" == "local" ]]; then
+  [[ -f "$CONFIG_FILE" ]] || { err "config.php not found at $CONFIG_FILE"; exit 1; }
+else
+  source_exec "test -f $(quote_shell "$CONFIG_FILE")" || { err "Remote config.php not found at $CONFIG_FILE"; exit 1; }
+fi
 
 parse_cfg() {
   local key="$1"
-  sudo awk -v k="$key" -F"'" '
+  if [[ "$SOURCE_MODE" == "local" ]]; then
+    sudo awk -v k="$key" -F"'" '
     $0 ~ "\\$CFG->" k "[[:space:]]*=" { print $2; exit }
   ' "$CONFIG_FILE"
+  else
+    source_exec "awk -v k=$(quote_shell "$key") -F\' '\$0 ~ \"\\\\\$CFG->\" k \"[[:space:]]*=\" { print \$2; exit }' $(quote_shell "$CONFIG_FILE")"
+  fi
 }
 
 SRC_DBHOST_CFG="$(parse_cfg dbhost)"
@@ -192,7 +233,11 @@ require_safe_db_name "$DEST_DB"
 
 if bool_true "$ENABLE_SRC_MAINT"; then
   log "Enabling maintenance mode on source…"
-  sudo -u www-data "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --enable
+  if [[ "$SOURCE_MODE" == "local" ]]; then
+    sudo -u www-data "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --enable
+  else
+    source_exec "sudo -u www-data $(quote_shell "$PHP_CLI") $(quote_shell "$SRC_DIR/admin/cli/maintenance.php") --enable"
+  fi
   SRC_MAINT_ENABLED=1
 else
   SRC_MAINT_ENABLED=0
@@ -241,12 +286,16 @@ DUMP_SAN="$TMP_DIR/${SRC_DBNAME}.sanitized.sql"
 PATCH_PHP="$TMP_DIR/config_patch.php"
 
 log "Dumping database $SRC_DBNAME from $SOURCE_DB_HOST …"
-(
-  export MYSQL_PWD="$SOURCE_DB_PASS"
-  mysqldump -h "$SOURCE_DB_HOST" -u "$SOURCE_DB_USER" \
-    --single-transaction --quick --set-gtid-purged=OFF \
-    "$SRC_DBNAME" > "$DUMP_ORIG"
-)
+if [[ "$SOURCE_MODE" == "local" ]]; then
+  (
+    export MYSQL_PWD="$SOURCE_DB_PASS"
+    mysqldump -h "$SOURCE_DB_HOST" -u "$SOURCE_DB_USER" \
+      --single-transaction --quick --set-gtid-purged=OFF \
+      "$SRC_DBNAME" > "$DUMP_ORIG"
+  )
+else
+  source_exec "export MYSQL_PWD=$(quote_shell "$SOURCE_DB_PASS"); mysqldump -h $(quote_shell "$SOURCE_DB_HOST") -u $(quote_shell "$SOURCE_DB_USER") --single-transaction --quick --set-gtid-purged=OFF $(quote_shell "$SRC_DBNAME")" > "$DUMP_ORIG"
+fi
 
 log "Sanitizing dump to remove privileged statements…"
 sed '/SQL_LOG_BIN/d; /GTID_PURGED/d' "$DUMP_ORIG" > "$DUMP_SAN"
@@ -292,12 +341,20 @@ PHP
 
 if [[ "$DEPLOY_TARGET" == "local" ]]; then
   log "Copying code to $DEST_DIR …"
-  sudo rsync -a "$SRC_DIR/" "$DEST_DIR/"
+  if [[ "$SOURCE_MODE" == "local" ]]; then
+    sudo rsync -a "$SRC_DIR/" "$DEST_DIR/"
+  else
+    sudo rsync -a -e "$SOURCE_RSYNC_SSH" --rsync-path="sudo rsync" "${SOURCE_SSH_TARGET}:${SRC_DIR}/" "$DEST_DIR/"
+  fi
   sudo chown -R www-data:www-data "$DEST_DIR"
 
   log "Copying moodledata to $DEST_DATA … (may take time)"
   sudo mkdir -p "$DEST_DATA"
-  sudo rsync -a "$SRC_DATA/" "$DEST_DATA/"
+  if [[ "$SOURCE_MODE" == "local" ]]; then
+    sudo rsync -a "$SRC_DATA/" "$DEST_DATA/"
+  else
+    sudo rsync -a -e "$SOURCE_RSYNC_SSH" --rsync-path="sudo rsync" "${SOURCE_SSH_TARGET}:${SRC_DATA}/" "$DEST_DATA/"
+  fi
   sudo chown -R www-data:www-data "$DEST_DATA"
   sudo find "$DEST_DATA" -type d -exec chmod 770 {} \;
   sudo find "$DEST_DATA" -type f -exec chmod 660 {} \;
@@ -323,7 +380,11 @@ else
   sudo mkdir -p "$STAGE_DIR"
 
   log "Staging Moodle code locally before remote sync …"
-  sudo rsync -a "$SRC_DIR/" "$STAGE_DIR/"
+  if [[ "$SOURCE_MODE" == "local" ]]; then
+    sudo rsync -a "$SRC_DIR/" "$STAGE_DIR/"
+  else
+    sudo rsync -a -e "$SOURCE_RSYNC_SSH" --rsync-path="sudo rsync" "${SOURCE_SSH_TARGET}:${SRC_DIR}/" "$STAGE_DIR/"
+  fi
 
   log "Patching staged config.php for remote destination …"
   sudo env \
@@ -340,7 +401,12 @@ else
   sudo rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" "$STAGE_DIR/" "${REMOTE_SSH_TARGET}:${DEST_DIR}/"
 
   log "Copying moodledata to remote $REMOTE_SSH_TARGET:$DEST_DATA … (may take time)"
-  sudo rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" "$SRC_DATA/" "${REMOTE_SSH_TARGET}:${DEST_DATA}/"
+  if [[ "$SOURCE_MODE" == "local" ]]; then
+    sudo rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" "$SRC_DATA/" "${REMOTE_SSH_TARGET}:${DEST_DATA}/"
+  else
+    sudo rsync -a -e "$SOURCE_RSYNC_SSH" --rsync-path="sudo rsync" "${SOURCE_SSH_TARGET}:${SRC_DATA}/" "$TMP_DIR/source_data/"
+    sudo rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" "$TMP_DIR/source_data/" "${REMOTE_SSH_TARGET}:${DEST_DATA}/"
+  fi
 
   remote_sudo_bash "chown -R www-data:www-data $(quote_shell "$DEST_DIR") $(quote_shell "$DEST_DATA")"
   remote_sudo_bash "find $(quote_shell "$DEST_DATA") -type d -exec chmod 770 {} \\;"

@@ -1,3 +1,94 @@
+## Clone from any source server (SSH)
+
+This tool can now clone Moodle from:
+
+- **Local source instance** (preset in `app.py`)
+- **Remote source server over SSH** (custom paths)
+
+### Requirements (remote source mode)
+
+The server running `app.py` must be able to SSH into the **source** server using the configured key:
+
+- SSH user (example: `ubuntu`)
+- SSH private key path (absolute path on the app server)
+- Access to source paths:
+  - Moodle dir (e.g. `/var/www/moodle_x`)
+  - moodledata dir (e.g. `/var/moodledata_x`)
+  - source `config.php` inside Moodle dir
+- Ability to run remote commands used by the script:
+  - `sudo -u www-data php ...` (maintenance/CLI actions on source)
+  - `mysqldump` on source host
+  - `rsync`/SSH copy from source host
+
+### UI usage
+
+1. Open the web UI.
+2. In **1. Origen**, set **Modo de origen**:
+   - `Instancia local (preconfigurada)` OR
+   - `Servidor remoto por SSH`
+3. If remote:
+   - Fill:
+     - `Host origen`
+     - `Usuario SSH origen`
+     - `Llave SSH origen` (absolute path in app server)
+     - `Directorio Moodle origen`
+     - `Directorio moodledata origen`
+     - `Vhost origen (ruta)`
+4. Fill destination + DB + options.
+5. Run **Simular (dry-run)** first.
+
+### API payload example (remote source)
+
+`POST /api/clone`
+
+```json
+{
+  "source_mode": "remote",
+  "source_host": "10.0.0.15",
+  "source_ssh_user": "ubuntu",
+  "source_ssh_key": "/home/ubuntu/.ssh/id_ed25519",
+  "source_dir": "/var/www/moodle_clienta",
+  "source_data": "/var/moodledata_clienta",
+  "source_vhost": "/etc/nginx/sites-available/clienta.example.com",
+
+  "source_instance": "",
+  "maintenance_source": true,
+
+  "deploy_target": "remote",
+  "remote_host": "51.44.30.62",
+
+  "new_key": "clienta_clone",
+  "new_domain": "clienta-clone.example.com",
+  "new_url": "https://clienta-clone.example.com",
+  "dest_dir": "/var/www/html/moodle/clienta_clone",
+  "dest_data": "/var/www/data/moodle/clienta_clone",
+
+  "source_db_host": "",
+  "source_db_user": "",
+  "source_db_pass": "",
+  "source_db_name": "",
+
+  "target_db_host": "aurora-moodle-cluster.cluster-xxxx.eu-west-3.rds.amazonaws.com",
+  "target_db_user": "admin_moodle",
+  "target_db_pass": "********",
+  "dest_db": "moodle_clienta_clone",
+
+  "opt_replace": true,
+  "opt_purge": true,
+  "opt_nginx": true,
+  "opt_certbot": true,
+  "opt_cron": true,
+  "dry_run": true
+}
+```
+
+### Notes
+
+- In **remote source mode**, `source_instance` is ignored.
+- In **local source mode**, presets from `SOURCE_INSTANCES` in `app.py` are used.
+- Use absolute SSH key paths (recommended), e.g. `/home/ubuntu/.ssh/id_ed25519`.
+- Always validate with **dry-run** before real cloning.
+
 # Moodle Cloner
 Script interactivo para clonar instancias Moodle en este servidor (Ubuntu, Nginx, MySQL/Aurora en RDS):
 - Copia código y `moodledata`
