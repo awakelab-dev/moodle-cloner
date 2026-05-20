@@ -203,12 +203,13 @@ parse_cfg() {
 }
 
 SRC_DBHOST_CFG="$(parse_cfg dbhost)"
-SRC_DBNAME="${SRC_DBNAME_OVERRIDE:-$(parse_cfg dbname)}"
+SRC_DBNAME="$(parse_cfg dbname)"
 SRC_DBUSER_CFG="$(parse_cfg dbuser)"
+SRC_DBPASS_CFG="$(parse_cfg dbpass)"
 SRC_WWWROOT="$(parse_cfg wwwroot)"
 
 if [[ -z "${SRC_DBNAME:-}" ]]; then
-  err "Could not read source dbname from $CONFIG_FILE (and SRC_DBNAME_OVERRIDE was not set)."
+  err "Could not read source dbname from $CONFIG_FILE."
   exit 1
 fi
 
@@ -216,12 +217,12 @@ if [[ -z "${SRC_WWWROOT:-}" ]]; then
   warn "Could not read source wwwroot from $CONFIG_FILE (URL replace may be skipped)."
 fi
 
-SOURCE_DB_HOST="${SRC_DB_HOST_OVERRIDE:-${SRC_DBHOST_CFG:-localhost}}"
-SOURCE_DB_USER="${SRC_DB_USER_OVERRIDE:-${SRC_DBUSER_CFG:-admin_moodle}}"
+SOURCE_DB_HOST="${SRC_DBHOST_CFG:-localhost}"
+SOURCE_DB_USER="${SRC_DBUSER_CFG:-admin_moodle}"
 TARGET_DB_HOST="${TARGET_DB_HOST:-${DB_HOST:-${SRC_DBHOST_CFG:-localhost}}}"
 TARGET_DB_USER="${TARGET_DB_USER:-${DB_USER:-${SRC_DBUSER_CFG:-admin_moodle}}}"
 TARGET_DB_PASS="${TARGET_DB_PASS:-${DB_PASS:-}}"
-SOURCE_DB_PASS="${SRC_DB_PASS_OVERRIDE:-${TARGET_DB_PASS}}"
+SOURCE_DB_PASS="${SRC_DBPASS_CFG:-}"
 
 require_non_empty SOURCE_DB_HOST
 require_non_empty SOURCE_DB_USER

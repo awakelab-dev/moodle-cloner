@@ -14,13 +14,39 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
 SCRIPT_FILE = ROOT / "moodle-clone-web.sh"
+ENV_FILE = ROOT / ".env"
+
+
+def load_dotenv(filepath: Path) -> None:
+    if not filepath.exists():
+        return
+    for raw_line in filepath.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        value = value.strip()
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
+load_dotenv(ENV_FILE)
 
 HOST = os.getenv("APP_HOST", "0.0.0.0")
 PORT = int(os.getenv("APP_PORT", "8787"))
 MAX_LOG_CHARS = 250_000
 DEFAULT_REMOTE_HOST = "51.44.30.62"
-REMOTE_SSH_KEY = str(Path.home() / ".ssh" / "id_ed25519")
+REMOTE_SSH_KEY = os.getenv("REMOTE_SSH_KEY", str(Path.home() / ".ssh" / "id_ed25519"))
 DEFAULT_SOURCE_SSH_USER = "ubuntu"
+TARGET_DB_HOST_ENV = os.getenv("TARGET_DB_HOST", "")
+TARGET_DB_ADMIN_USER_ENV = os.getenv("TARGET_DB_ADMIN_USER", "")
+TARGET_DB_ADMIN_PASS_ENV = os.getenv("TARGET_DB_ADMIN_PASS", "")
 
 SOURCE_INSTANCES: Dict[str, Dict[str, str]] = {
     "base_limpia": {
@@ -63,7 +89,7 @@ def is_safe_path(value: str) -> bool:
 
 def sanitize_preview(payload: Dict[str, Any]) -> Dict[str, Any]:
     clean = dict(payload)
-    for key in ("db_pass", "target_db_pass", "source_db_pass"):
+    for key in ("db_pass", "target_db_pass", "source_db_pass", "target_db_admin_pass"):
         if key in clean:
             clean[key] = "***"
     return clean
@@ -76,8 +102,6 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     source_mode = str(payload.get("source_mode", "local")).strip().lower()
     source_instance = str(payload.get("source_instance", "")).strip()
     source_host = str(payload.get("source_host", "")).strip()
-    source_ssh_user = str(payload.get("source_ssh_user", DEFAULT_SOURCE_SSH_USER)).strip()
-    source_ssh_key = str(payload.get("source_ssh_key", REMOTE_SSH_KEY)).strip()
     source_dir = str(payload.get("source_dir", "")).strip()
     source_data = str(payload.get("source_data", "")).strip()
     source_vhost = str(payload.get("source_vhost", "")).strip()
@@ -89,12 +113,9 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     deploy_target = str(payload.get("deploy_target", "local")).strip().lower()
     remote_host = str(payload.get("remote_host", DEFAULT_REMOTE_HOST)).strip()
 
-    source_db_host = str(payload.get("source_db_host", "")).strip()
-    source_db_user = str(payload.get("source_db_user", "")).strip()
-    source_db_pass = str(payload.get("source_db_pass", ""))
-    source_db_name = str(payload.get("source_db_name", "")).strip()
-
-    target_db_host = str(payload.get("target_db_host", payload.get("db_host", ""))).strip()
+    target_db_host = TARGET_DB_HOST_ENV.strip()
+    target_db_admin_user = TARGET_DB_ADMIN_USER_ENV.strip()
+    target_db_admin_pass = TARGET_DB_ADMIN_PASS_ENV
     target_db_user = str(payload.get("target_db_user", payload.get("db_user", ""))).strip()
     target_db_pass = str(payload.get("target_db_pass", payload.get("db_pass", "")))
     dest_db = str(payload.get("dest_db", "")).strip()
@@ -108,10 +129,6 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     else:
         if not re.fullmatch(r"[A-Za-z0-9.-]+", source_host):
             raise ValueError("Host origen inválido.")
-        if not re.fullmatch(r"[A-Za-z0-9._-]+", source_ssh_user):
-            raise ValueError("Usuario SSH origen inválido.")
-        if not source_ssh_key.startswith("/"):
-            raise ValueError("Ruta de llave SSH origen inválida.")
         if not is_safe_path(source_dir):
             raise ValueError("Directorio Moodle origen inválido.")
         if not is_safe_path(source_data):
@@ -150,17 +167,14 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         if not dest_data.startswith("/var/www/data/moodle/"):
             raise ValueError("En remoto, el directorio moodledata debe iniciar con /var/www/data/moodle/.")
 
-    if source_db_host and not re.fullmatch(r"[A-Za-z0-9._-]+", source_db_host):
-        raise ValueError("Host DB origen inválido.")
-
-    if source_db_user and not re.fullmatch(r"[A-Za-z0-9._$-]+", source_db_user):
-        raise ValueError("Usuario DB origen inválido.")
-
-    if source_db_name and not re.fullmatch(r"[A-Za-z0-9_]+", source_db_name):
-        raise ValueError("Nombre DB origen inválido (solo letras, números y _).")
-
     if not re.fullmatch(r"[A-Za-z0-9._-]+", target_db_host):
         raise ValueError("Host DB destino inválido.")
+
+    if not re.fullmatch(r"[A-Za-z0-9._$-]+", target_db_admin_user):
+        raise ValueError("Usuario administrador BD destino inválido (TARGET_DB_ADMIN_USER).")
+
+    if not target_db_admin_pass:
+        raise ValueError("La contraseña administradora BD destino es obligatoria (TARGET_DB_ADMIN_PASS).")
 
     if not re.fullmatch(r"[A-Za-z0-9._$-]+", target_db_user):
         raise ValueError("Usuario DB destino inválido.")
@@ -175,8 +189,6 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "source_instance": source_instance,
         "source_mode": source_mode,
         "source_host": source_host,
-        "source_ssh_user": source_ssh_user,
-        "source_ssh_key": source_ssh_key,
         "source_dir": source_dir,
         "source_data": source_data,
         "source_vhost": source_vhost,
@@ -187,13 +199,11 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "dest_data": dest_data,
         "deploy_target": deploy_target,
         "remote_host": remote_host if deploy_target == "remote" else "",
-        "source_db_host": source_db_host,
-        "source_db_user": source_db_user,
-        "source_db_pass": source_db_pass,
-        "source_db_name": source_db_name,
         "target_db_host": target_db_host,
         "target_db_user": target_db_user,
         "target_db_pass": target_db_pass,
+        "target_db_admin_user": target_db_admin_user,
+        "target_db_admin_pass": target_db_admin_pass,
         "dest_db": dest_db,
         "maintenance_source": bool(payload.get("maintenance_source", True)),
         "opt_replace": bool(payload.get("opt_replace", True)),
@@ -245,8 +255,8 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "SRC_VHOST": src_vhost,
             "SOURCE_MODE": payload["source_mode"],
             "SOURCE_HOST": payload["source_host"],
-            "SOURCE_SSH_USER": payload["source_ssh_user"],
-            "SOURCE_SSH_KEY": payload["source_ssh_key"],
+            "SOURCE_SSH_USER": DEFAULT_SOURCE_SSH_USER,
+            "SOURCE_SSH_KEY": REMOTE_SSH_KEY,
             "NEW_KEY": payload["new_key"],
             "NEW_DOMAIN": payload["new_domain"],
             "NEW_URL": payload["new_url"],
@@ -256,13 +266,9 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "DEPLOY_TARGET": payload["deploy_target"],
             "REMOTE_HOST": payload["remote_host"],
             "REMOTE_SSH_KEY": REMOTE_SSH_KEY,
-            "SRC_DB_HOST_OVERRIDE": payload["source_db_host"],
-            "SRC_DB_USER_OVERRIDE": payload["source_db_user"],
-            "SRC_DB_PASS_OVERRIDE": payload["source_db_pass"],
-            "SRC_DBNAME_OVERRIDE": payload["source_db_name"],
             "TARGET_DB_HOST": payload["target_db_host"],
-            "TARGET_DB_USER": payload["target_db_user"],
-            "TARGET_DB_PASS": payload["target_db_pass"],
+            "TARGET_DB_USER": payload["target_db_admin_user"],
+            "TARGET_DB_PASS": payload["target_db_admin_pass"],
             "DB_HOST": payload["target_db_host"],
             "DB_USER": payload["target_db_user"],
             "DB_PASS": payload["target_db_pass"],

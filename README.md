@@ -29,8 +29,6 @@ The server running `app.py` must be able to SSH into the **source** server using
 3. If remote:
    - Fill:
      - `Host origen`
-     - `Usuario SSH origen`
-     - `Llave SSH origen` (absolute path in app server)
      - `Directorio Moodle origen`
      - `Directorio moodledata origen`
      - `Vhost origen (ruta)`
@@ -45,8 +43,6 @@ The server running `app.py` must be able to SSH into the **source** server using
 {
   "source_mode": "remote",
   "source_host": "10.0.0.15",
-  "source_ssh_user": "ubuntu",
-  "source_ssh_key": "/home/ubuntu/.ssh/id_ed25519",
   "source_dir": "/var/www/moodle_clienta",
   "source_data": "/var/moodledata_clienta",
   "source_vhost": "/etc/nginx/sites-available/clienta.example.com",
@@ -63,12 +59,6 @@ The server running `app.py` must be able to SSH into the **source** server using
   "dest_dir": "/var/www/html/moodle/clienta_clone",
   "dest_data": "/var/www/data/moodle/clienta_clone",
 
-  "source_db_host": "",
-  "source_db_user": "",
-  "source_db_pass": "",
-  "source_db_name": "",
-
-  "target_db_host": "aurora-moodle-cluster.cluster-xxxx.eu-west-3.rds.amazonaws.com",
   "target_db_user": "admin_moodle",
   "target_db_pass": "********",
   "dest_db": "moodle_clienta_clone",
@@ -86,7 +76,7 @@ The server running `app.py` must be able to SSH into the **source** server using
 
 - In **remote source mode**, `source_instance` is ignored.
 - In **local source mode**, presets from `SOURCE_INSTANCES` in `app.py` are used.
-- Use absolute SSH key paths (recommended), e.g. `/home/ubuntu/.ssh/id_ed25519`.
+- SSH key used by the app is configured via `.env` (`REMOTE_SSH_KEY`).
 - Always validate with **dry-run** before real cloning.
 
 # Moodle Cloner

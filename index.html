@@ -96,34 +96,13 @@
     <div id="remote-source-fields" class="hidden rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
       <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Origen remoto (SSH)</h3>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Host origen</label>
-          <input
-            type="text"
-            name="source_host"
-            value=""
-            placeholder="ej: 10.0.0.15"
-            class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Usuario SSH origen</label>
-          <input
-            type="text"
-            name="source_ssh_user"
-            value="ubuntu"
-            class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          />
-        </div>
-      </div>
-
       <div>
-        <label class="block text-xs font-medium text-slate-300 mb-1">Llave SSH origen (ruta absoluta en este servidor)</label>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Host origen</label>
         <input
           type="text"
-          name="source_ssh_key"
-          value="~/.ssh/id_ed25519"
+          name="source_host"
+          value=""
+          placeholder="ej: 10.0.0.15"
           class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         />
       </div>
@@ -304,83 +283,7 @@
 
               <div class="space-y-5">
                 <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 space-y-4">
-                  <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Conexión BD origen (opcional)</h3>
-                  <p class="text-xs text-slate-500">
-                    Si host/usuario/nombre se dejan vacíos, se leen desde <span class="font-mono">config.php</span> del Moodle origen.
-                    Si la contraseña queda vacía, se reutiliza la contraseña de BD destino.
-                  </p>
-
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Host BD origen
-                      </label>
-                      <input
-                        type="text"
-                        name="source_db_host"
-                        value=""
-                        placeholder="(opcional)"
-                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
-
-                    <div>
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Usuario BD origen
-                      </label>
-                      <input
-                        type="text"
-                        name="source_db_user"
-                        value=""
-                        placeholder="(opcional)"
-                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Contraseña BD origen
-                      </label>
-                      <input
-                        type="password"
-                        name="source_db_pass"
-                        value=""
-                        placeholder="(opcional)"
-                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
-
-                    <div>
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Nombre BD origen
-                      </label>
-                      <input
-                        type="text"
-                        name="source_db_name"
-                        value=""
-                        placeholder="(opcional)"
-                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 space-y-4">
                   <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Conexión BD destino (obligatoria)</h3>
-
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">
-                      Host BD destino
-                    </label>
-                    <input
-                      type="text"
-                      name="target_db_host"
-                      value="aurora-moodle-cluster.cluster-cr2ks28gi5a2.eu-west-3.rds.amazonaws.com"
-                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -671,8 +574,6 @@
           source_mode: sourceMode,
           source_instance: String(fd.get('source_instance') || '').trim(),
           source_host: sourceMode === 'remote' ? String(fd.get('source_host') || '').trim() : '',
-          source_ssh_user: sourceMode === 'remote' ? String(fd.get('source_ssh_user') || '').trim() : '',
-          source_ssh_key: sourceMode === 'remote' ? String(fd.get('source_ssh_key') || '').trim() : '',
           source_dir: sourceMode === 'remote' ? String(fd.get('source_dir') || '').trim() : '',
           source_data: sourceMode === 'remote' ? String(fd.get('source_data') || '').trim() : '',
           source_vhost: sourceMode === 'remote' ? String(fd.get('source_vhost') || '').trim() : '',
@@ -684,11 +585,6 @@
           dest_data: String(fd.get('dest_data') || '').trim(),
           deploy_target: deployTarget,
           remote_host: deployTarget === 'remote' ? String(fd.get('remote_host') || '').trim() : '',
-          source_db_host: String(fd.get('source_db_host') || '').trim(),
-          source_db_user: String(fd.get('source_db_user') || '').trim(),
-          source_db_pass: String(fd.get('source_db_pass') || ''),
-          source_db_name: String(fd.get('source_db_name') || '').trim(),
-          target_db_host: String(fd.get('target_db_host') || '').trim(),
           target_db_user: String(fd.get('target_db_user') || '').trim(),
           target_db_pass: String(fd.get('target_db_pass') || ''),
           dest_db: String(fd.get('dest_db') || '').trim(),
