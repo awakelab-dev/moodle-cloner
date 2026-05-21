@@ -48,6 +48,22 @@ TARGET_DB_HOST_ENV = os.getenv("TARGET_DB_HOST", "")
 TARGET_DB_ADMIN_USER_ENV = os.getenv("TARGET_DB_ADMIN_USER", "")
 TARGET_DB_ADMIN_PASS_ENV = os.getenv("TARGET_DB_ADMIN_PASS", "")
 
+
+def esc_html(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
+    )
+
+
+def render_index_html() -> bytes:
+    html = INDEX_FILE.read_text(encoding="utf-8")
+    html = html.replace("{{TARGET_DB_HOST}}", esc_html(TARGET_DB_HOST_ENV.strip()))
+    return html.encode("utf-8")
+
 SOURCE_INSTANCES: Dict[str, Dict[str, str]] = {
     "base_limpia": {
         "src_dir": "/var/www/moodle_dev",
@@ -325,7 +341,10 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def _send_file(self, filepath: Path, content_type: str, send_body: bool = True) -> None:
-        data = filepath.read_bytes()
+        if filepath == INDEX_FILE:
+            data = render_index_html()
+        else:
+            data = filepath.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))

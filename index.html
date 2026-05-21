@@ -286,6 +286,19 @@
                   <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Conexión BD destino (obligatoria)</h3>
 
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                      <label class="block text-xs font-medium text-slate-300 mb-1">
+                        Host BD destino (TARGET_DB_HOST)
+                      </label>
+                      <input
+                        type="text"
+                        name="target_db_host"
+                        value="{{TARGET_DB_HOST}}"
+                        readonly
+                        class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-400 cursor-not-allowed"
+                      />
+                    </div>
+
                     <div>
                       <label class="block text-xs font-medium text-slate-300 mb-1">
                         Usuario BD destino
