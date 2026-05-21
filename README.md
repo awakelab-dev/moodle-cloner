@@ -107,5 +107,28 @@ Por defecto propone:
 - Las contraseñas se leen en modo silencioso y se pasan a los clientes MySQL mediante la variable `MYSQL_PWD` o variables de entorno temporales; no se incluyen como argumentos visibles del proceso.
 - Revisa el vhost generado y los logs de Nginx si algo falla (`sudo nginx -t`, `sudo tail -f /var/log/nginx/error.log`).
 
+### Guardrails adicionales para RDS en producción
+
+El script web incluye controles de seguridad adicionales para minimizar riesgos en RDS:
+
+- `SAFE_MODE` (default: `1`): habilita barreras obligatorias antes de escribir en BD.
+- `I_UNDERSTAND_PRODUCTION_RDS=true`: confirmación explícita requerida cuando `SAFE_MODE=1` y `DRY_RUN=0`.
+- `RDS_HOST_ALLOWLIST` (CSV opcional): lista de hosts permitidos para `TARGET_DB_HOST`.
+  - Ejemplo: `RDS_HOST_ALLOWLIST=db1.xxxxx.rds.amazonaws.com,db2.xxxxx.rds.amazonaws.com`
+- `PROTECTED_DATABASES` (CSV opcional): bases prohibidas como destino.
+  - Ejemplo: `PROTECTED_DATABASES=moodle_prod,moodle_clienta_prod`
+
+Además, el script ahora valida que:
+
+- `DEST_DB` y `SRC_DBNAME` tengan formato seguro (`[A-Za-z0-9_]+`).
+- `DEST_DB` sea distinto de la base origen.
+- Se ejecute un preflight de conexión al host destino antes de `CREATE DATABASE`/import.
+
+Recomendación operativa:
+
+1. Ejecutar primero con `DRY_RUN=1`.
+2. Configurar `RDS_HOST_ALLOWLIST` y `PROTECTED_DATABASES`.
+3. Solo para ejecución real, establecer `I_UNDERSTAND_PRODUCTION_RDS=true`.
+
 ## Modo WEB
 - El archivo index.html puede ser desplegado en un webserver para correr el script `moodle-clone-web.sh` 

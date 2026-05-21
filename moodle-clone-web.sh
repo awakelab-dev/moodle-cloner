@@ -37,6 +37,66 @@ require_safe_db_name() {
   fi
 }
 
+require_safe_db_identifier() {
+  local name="$1"
+  local label="$2"
+  if [[ ! "$name" =~ ^[A-Za-z0-9_]+$ ]]; then
+    err "Invalid ${label} '$name'. Only letters, numbers and underscore are allowed."
+    exit 1
+  fi
+}
+
+is_in_csv_list() {
+  local needle="$1"
+  local csv="$2"
+  local item
+  IFS=',' read -r -a __items <<< "$csv"
+  for item in "${__items[@]}"; do
+    item="${item//[[:space:]]/}"
+    [[ -z "$item" ]] && continue
+    if [[ "$needle" == "$item" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+enforce_db_host_allowlist() {
+  local host="$1"
+  local allowlist_csv="$2"
+  if [[ -z "$allowlist_csv" ]]; then
+    return 0
+  fi
+  if ! is_in_csv_list "$host" "$allowlist_csv"; then
+    err "TARGET_DB_HOST '$host' is not in RDS_HOST_ALLOWLIST. Aborting for safety."
+    exit 1
+  fi
+}
+
+enforce_protected_db_blocklist() {
+  local dbname="$1"
+  local protected_csv="$2"
+  if [[ -z "$protected_csv" ]]; then
+    return 0
+  fi
+  if is_in_csv_list "$dbname" "$protected_csv"; then
+    err "DEST_DB '$dbname' is listed in PROTECTED_DATABASES. Aborting for safety."
+    exit 1
+  fi
+}
+
+require_production_ack_if_needed() {
+  local safe_mode="$1"
+  local dry_run="$2"
+  local ack="${I_UNDERSTAND_PRODUCTION_RDS:-}"
+  if bool_true "$safe_mode" && ! bool_true "$dry_run"; then
+    if ! bool_true "$ack"; then
+      err "SAFE_MODE is enabled and this is not a dry-run. Set I_UNDERSTAND_PRODUCTION_RDS=true to proceed."
+      exit 1
+    fi
+  fi
+}
+
 quote_shell() {
   printf '%q' "$1"
 }
@@ -137,6 +197,9 @@ ENABLE_CRON="${ENABLE_CRON:-1}"
 DISABLE_NEW_MAINT="${DISABLE_NEW_MAINT:-1}"
 DISABLE_SRC_MAINT_AFTER="${DISABLE_SRC_MAINT_AFTER:-1}"
 DRY_RUN="${DRY_RUN:-0}"
+SAFE_MODE="${SAFE_MODE:-1}"
+RDS_HOST_ALLOWLIST="${RDS_HOST_ALLOWLIST:-}"
+PROTECTED_DATABASES="${PROTECTED_DATABASES:-}"
 
 SSH_OPTS=()
 REMOTE_SSH_TARGET=""
@@ -231,6 +294,17 @@ require_non_empty TARGET_DB_HOST
 require_non_empty TARGET_DB_USER
 require_non_empty TARGET_DB_PASS
 require_safe_db_name "$DEST_DB"
+require_safe_db_identifier "$SRC_DBNAME" "source database name"
+require_safe_db_identifier "$DEST_DB" "destination database name"
+enforce_db_host_allowlist "$TARGET_DB_HOST" "$RDS_HOST_ALLOWLIST"
+enforce_protected_db_blocklist "$DEST_DB" "$PROTECTED_DATABASES"
+
+if [[ "$DEST_DB" == "$SRC_DBNAME" ]]; then
+  err "DEST_DB must be different from source DB ($SRC_DBNAME). Aborting for safety."
+  exit 1
+fi
+
+require_production_ack_if_needed "$SAFE_MODE" "$DRY_RUN"
 
 if bool_true "$ENABLE_SRC_MAINT"; then
   log "Enabling maintenance mode on source…"
@@ -271,6 +345,9 @@ Source DB user:    $SOURCE_DB_USER
 Target DB host:    $TARGET_DB_HOST
 Target DB user:    $TARGET_DB_USER
 Dry-run:          $DRY_RUN
+Safe mode:        $SAFE_MODE
+RDS allowlist:    ${RDS_HOST_ALLOWLIST:-<not set>}
+Protected DBs:    ${PROTECTED_DATABASES:-<not set>}
 Maintenance on source now: $SRC_MAINT_ENABLED
 ----------------
 SUM
@@ -302,6 +379,13 @@ log "Sanitizing dump to remove privileged statements…"
 sed '/SQL_LOG_BIN/d; /GTID_PURGED/d' "$DUMP_ORIG" > "$DUMP_SAN"
 
 log "Ensuring destination database $DEST_DB exists on $TARGET_DB_HOST…"
+log "Running target DB preflight safety checks on $TARGET_DB_HOST …"
+(
+  export MYSQL_PWD="$TARGET_DB_PASS"
+  mysql -N -B -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" \
+    -e "SELECT 'preflight_ok', CURRENT_USER(), @@hostname;" >/dev/null
+)
+
 (
   export MYSQL_PWD="$TARGET_DB_PASS"
   mysql -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" \
