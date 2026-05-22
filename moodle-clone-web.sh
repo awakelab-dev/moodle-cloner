@@ -141,7 +141,7 @@ remote_sudo_bash() {
   remote_exec "sudo bash -lc $(quote_shell "$script")"
 }
 
-PHP_CLI="${PHP_CLI:-/usr/bin/php}"
+PHP_CLI="${PHP_CLI:-php}"
 require_cmd rsync sed grep awk mysql mysqldump "$PHP_CLI"
 if command -v certbot >/dev/null 2>&1; then HAS_CERTBOT=1; else HAS_CERTBOT=0; fi
 
@@ -622,7 +622,7 @@ fi
 
 if bool_true "$ENABLE_CRON"; then
   log "Ensuring cron entry for www-data …"
-  CRON_LINE="*/1 * * * * /usr/bin/php ${DEST_DIR}/admin/cli/cron.php >/dev/null 2>&1"
+  CRON_LINE="*/1 * * * * ${PHP_CLI} ${DEST_DIR}/admin/cli/cron.php >/dev/null 2>&1"
   if [[ "$DEPLOY_TARGET" == "local" ]]; then
     if sudo crontab -u www-data -l 2>/dev/null | grep -Fq "${DEST_DIR}/admin/cli/cron.php"; then
       log "Cron entry already present for this instance."
