@@ -172,8 +172,10 @@ REMOTE_SSH_KEY="${REMOTE_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 REMOTE_SSH_USER="${REMOTE_SSH_USER:-ubuntu}"
 
 # Expand leading ~ in SSH key paths (env values may contain literal '~')
-[[ "$SOURCE_SSH_KEY" == ~* ]] && SOURCE_SSH_KEY="$HOME${SOURCE_SSH_KEY#~}"
-[[ "$REMOTE_SSH_KEY" == ~* ]] && REMOTE_SSH_KEY="$HOME${REMOTE_SSH_KEY#~}"
+[[ "$SOURCE_SSH_KEY" == "~" ]] && SOURCE_SSH_KEY="$HOME"
+[[ "$REMOTE_SSH_KEY" == "~" ]] && REMOTE_SSH_KEY="$HOME"
+[[ "$SOURCE_SSH_KEY" == "~/"* ]] && SOURCE_SSH_KEY="${HOME}/${SOURCE_SSH_KEY#~/}"
+[[ "$REMOTE_SSH_KEY" == "~/"* ]] && REMOTE_SSH_KEY="${HOME}/${REMOTE_SSH_KEY#~/}"
 
 if [[ "$DEPLOY_TARGET" != "local" && "$DEPLOY_TARGET" != "remote" ]]; then
   err "DEPLOY_TARGET must be 'local' or 'remote'."
