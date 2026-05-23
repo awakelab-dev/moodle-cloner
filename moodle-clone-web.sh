@@ -166,7 +166,7 @@ if [[ "$SOURCE_MODE" != "local" && "$SOURCE_MODE" != "remote" ]]; then
 fi
 
 DEPLOY_TARGET="${DEPLOY_TARGET:-local}"
-DEPLOY_TARGET="${DEPLOY_TARGET,,}"
+DEPLOY_TARGET="$(printf '%s' "$DEPLOY_TARGET" | tr '[:upper:]' '[:lower:]')"
 REMOTE_HOST="${REMOTE_HOST:-51.44.30.62}"
 REMOTE_SSH_KEY="${REMOTE_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 REMOTE_SSH_USER="${REMOTE_SSH_USER:-ubuntu}"
