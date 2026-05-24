@@ -104,7 +104,11 @@ quote_shell() {
 cleanup() {
   if [[ "${SRC_MAINT_ENABLED:-0}" == "1" && "${REVERT_SRC_MAINT:-0}" == "1" ]]; then
     log "Disabling maintenance mode on source (cleanup)…"
-    sudo -u www-data "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --disable || true
+    if [[ "${SOURCE_MODE:-local}" == "local" ]]; then
+      sudo -u "$SRC_WEB_USER" "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --disable || true
+    else
+      source_exec "sudo -u $(quote_shell "$SRC_WEB_USER") $(quote_shell "$PHP_CLI") $(quote_shell "$SRC_DIR/admin/cli/maintenance.php") --disable || true"
+    fi
   fi
 
   if [[ -n "${TMP_DIR:-}" && -d "${TMP_DIR:-}" ]]; then
@@ -260,6 +264,16 @@ else
   source_exec "test -f $(quote_shell "$CONFIG_FILE")" || { err "Remote config.php not found at $CONFIG_FILE"; exit 1; }
 fi
 
+SRC_WEB_USER=""
+if [[ "$SOURCE_MODE" == "local" ]]; then
+  SRC_WEB_USER="$(stat -c '%U' "$CONFIG_FILE" 2>/dev/null || true)"
+else
+  SRC_WEB_USER="$(source_exec "stat -c %U $(quote_shell "$CONFIG_FILE")" 2>/dev/null || true)"
+fi
+if [[ -z "${SRC_WEB_USER:-}" || "$SRC_WEB_USER" == "UNKNOWN" ]]; then
+  SRC_WEB_USER="www-data"
+fi
+
 parse_cfg() {
   local key="$1"
   if [[ "$SOURCE_MODE" == "local" ]]; then
@@ -315,9 +329,9 @@ require_production_ack_if_needed "$SAFE_MODE" "$DRY_RUN"
 if bool_true "$ENABLE_SRC_MAINT"; then
   log "Enabling maintenance mode on source…"
   if [[ "$SOURCE_MODE" == "local" ]]; then
-    sudo -u www-data "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --enable
+    sudo -u "$SRC_WEB_USER" "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --enable
   else
-    source_exec "sudo -u www-data $(quote_shell "$PHP_CLI") $(quote_shell "$SRC_DIR/admin/cli/maintenance.php") --enable"
+    source_exec "sudo -u $(quote_shell "$SRC_WEB_USER") $(quote_shell "$PHP_CLI") $(quote_shell "$SRC_DIR/admin/cli/maintenance.php") --enable"
   fi
   SRC_MAINT_ENABLED=1
 else
