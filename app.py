@@ -298,6 +298,8 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "DISABLE_SRC_MAINT_AFTER": "1",
             "DRY_RUN": bool_to_env(payload["dry_run"]),
             "I_UNDERSTAND_PRODUCTION_RDS": "true" if not payload["dry_run"] else "",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
         }
     )
 
@@ -322,12 +324,29 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             append_job_output(job_id, line)
 
         rc = process.wait()
-        if rc == 0:
+        with jobs_lock:
+            current_output = jobs.get(job_id, {}).get("output", "")
+
+        fatal_markers = (
+            "unbound variable",
+            "[ERROR]",
+            "Traceback (most recent call last)",
+            "mysqldump:",
+        )
+        has_fatal_output = any(marker in current_output for marker in fatal_markers)
+
+        if rc == 0 and not has_fatal_output:
             update_job(job_id, status="success", exit_code=0)
-            append_job_output(job_id, f"[{now_iso()}] Job finished successfully.\n")
+            append_job_output(job_id, f"[{now_iso()}] Job finished successfully (rc=0).\n")
         else:
-            update_job(job_id, status="failed", exit_code=rc)
-            append_job_output(job_id, f"[{now_iso()}] Job failed with exit code {rc}.\n")
+            effective_rc = rc if rc != 0 else 1
+            update_job(job_id, status="failed", exit_code=effective_rc)
+            if has_fatal_output and rc == 0:
+                append_job_output(
+                    job_id,
+                    f"[{now_iso()}] Job marked as failed due to fatal error markers in output (rc=0).\n",
+                )
+            append_job_output(job_id, f"[{now_iso()}] Job failed with exit code {effective_rc}.\n")
     except Exception as exc:
         update_job(job_id, status="failed", exit_code=1)
         append_job_output(job_id, f"[{now_iso()}] Unexpected error: {exc}\n")
