@@ -312,6 +312,8 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             stdout=PIPE,
             stderr=STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
         )
 

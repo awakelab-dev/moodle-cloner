@@ -388,11 +388,11 @@ if [[ "$SOURCE_MODE" == "local" ]]; then
   (
     export MYSQL_PWD="$SOURCE_DB_PASS"
     mysqldump -h "$SOURCE_DB_HOST" -u "$SOURCE_DB_USER" \
-      --single-transaction --quick --set-gtid-purged=OFF \
+      --single-transaction --quick --set-gtid-purged=OFF --no-tablespaces \
       "$SRC_DBNAME" > "$DUMP_ORIG"
   )
 else
-  source_exec "export MYSQL_PWD=$(quote_shell "$SOURCE_DB_PASS"); mysqldump -h $(quote_shell "$SOURCE_DB_HOST") -u $(quote_shell "$SOURCE_DB_USER") --single-transaction --quick --set-gtid-purged=OFF $(quote_shell "$SRC_DBNAME")" > "$DUMP_ORIG"
+  source_exec "export MYSQL_PWD=$(quote_shell "$SOURCE_DB_PASS"); mysqldump -h $(quote_shell "$SOURCE_DB_HOST") -u $(quote_shell "$SOURCE_DB_USER") --single-transaction --quick --set-gtid-purged=OFF --no-tablespaces $(quote_shell "$SRC_DBNAME")" > "$DUMP_ORIG"
 fi
 
 log "Sanitizing dump to remove privileged statements…"
