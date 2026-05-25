@@ -103,7 +103,7 @@ quote_shell() {
 
 cleanup() {
   if [[ "${SRC_MAINT_ENABLED:-0}" == "1" && "${REVERT_SRC_MAINT:-0}" == "1" ]]; then
-    log "Disabling maintenance mode on source (cleanup)…"
+    log "Disabling maintenance mode on source (cleanup)..."
     if [[ "${SOURCE_MODE:-local}" == "local" ]]; then
       sudo -u "$SRC_WEB_USER" "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --disable || true
     else
@@ -327,7 +327,7 @@ fi
 require_production_ack_if_needed "$SAFE_MODE" "$DRY_RUN"
 
 if bool_true "$ENABLE_SRC_MAINT"; then
-  log "Enabling maintenance mode on source…"
+  log "Enabling maintenance mode on source..."
   if [[ "$SOURCE_MODE" == "local" ]]; then
     sudo -u "$SRC_WEB_USER" "$PHP_CLI" "$SRC_DIR/admin/cli/maintenance.php" --enable
   else
@@ -383,7 +383,7 @@ DUMP_ORIG="$TMP_DIR/${SRC_DBNAME}.sql"
 DUMP_SAN="$TMP_DIR/${SRC_DBNAME}.sanitized.sql"
 PATCH_PHP="$TMP_DIR/config_patch.php"
 
-log "Dumping database $SRC_DBNAME from $SOURCE_DB_HOST …"
+log "Dumping database $SRC_DBNAME from $SOURCE_DB_HOST ..."
 if [[ "$SOURCE_MODE" == "local" ]]; then
   (
     export MYSQL_PWD="$SOURCE_DB_PASS"
@@ -395,11 +395,11 @@ else
   source_exec "export MYSQL_PWD=$(quote_shell "$SOURCE_DB_PASS"); mysqldump -h $(quote_shell "$SOURCE_DB_HOST") -u $(quote_shell "$SOURCE_DB_USER") --single-transaction --quick --set-gtid-purged=OFF --no-tablespaces $(quote_shell "$SRC_DBNAME")" > "$DUMP_ORIG"
 fi
 
-log "Sanitizing dump to remove privileged statements…"
+log "Sanitizing dump to remove privileged statements..."
 sed '/SQL_LOG_BIN/d; /GTID_PURGED/d' "$DUMP_ORIG" > "$DUMP_SAN"
 
-log "Ensuring destination database $DEST_DB exists on $TARGET_DB_HOST…"
-log "Running target DB preflight safety checks on $TARGET_DB_HOST …"
+log "Ensuring destination database $DEST_DB exists on $TARGET_DB_HOST..."
+log "Running target DB preflight safety checks on $TARGET_DB_HOST ..."
 (
   export MYSQL_PWD="$TARGET_DB_PASS"
   mysql -N -B -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" \
@@ -412,7 +412,7 @@ log "Running target DB preflight safety checks on $TARGET_DB_HOST …"
     -e "CREATE DATABASE IF NOT EXISTS ${DEST_DB} DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 )
 
-log "Importing dump into $DEST_DB on $TARGET_DB_HOST …"
+log "Importing dump into $DEST_DB on $TARGET_DB_HOST ..."
 (
   export MYSQL_PWD="$TARGET_DB_PASS"
   mysql -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" "$DEST_DB" < "$DUMP_SAN"
@@ -445,7 +445,7 @@ if (file_put_contents($conf, $c) === false) { fwrite(STDERR, "Cannot write $conf
 PHP
 
 if [[ "$DEPLOY_TARGET" == "local" ]]; then
-  log "Copying code to $DEST_DIR …"
+  log "Copying code to $DEST_DIR ..."
   if [[ "$SOURCE_MODE" == "local" ]]; then
     sudo rsync -a "$SRC_DIR/" "$DEST_DIR/"
   else
@@ -453,7 +453,7 @@ if [[ "$DEPLOY_TARGET" == "local" ]]; then
   fi
   sudo chown -R www-data:www-data "$DEST_DIR"
 
-  log "Copying moodledata to $DEST_DATA … (may take time)"
+  log "Copying moodledata to $DEST_DATA ... (may take time)"
   sudo mkdir -p "$DEST_DATA"
   if [[ "$SOURCE_MODE" == "local" ]]; then
     sudo rsync -a "$SRC_DATA/" "$DEST_DATA/"
@@ -464,7 +464,7 @@ if [[ "$DEPLOY_TARGET" == "local" ]]; then
   sudo find "$DEST_DATA" -type d -exec chmod 770 {} \;
   sudo find "$DEST_DATA" -type f -exec chmod 660 {} \;
 
-  log "Patching $DEST_DIR/config.php …"
+  log "Patching $DEST_DIR/config.php ..."
   sudo env \
     WWWROOT="$NEW_URL" \
     DATAROOT="$DEST_DATA" \
@@ -475,23 +475,23 @@ if [[ "$DEPLOY_TARGET" == "local" ]]; then
     DBPASS="$TARGET_DB_PASS" \
     "$PHP_CLI" "$PATCH_PHP" "$DEST_DIR/config.php"
 else
-  log "Testing SSH connectivity to $REMOTE_SSH_TARGET …"
+  log "Testing SSH connectivity to $REMOTE_SSH_TARGET ..."
   remote_exec "true"
 
-  log "Preparing remote directories on $REMOTE_SSH_TARGET …"
+  log "Preparing remote directories on $REMOTE_SSH_TARGET ..."
   remote_sudo_bash "mkdir -p $(quote_shell "$DEST_DIR") $(quote_shell "$DEST_DATA")"
 
   STAGE_DIR="$TMP_DIR/stage_moodle"
   sudo mkdir -p "$STAGE_DIR"
 
-  log "Staging Moodle code locally before remote sync …"
+  log "Staging Moodle code locally before remote sync ..."
   if [[ "$SOURCE_MODE" == "local" ]]; then
     sudo rsync -a "$SRC_DIR/" "$STAGE_DIR/"
   else
     sudo rsync -a -e "$SOURCE_RSYNC_SSH" --rsync-path="sudo rsync" "${SOURCE_SSH_TARGET}:${SRC_DIR}/" "$STAGE_DIR/"
   fi
 
-  log "Patching staged config.php for remote destination …"
+  log "Patching staged config.php for remote destination ..."
   sudo env \
     WWWROOT="$NEW_URL" \
     DATAROOT="$DEST_DATA" \
@@ -502,10 +502,10 @@ else
     DBPASS="$TARGET_DB_PASS" \
     "$PHP_CLI" "$PATCH_PHP" "$STAGE_DIR/config.php"
 
-  log "Copying code to remote $REMOTE_SSH_TARGET:$DEST_DIR …"
+  log "Copying code to remote $REMOTE_SSH_TARGET:$DEST_DIR ..."
   sudo rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" "$STAGE_DIR/" "${REMOTE_SSH_TARGET}:${DEST_DIR}/"
 
-  log "Copying moodledata to remote $REMOTE_SSH_TARGET:$DEST_DATA … (may take time)"
+  log "Copying moodledata to remote $REMOTE_SSH_TARGET:$DEST_DATA ... (may take time)"
   if [[ "$SOURCE_MODE" == "local" ]]; then
     sudo rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" "$SRC_DATA/" "${REMOTE_SSH_TARGET}:${DEST_DATA}/"
   else
@@ -521,7 +521,7 @@ fi
 if bool_true "$ENABLE_NGINX"; then
   NEW_VHOST="/etc/nginx/sites-available/${NEW_DOMAIN}"
   VHOST_TMP="$TMP_DIR/${NEW_DOMAIN}.nginx"
-  log "Creating Nginx vhost at $NEW_VHOST …"
+  log "Creating Nginx vhost at $NEW_VHOST ..."
 
   cat > "$VHOST_TMP" <<NGINX
 server {
@@ -601,7 +601,7 @@ fi
 
 if bool_true "$ENABLE_REPLACE"; then
   if [[ -n "${SRC_WWWROOT:-}" && "$SRC_WWWROOT" != "$NEW_URL" ]]; then
-    log "Replacing URLs in DB: $SRC_WWWROOT -> $NEW_URL …"
+    log "Replacing URLs in DB: $SRC_WWWROOT -> $NEW_URL ..."
 
     if [[ "$DEPLOY_TARGET" == "local" ]]; then
       pushd "$DEST_DIR" >/dev/null
@@ -628,7 +628,7 @@ else
 fi
 
 if bool_true "$ENABLE_PURGE"; then
-  log "Purging caches …"
+  log "Purging caches ..."
   if [[ "$DEPLOY_TARGET" == "local" ]]; then
     pushd "$DEST_DIR" >/dev/null
     sudo -u www-data "$PHP_CLI" admin/cli/purge_caches.php || true
@@ -641,7 +641,7 @@ else
 fi
 
 if bool_true "$ENABLE_CRON"; then
-  log "Ensuring cron entry for www-data …"
+  log "Ensuring cron entry for www-data ..."
   CRON_LINE="*/1 * * * * ${PHP_CLI} ${DEST_DIR}/admin/cli/cron.php >/dev/null 2>&1"
   if [[ "$DEPLOY_TARGET" == "local" ]]; then
     if sudo crontab -u www-data -l 2>/dev/null | grep -Fq "${DEST_DIR}/admin/cli/cron.php"; then
