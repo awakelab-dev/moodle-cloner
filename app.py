@@ -297,6 +297,7 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "DISABLE_NEW_MAINT": "1",
             "DISABLE_SRC_MAINT_AFTER": "1",
             "DRY_RUN": bool_to_env(payload["dry_run"]),
+            "I_UNDERSTAND_PRODUCTION_RDS": "true" if not payload["dry_run"] else "",
         }
     )
 
