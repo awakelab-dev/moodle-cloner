@@ -620,7 +620,10 @@ if bool_true "$ENABLE_REPLACE"; then
       popd >/dev/null
     else
       set +e
-      remote_bash "cd $(quote_shell "$DEST_DIR") && sudo -u www-data $(quote_shell "$PHP_CLI") admin/tool/replace/cli/replace.php --non-interactive --search=$(quote_shell "$SRC_WWWROOT") --replace=$(quote_shell "$NEW_URL")"
+      # remote_sudo_bash (root) needed because $DEST_DIR is chowned to www-data and the
+      # source-side perms (often 750) leave the ubuntu SSH user without execute on the dir.
+      # We escalate to root for the cd, then drop to www-data for the PHP CLI itself.
+      remote_sudo_bash "cd $(quote_shell "$DEST_DIR") && sudo -u www-data $(quote_shell "$PHP_CLI") admin/tool/replace/cli/replace.php --non-interactive --search=$(quote_shell "$SRC_WWWROOT") --replace=$(quote_shell "$NEW_URL")"
       REPLACE_RC=$?
       set -e
     fi
@@ -642,7 +645,7 @@ if bool_true "$ENABLE_PURGE"; then
     sudo -u www-data "$PHP_CLI" admin/cli/purge_caches.php || true
     popd >/dev/null
   else
-    remote_bash "cd $(quote_shell "$DEST_DIR") && sudo -u www-data $(quote_shell "$PHP_CLI") admin/cli/purge_caches.php || true"
+    remote_sudo_bash "cd $(quote_shell "$DEST_DIR") && sudo -u www-data $(quote_shell "$PHP_CLI") admin/cli/purge_caches.php || true"
   fi
 else
   warn "Skipping cache purge."

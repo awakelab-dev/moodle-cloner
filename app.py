@@ -352,6 +352,7 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "[ERROR]",
             "Traceback (most recent call last)",
             "mysqldump:",
+            "URL replace failed",
         )
         has_fatal_output = any(marker in current_output for marker in fatal_markers)
 
