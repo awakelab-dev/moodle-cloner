@@ -112,7 +112,15 @@ cleanup() {
   fi
 
   if [[ -n "${TMP_DIR:-}" && -d "${TMP_DIR:-}" ]]; then
-    rm -rf "$TMP_DIR" || true
+    # Contents under $TMP_DIR/source_data are written by `sudo rsync --rsync-path="sudo rsync"`
+    # and end up owned by root on this (cloner) host. A plain `rm -rf` therefore fails with
+    # hundreds of "Permission denied" lines that mask earlier errors in the job log.
+    # Only the local /tmp dir on the cloner is touched here — no change to the source instance.
+    if sudo -n rm -rf "$TMP_DIR" >/dev/null 2>&1; then
+      :
+    else
+      rm -rf "$TMP_DIR" 2>/dev/null || true
+    fi
   fi
 }
 trap cleanup EXIT

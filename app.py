@@ -15,6 +15,18 @@ ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
 SCRIPT_FILE = ROOT / "moodle-clone-web.sh"
 ENV_FILE = ROOT / ".env"
+VERSION_FILE = ROOT / "VERSION"
+LOG_DIR = ROOT / "logs"
+
+
+def read_app_version() -> str:
+    try:
+        return VERSION_FILE.read_text(encoding="utf-8").strip() or "unknown"
+    except OSError:
+        return "unknown"
+
+
+APP_VERSION = read_app_version()
 
 
 def load_dotenv(filepath: Path) -> None:
@@ -62,6 +74,7 @@ def esc_html(value: str) -> str:
 def render_index_html() -> bytes:
     html = INDEX_FILE.read_text(encoding="utf-8")
     html = html.replace("{{TARGET_DB_HOST}}", esc_html(TARGET_DB_HOST_ENV.strip()))
+    html = html.replace("{{APP_VERSION}}", esc_html(APP_VERSION))
     return html.encode("utf-8")
 
 SOURCE_INSTANCES: Dict[str, Dict[str, str]] = {
@@ -241,6 +254,13 @@ def append_job_output(job_id: str, text: str) -> None:
         if len(job["output"]) > MAX_LOG_CHARS:
             job["output"] = "... (output truncated) ...\n" + job["output"][-MAX_LOG_CHARS:]
         job["updated_at"] = now_iso()
+        log_path = job.get("log_path")
+    if log_path:
+        try:
+            with open(log_path, "a", encoding="utf-8") as fh:
+                fh.write(text)
+        except OSError:
+            pass
 
 
 def update_job(job_id: str, **changes: Any) -> None:
@@ -396,12 +416,17 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                     "updated_at": job["updated_at"],
                     "request": job["request_preview"],
                     "output": job.get("output", ""),
+                    "log_path": job.get("log_path", ""),
                 }
             self._send_json(200, result, send_body=False)
             return
 
         if parsed.path == "/api/health":
             self._send_json(200, {"ok": True, "time": now_iso()}, send_body=False)
+            return
+
+        if parsed.path == "/api/version":
+            self._send_json(200, {"version": APP_VERSION}, send_body=False)
             return
 
         self._send_json(404, {"error": "Not found"}, send_body=False)
@@ -428,12 +453,17 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                     "updated_at": job["updated_at"],
                     "request": job["request_preview"],
                     "output": job.get("output", ""),
+                    "log_path": job.get("log_path", ""),
                 }
             self._send_json(200, result)
             return
 
         if parsed.path == "/api/health":
             self._send_json(200, {"ok": True, "time": now_iso()})
+            return
+
+        if parsed.path == "/api/version":
+            self._send_json(200, {"version": APP_VERSION})
             return
 
         self._send_json(404, {"error": "Not found"})
@@ -474,6 +504,14 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
 
             job_id = str(uuid.uuid4())
             now = now_iso()
+            log_path = ""
+            try:
+                LOG_DIR.mkdir(parents=True, exist_ok=True)
+                log_path = str(LOG_DIR / f"job-{job_id}.log")
+                with open(log_path, "w", encoding="utf-8") as fh:
+                    fh.write(f"[{now}] Job {job_id} created. App version {APP_VERSION}.\n")
+            except OSError:
+                log_path = ""
             with jobs_lock:
                 jobs[job_id] = {
                     "id": job_id,
@@ -483,6 +521,7 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                     "created_at": now,
                     "updated_at": now,
                     "request_preview": sanitize_preview(validated),
+                    "log_path": log_path,
                 }
 
             worker = threading.Thread(target=run_clone_job, args=(job_id, validated), daemon=True)
