@@ -2,13 +2,13 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Clonador de Instancias Moodle</title>
+  <title>Awake Lab - Plataforma de Clonado</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Configuración básica de Tailwind para un look moderno -->
+  <!-- Configuracion basica de Tailwind para un look moderno -->
   <script>
     tailwind.config = {
       theme: {
@@ -29,448 +29,698 @@
 </head>
 <body class="min-h-screen bg-slate-950 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-100">
 
-  <div class="min-h-screen flex items-center justify-center px-4 py-10">
-    <div class="w-full max-w-5xl bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
-      <!-- Header -->
-      <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
+  <!-- Toaster container -->
+  <div id="toaster" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- Login view -->
+  <div id="login-view" class="hidden min-h-screen items-center justify-center px-4 py-10">
+    <div class="w-full max-w-md bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-8">
+      <h1 class="text-2xl font-semibold text-slate-50">Iniciar sesion</h1>
+      <p class="text-sm text-slate-400 mt-1 mb-6">Accede a la plataforma de clonado.</p>
+      <form id="login-form" class="space-y-4">
         <div>
-          <h1 class="text-2xl font-semibold text-slate-50">Clonador de Instancias Moodle</h1>
-          <p class="text-sm text-slate-400 mt-1">
-            Configura una nueva instancia a partir de una existente (código, moodledata, base de datos, Nginx, Certbot, cron).
-          </p>
-        </div>
-        <div class="hidden md:flex items-center gap-2 text-xs text-slate-400">
-          <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30">
-            1
-          </span>
-          <span>Asistente CLI: <span class="font-mono text-slate-200">moodle-clone</span></span>
-          <span class="ml-3 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-300">v{{APP_VERSION}}</span>
-        </div>
-      </div>
-
-      <div class="px-8 py-6 space-y-8">
-        <!-- Grid principal -->
-        <form id="clone-form" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-          <!-- Columna izquierda -->
-          <div class="space-y-6">
-
-            <!-- Origen -->
-            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-  <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
-    1. Origen
-  </h2>
-
-  <div class="space-y-4">
-    <div>
-      <label class="block text-xs font-medium text-slate-300 mb-1">
-        Modo de origen
-      </label>
-      <select
-        name="source_mode"
-        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-      >
-        <option value="local" selected>Instancia local (preconfigurada)</option>
-        <option value="remote">Servidor remoto por SSH</option>
-      </select>
-    </div>
-
-    <div>
-      <label class="block text-xs font-medium text-slate-300 mb-1">
-        Instancia Moodle Origen
-      </label>
-      <select
-        name="source_instance"
-        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-      >
-        <option value="base_limpia">Base Limpia</option>
-        <option value="digit_institute" selected>Digit Institute</option>
-        <option value="hoppers">Hoppers</option>
-        <option value="refactika">Refactika</option>
-      </select>
-      <p class="mt-1 text-xs text-slate-500">
-        Selecciona la instancia que se usará como origen para la clonación
-        (código, <span class="font-mono">moodledata</span> y configuración).
-      </p>
-    </div>
-
-    <div id="remote-source-fields" class="hidden rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Origen remoto (SSH)</h3>
-
-      <div>
-        <label class="block text-xs font-medium text-slate-300 mb-1">Host origen</label>
-        <input
-          type="text"
-          name="source_host"
-          value=""
-          placeholder="ej: 10.0.0.15"
-          class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-        />
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Directorio Moodle origen</label>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Usuario</label>
           <input
             type="text"
-            name="source_dir"
-            value=""
-            placeholder="/var/www/moodle_x"
+            name="username"
+            autocomplete="username"
+            required
             class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Directorio moodledata origen</label>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena</label>
           <input
-            type="text"
-            name="source_data"
-            value=""
-            placeholder="/var/moodledata_x"
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            required
             class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
-      </div>
-
-      <div>
-        <label class="block text-xs font-medium text-slate-300 mb-1">Vhost origen (ruta)</label>
-        <input
-          type="text"
-          name="source_vhost"
-          value=""
-          placeholder="/etc/nginx/sites-available/moodle.example.com"
-          class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-        />
-      </div>
-    </div>
-
-    <div class="flex items-center gap-2 pt-2">
-      <input
-        id="maintenance_source"
-        type="checkbox"
-        name="maintenance_source"
-        class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
-        checked
-      />
-      <label for="maintenance_source" class="text-xs text-slate-300">
-        Poner instancia origen en modo mantenimiento durante la clonación (recomendado)
-      </label>
+        <button
+          type="submit"
+          id="login-submit"
+          class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+        >
+          Entrar
+        </button>
+        <div id="login-error" class="hidden text-xs text-red-300 border border-red-600/40 rounded-lg px-3 py-2"></div>
+      </form>
     </div>
   </div>
-</section>
 
-            <!-- Destino / Nueva instancia -->
-            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-              <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
-                2. Nueva instancia
-              </h2>
+  <!-- Main app shell -->
+  <div id="app-view" class="hidden min-h-screen flex flex-col">
 
-              <div class="space-y-4">
-                <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Destino de instalación
-                      </label>
-                      <select
-                        name="deploy_target"
-                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      >
-                        <option value="remote" selected>Servidor remoto (SSH)</option>
-                        <option value="local">Servidor local</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Host remoto (IP)
-                      </label>
-                      <input
-                        type="text"
-                        name="remote_host"
-                        value="51.44.30.62"
-                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-                  <p class="text-xs text-slate-500">
-                    Para destino remoto se usa siempre la llave SSH <span class="font-mono">~/.ssh/id_ed25519</span>.
-                  </p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">
-                      Key de la instancia (nombre corto)
-                    </label>
-                    <input
-                      type="text"
-                      name="new_key"
-                      value="nuevaplataforma"
-                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                    <p class="mt-1 text-xs text-slate-500">
-                      Se usará para nombres de carpetas y base de datos (<span class="font-mono">moodle_nuevaplataforma</span>).
-                    </p>
-                  </div>
-
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">
-                      Dominio nuevo (FQDN)
-                    </label>
-                    <input
-                      type="text"
-                      name="new_domain"
-                      value="nuevaplataforma.awakelab.world"
-                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                    <p class="mt-1 text-xs text-slate-500">
-                      Ejemplo: <span class="font-mono">moodle-dev.awakelab.world</span>.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-xs font-medium text-slate-300 mb-1">
-                    URL base (<span class="font-mono">$CFG-&gt;wwwroot</span>)
-                  </label>
-                  <input
-                    type="text"
-                    name="new_url"
-                    value="https://nuevaplataforma.awakelab.world"
-                    class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                  <p class="mt-1 text-xs text-slate-500">
-                    Debe coincidir con el dominio y el esquema (HTTP/HTTPS) reales del sitio.
-                  </p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">
-                      Directorio Moodle destino
-                    </label>
-                    <input
-                      type="text"
-                      name="dest_dir"
-                      value="/var/www/html/moodle/nuevaplataforma"
-                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">
-                      Directorio MoodleData destino
-                    </label>
-                    <input
-                      type="text"
-                      name="dest_data"
-                      value="/var/www/data/moodle/nuevaplataforma"
-                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-              </div>
-            </section>
+    <!-- Top header / nav -->
+    <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-30">
+      <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span class="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary-500/10 text-primary-400 border border-primary-500/30 font-semibold">A</span>
+          <div>
+            <div class="text-sm font-semibold text-slate-100">Awake Lab</div>
+            <div class="text-xs text-slate-400">Plataforma de clonado <span class="ml-1 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-slate-300">v{{APP_VERSION}}</span></div>
           </div>
+        </div>
 
-          <!-- Columna derecha -->
-          <div class="space-y-6">
+        <nav class="flex items-center gap-1">
+          <button data-section="moodle" data-perm="can_access_moodle_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador Moodle</button>
+          <button data-section="course" data-perm="can_access_course_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador de cursos</button>
+          <button data-section="plugin" data-perm="can_access_plugin_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador de plugins</button>
+        </nav>
 
-            <!-- Base de datos -->
-            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-              <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
-                3. Base de datos (origen y destino)
-              </h2>
-
-              <div class="space-y-5">
-                <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 space-y-4">
-                  <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Conexión BD destino (obligatoria)</h3>
-
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="md:col-span-2">
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Host BD destino (TARGET_DB_HOST)
-                      </label>
-                      <input
-                        type="text"
-                        name="target_db_host"
-                        value="{{TARGET_DB_HOST}}"
-                        readonly
-                        class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-400 cursor-not-allowed"
-                      />
-                    </div>
-
-                    <div>
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Usuario BD destino
-                      </label>
-                      <input
-                        type="text"
-                        name="target_db_user"
-                        value="admin_moodle"
-                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
-
-                    <div>
-                      <label class="block text-xs font-medium text-slate-300 mb-1">
-                        Contraseña BD destino
-                      </label>
-                      <input
-                        type="password"
-                        name="target_db_pass"
-                        value=""
-                        placeholder="••••••••"
-                        class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">
-                      Nombre BD destino
-                    </label>
-                    <input
-                      type="text"
-                      name="dest_db"
-                      value="moodle_nuevaplataforma"
-                      class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                    <p class="mt-1 text-xs text-slate-500">
-                      Se creará si no existe (con <span class="font-mono">utf8mb4_unicode_ci</span>).
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <!-- Opciones avanzadas -->
-            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-              <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">
-                4. Opciones de clonación
-              </h2>
-
-              <div class="space-y-3 text-xs text-slate-300">
-                <div class="flex items-start gap-2">
-                  <input
-                    id="opt_replace"
-                    type="checkbox"
-                    name="opt_replace"
-                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
-                    checked
-                  />
-                  <label for="opt_replace">
-                    Ejecutar <span class="font-mono">admin/tool/replace/cli/replace.php</span> para reemplazar la URL antigua
-                    (<span class="font-mono">{$CFG-&gt;wwwroot}</span> de origen) por la nueva.
-                  </label>
-                </div>
-
-                <div class="flex items-start gap-2">
-                  <input
-                    id="opt_purge"
-                    type="checkbox"
-                    name="opt_purge"
-                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
-                    checked
-                  />
-                  <label for="opt_purge">
-                    Ejecutar <span class="font-mono">admin/cli/purge_caches.php</span> en la instancia nueva.
-                  </label>
-                </div>
-
-                <div class="flex items-start gap-2">
-                  <input
-                    id="opt_nginx"
-                    type="checkbox"
-                    name="opt_nginx"
-                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
-                    checked
-                  />
-                  <label for="opt_nginx">
-                    Crear VirtualHost Nginx para el dominio nuevo y recargar Nginx.
-                  </label>
-                </div>
-
-                <div class="flex items-start gap-2">
-                  <input
-                    id="opt_certbot"
-                    type="checkbox"
-                    name="opt_certbot"
-                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
-                    checked
-                  />
-                  <label for="opt_certbot">
-                    Ejecutar <span class="font-mono">certbot --nginx -d &lt;dominio&gt; --redirect</span> para emitir certificado SSL.
-                  </label>
-                </div>
-
-                <div class="flex items-start gap-2">
-                  <input
-                    id="opt_cron"
-                    type="checkbox"
-                    name="opt_cron"
-                    class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500"
-                    checked
-                  />
-                  <label for="opt_cron">
-                    Crear entrada de cron para <span class="font-mono">www-data</span>:
-                    <span class="font-mono">*/1 * * * * /usr/bin/php &lt;dir&gt;/admin/cli/cron.php</span>
-                  </label>
-                </div>
-              </div>
-            </section>
-
-            <!-- Resumen / acciones -->
-            <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-              <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-3">
-                5. Acciones
-              </h2>
-
-              <div class="flex flex-wrap items-center gap-3">
-                <button
-                  id="clone-btn"
-                  type="button"
-                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-                >
-                  Clonar instancia Moodle
-                </button>
-
-                <button
-                  id="dry-run-btn"
-                  type="button"
-                  class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
-                >
-                  Simular (dry-run)
-                </button>
-              </div>
-
-              <div class="mt-4 space-y-3">
-                <div id="ui-status" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
-                  Listo para ejecutar.
-                </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                  <div class="mb-2 flex items-center justify-between text-xs">
-                    <span id="phase-text" class="text-slate-300">Fase: esperando ejecución</span>
-                    <span id="progress-percent" class="font-mono text-slate-200">0%</span>
-                  </div>
-                  <div class="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-                    <div id="progress-bar" class="h-full w-0 rounded-full bg-primary-500 transition-all duration-500"></div>
-                  </div>
-                </div>
-                <div>
-                  <label class="block text-xs font-medium text-slate-300 mb-1">Salida del proceso</label>
-                  <pre id="job-output" class="h-56 overflow-auto rounded-lg border border-slate-800 bg-black/60 p-3 text-[11px] leading-5 text-emerald-300 whitespace-pre-wrap">(sin ejecución aún)</pre>
-                </div>
-              </div>
-            </section>
-
-          </div>
-        </form>
+        <div class="flex items-center gap-2">
+          <span id="current-user-label" class="hidden md:inline text-xs text-slate-400"></span>
+          <button id="users-btn" class="hidden px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Usuarios</button>
+          <button id="logout-btn" class="px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Salir</button>
+        </div>
       </div>
+    </header>
+
+    <main class="flex-1 px-4 py-8">
+      <div class="max-w-6xl mx-auto">
+
+        <!-- Section: Moodle cloner (the original form) -->
+        <section id="section-moodle" class="app-section">
+          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
+              <div>
+                <h1 class="text-2xl font-semibold text-slate-50">Clonador de Instancias Moodle</h1>
+                <p class="text-sm text-slate-400 mt-1">Configura una nueva instancia a partir de una existente (codigo, moodledata, base de datos, Nginx, Certbot, cron).</p>
+              </div>
+            </div>
+
+            <div class="px-8 py-6 space-y-8">
+              <form id="clone-form" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="space-y-6">
+                  <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                    <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">1. Origen</h2>
+                    <div class="space-y-4">
+                      <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Modo de origen</label>
+                        <select name="source_mode" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                          <option value="local" selected>Instancia local (preconfigurada)</option>
+                          <option value="remote">Servidor remoto por SSH</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Instancia Moodle Origen</label>
+                        <select name="source_instance" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                          <option value="base_limpia">Base Limpia</option>
+                          <option value="digit_institute" selected>Digit Institute</option>
+                          <option value="hoppers">Hoppers</option>
+                          <option value="refactika">Refactika</option>
+                        </select>
+                        <p class="mt-1 text-xs text-slate-500">Selecciona la instancia que se usara como origen para la clonacion.</p>
+                      </div>
+                      <div id="remote-source-fields" class="hidden rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
+                        <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Origen remoto (SSH)</h3>
+                        <div>
+                          <label class="block text-xs font-medium text-slate-300 mb-1">Host origen</label>
+                          <input type="text" name="source_host" value="" placeholder="ej: 10.0.0.15" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Directorio Moodle origen</label>
+                            <input type="text" name="source_dir" value="" placeholder="/var/www/moodle_x" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Directorio moodledata origen</label>
+                            <input type="text" name="source_data" value="" placeholder="/var/moodledata_x" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-slate-300 mb-1">Vhost origen (ruta)</label>
+                          <input type="text" name="source_vhost" value="" placeholder="/etc/nginx/sites-available/moodle.example.com" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2 pt-2">
+                        <input id="maintenance_source" type="checkbox" name="maintenance_source" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500" checked />
+                        <label for="maintenance_source" class="text-xs text-slate-300">Poner instancia origen en modo mantenimiento durante la clonacion (recomendado)</label>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                    <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">2. Nueva instancia</h2>
+                    <div class="space-y-4">
+                      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Destino de instalacion</label>
+                            <select name="deploy_target" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                              <option value="remote" selected>Servidor remoto (SSH)</option>
+                              <option value="local">Servidor local</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Host remoto (IP)</label>
+                            <input type="text" name="remote_host" value="51.44.30.62" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                          </div>
+                        </div>
+                        <p class="text-xs text-slate-500">Para destino remoto se usa siempre la llave SSH <span class="font-mono">~/.ssh/id_ed25519</span>.</p>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label class="block text-xs font-medium text-slate-300 mb-1">Key de la instancia (nombre corto)</label>
+                          <input type="text" name="new_key" value="nuevaplataforma" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                          <p class="mt-1 text-xs text-slate-500">Se usara para nombres de carpetas y base de datos (<span class="font-mono">moodle_nuevaplataforma</span>).</p>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-slate-300 mb-1">Dominio nuevo (FQDN)</label>
+                          <input type="text" name="new_domain" value="nuevaplataforma.awakelab.world" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                          <p class="mt-1 text-xs text-slate-500">Ejemplo: <span class="font-mono">moodle-dev.awakelab.world</span>.</p>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">URL base (<span class="font-mono">$CFG-&gt;wwwroot</span>)</label>
+                        <input type="text" name="new_url" value="https://nuevaplataforma.awakelab.world" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                        <p class="mt-1 text-xs text-slate-500">Debe coincidir con el dominio y el esquema (HTTP/HTTPS) reales del sitio.</p>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label class="block text-xs font-medium text-slate-300 mb-1">Directorio Moodle destino</label>
+                          <input type="text" name="dest_dir" value="/var/www/html/moodle/nuevaplataforma" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-slate-300 mb-1">Directorio MoodleData destino</label>
+                          <input type="text" name="dest_data" value="/var/www/data/moodle/nuevaplataforma" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <div class="space-y-6">
+                  <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                    <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">3. Base de datos (origen y destino)</h2>
+                    <div class="space-y-5">
+                      <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-4 space-y-4">
+                        <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Conexion BD destino (obligatoria)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div class="md:col-span-2">
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Host BD destino (TARGET_DB_HOST)</label>
+                            <input type="text" name="target_db_host" value="{{TARGET_DB_HOST}}" readonly class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-400 cursor-not-allowed" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Usuario BD destino</label>
+                            <input type="text" name="target_db_user" value="admin_moodle" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena BD destino</label>
+                            <input type="password" name="target_db_pass" value="" placeholder="********" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-slate-300 mb-1">Nombre BD destino</label>
+                          <input type="text" name="dest_db" value="moodle_nuevaplataforma" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                          <p class="mt-1 text-xs text-slate-500">Se creara si no existe (con <span class="font-mono">utf8mb4_unicode_ci</span>).</p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                    <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-4">4. Opciones de clonacion</h2>
+                    <div class="space-y-3 text-xs text-slate-300">
+                      <div class="flex items-start gap-2">
+                        <input id="opt_replace" type="checkbox" name="opt_replace" class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500" checked />
+                        <label for="opt_replace">Ejecutar <span class="font-mono">admin/tool/replace/cli/replace.php</span> para reemplazar la URL antigua.</label>
+                      </div>
+                      <div class="flex items-start gap-2">
+                        <input id="opt_purge" type="checkbox" name="opt_purge" class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500" checked />
+                        <label for="opt_purge">Ejecutar <span class="font-mono">admin/cli/purge_caches.php</span> en la instancia nueva.</label>
+                      </div>
+                      <div class="flex items-start gap-2">
+                        <input id="opt_nginx" type="checkbox" name="opt_nginx" class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500" checked />
+                        <label for="opt_nginx">Crear VirtualHost Nginx para el dominio nuevo y recargar Nginx.</label>
+                      </div>
+                      <div class="flex items-start gap-2">
+                        <input id="opt_certbot" type="checkbox" name="opt_certbot" class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500" checked />
+                        <label for="opt_certbot">Ejecutar <span class="font-mono">certbot --nginx -d &lt;dominio&gt; --redirect</span>.</label>
+                      </div>
+                      <div class="flex items-start gap-2">
+                        <input id="opt_cron" type="checkbox" name="opt_cron" class="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500 focus:ring-primary-500" checked />
+                        <label for="opt_cron">Crear entrada de cron para <span class="font-mono">www-data</span>.</label>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                    <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide mb-3">5. Acciones</h2>
+                    <div class="flex flex-wrap items-center gap-3">
+                      <button id="clone-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-slate-900">Clonar instancia Moodle</button>
+                      <button id="dry-run-btn" type="button" class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800">Simular (dry-run)</button>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                      <div id="ui-status" class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">Listo para ejecutar.</div>
+                      <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                        <div class="mb-2 flex items-center justify-between text-xs">
+                          <span id="phase-text" class="text-slate-300">Fase: esperando ejecucion</span>
+                          <span id="progress-percent" class="font-mono text-slate-200">0%</span>
+                        </div>
+                        <div class="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                          <div id="progress-bar" class="h-full w-0 rounded-full bg-primary-500 transition-all duration-500"></div>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Salida del proceso</label>
+                        <pre id="job-output" class="h-56 overflow-auto rounded-lg border border-slate-800 bg-black/60 p-3 text-[11px] leading-5 text-emerald-300 whitespace-pre-wrap">(sin ejecucion aun)</pre>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section: Course cloner (placeholder) -->
+        <section id="section-course" class="app-section hidden">
+          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-10 text-center">
+            <h1 class="text-2xl font-semibold text-slate-50">Clonador de cursos</h1>
+            <p class="text-sm text-slate-400 mt-2">Esta seccion aun no esta implementada.</p>
+          </div>
+        </section>
+
+        <!-- Section: Plugin cloner (placeholder) -->
+        <section id="section-plugin" class="app-section hidden">
+          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-10 text-center">
+            <h1 class="text-2xl font-semibold text-slate-50">Clonador de plugins</h1>
+            <p class="text-sm text-slate-400 mt-2">Esta seccion aun no esta implementada.</p>
+          </div>
+        </section>
+
+        <!-- Section: Users (only visible to managers) -->
+        <section id="section-users" class="app-section hidden">
+          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
+              <div>
+                <h1 class="text-2xl font-semibold text-slate-50">Gestion de usuarios</h1>
+                <p class="text-sm text-slate-400 mt-1">Crea usuarios y asigna permisos por seccion.</p>
+              </div>
+              <button id="new-user-btn" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700">Nuevo usuario</button>
+            </div>
+            <div class="px-8 py-6">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th class="px-3 py-2">Usuario</th>
+                      <th class="px-3 py-2 text-center">Super</th>
+                      <th class="px-3 py-2 text-center">Moodle</th>
+                      <th class="px-3 py-2 text-center">Cursos</th>
+                      <th class="px-3 py-2 text-center">Plugins</th>
+                      <th class="px-3 py-2 text-center">Usuarios</th>
+                      <th class="px-3 py-2 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="users-tbody" class="text-slate-200">
+                    <tr><td colspan="7" class="px-3 py-6 text-center text-slate-500">Cargando...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- User editor modal -->
+  <div id="user-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+    <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 id="user-modal-title" class="text-lg font-semibold text-slate-50">Nuevo usuario</h2>
+        <button id="user-modal-close" class="text-slate-400 hover:text-slate-200">&times;</button>
+      </div>
+      <form id="user-form" class="space-y-4">
+        <input type="hidden" name="id" value="" />
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Usuario</label>
+          <input type="text" name="username" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena</label>
+          <input type="password" name="password" autocomplete="new-password" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          <p id="user-pw-hint" class="mt-1 text-xs text-slate-500">Minimo 8 caracteres.</p>
+        </div>
+        <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-2">
+          <label class="flex items-center gap-2 text-xs text-slate-300">
+            <input id="perm_super" type="checkbox" name="is_superadmin" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+            Superadministrador (acceso total)
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" name="can_access_moodle_cloner" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+            Acceso al clonador Moodle
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" name="can_access_course_cloner" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+            Acceso al clonador de cursos
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" name="can_access_plugin_cloner" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+            Acceso al clonador de plugins
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" name="can_manage_users" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+            Gestion de usuarios
+          </label>
+        </div>
+        <div id="user-form-error" class="hidden text-xs text-red-300 border border-red-600/40 rounded-lg px-3 py-2"></div>
+        <div class="flex items-center justify-end gap-2">
+          <button type="button" id="user-cancel" class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-800">Cancelar</button>
+          <button type="submit" id="user-save" class="px-4 py-2 rounded-lg bg-primary-600 text-sm font-semibold text-white hover:bg-primary-700">Guardar</button>
+        </div>
+      </form>
     </div>
   </div>
 
   <script>
+    // ====== Toaster =================================================
+    const toaster = {
+      show(message, tone) {
+        const el = document.createElement('div');
+        const palette = {
+          success: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
+          error: 'border-red-500/40 bg-red-500/10 text-red-200',
+          warning: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
+          info: 'border-slate-600 bg-slate-900/90 text-slate-200',
+        };
+        el.className = `pointer-events-auto rounded-lg border px-4 py-3 text-sm shadow-lg ${palette[tone] || palette.info}`;
+        el.textContent = message;
+        document.getElementById('toaster').appendChild(el);
+        setTimeout(() => {
+          el.style.transition = 'opacity 300ms';
+          el.style.opacity = '0';
+          setTimeout(() => el.remove(), 350);
+        }, 3500);
+      },
+    };
+
+    // ====== API helper ==============================================
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok) {
+        const err = new Error((data && data.error) || `HTTP ${res.status}`);
+        err.status = res.status;
+        err.data = data;
+        throw err;
+      }
+      return data;
+    }
+
+    // ====== Auth state ==============================================
+    let currentUser = null;
+
+    function hasPermission(flag) {
+      if (!currentUser) return false;
+      if (currentUser.is_superadmin) return true;
+      return !!(currentUser.permissions && currentUser.permissions[flag]);
+    }
+
+    function canManageUsers() {
+      return !!currentUser && (currentUser.is_superadmin || (currentUser.permissions && currentUser.permissions.can_manage_users));
+    }
+
+    // ====== View switching ==========================================
+    const SECTION_LABELS = {
+      moodle: 'Clonador Moodle',
+      course: 'Clonador de cursos',
+      plugin: 'Clonador de plugins',
+      users: 'Gestion de usuarios',
+    };
+    const SECTION_PERMS = {
+      moodle: 'can_access_moodle_cloner',
+      course: 'can_access_course_cloner',
+      plugin: 'can_access_plugin_cloner',
+      users: 'can_manage_users',
+    };
+
+    function showLoginView() {
+      document.getElementById('login-view').classList.remove('hidden');
+      document.getElementById('login-view').classList.add('flex');
+      document.getElementById('app-view').classList.add('hidden');
+    }
+
+    function showAppView() {
+      document.getElementById('login-view').classList.add('hidden');
+      document.getElementById('login-view').classList.remove('flex');
+      document.getElementById('app-view').classList.remove('hidden');
+      document.getElementById('app-view').classList.add('flex');
+
+      document.getElementById('current-user-label').textContent = currentUser ? `Sesion: ${currentUser.username}` : '';
+      const usersBtn = document.getElementById('users-btn');
+      if (canManageUsers()) {
+        usersBtn.classList.remove('hidden');
+      } else {
+        usersBtn.classList.add('hidden');
+      }
+      updateNavTabHighlight();
+    }
+
+    function showSection(name) {
+      const perm = SECTION_PERMS[name];
+      if (perm && !hasPermission(perm)) {
+        // Special case: users tab uses can_manage_users
+        if (name === 'users' && canManageUsers()) {
+          // fall through
+        } else {
+          toaster.show(`No tienes permiso para acceder a "${SECTION_LABELS[name]}".`, 'warning');
+          return;
+        }
+      }
+      document.querySelectorAll('.app-section').forEach(s => s.classList.add('hidden'));
+      const target = document.getElementById(`section-${name}`);
+      if (target) target.classList.remove('hidden');
+      updateNavTabHighlight(name);
+    }
+
+    function updateNavTabHighlight(activeName) {
+      document.querySelectorAll('.nav-tab').forEach(btn => {
+        const isActive = btn.dataset.section === activeName;
+        btn.classList.toggle('bg-slate-800', isActive);
+        btn.classList.toggle('text-white', isActive);
+      });
+    }
+
+    // ====== Login form ==============================================
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('login-error');
+      errEl.classList.add('hidden');
+      const fd = new FormData(e.currentTarget);
+      const submitBtn = document.getElementById('login-submit');
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-60');
+      try {
+        const data = await api('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({
+            username: String(fd.get('username') || ''),
+            password: String(fd.get('password') || ''),
+          }),
+        });
+        currentUser = data.user;
+        toaster.show(`Bienvenido, ${currentUser.username}.`, 'success');
+        showAppView();
+        pickInitialSection();
+      } catch (err) {
+        errEl.textContent = err.message || 'Error de autenticacion.';
+        errEl.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-60');
+      }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+      currentUser = null;
+      showLoginView();
+    });
+
+    document.getElementById('users-btn').addEventListener('click', () => {
+      showSection('users');
+      loadUsers();
+    });
+
+    // ====== Nav tabs ================================================
+    document.querySelectorAll('.nav-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const section = btn.dataset.section;
+        showSection(section);
+      });
+    });
+
+    function pickInitialSection() {
+      const order = ['moodle', 'course', 'plugin'];
+      const allowed = order.find(s => hasPermission(SECTION_PERMS[s]));
+      if (allowed) {
+        showSection(allowed);
+      } else if (canManageUsers()) {
+        showSection('users');
+        loadUsers();
+      } else {
+        // No permissions at all — show moodle but it'll just be empty and any
+        // action will be blocked.
+        showSection('moodle');
+        toaster.show('Tu usuario no tiene permisos asignados. Contacta a un administrador.', 'warning');
+      }
+    }
+
+    // ====== Users management ========================================
+    async function loadUsers() {
+      const tbody = document.getElementById('users-tbody');
+      tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-6 text-center text-slate-500">Cargando...</td></tr>';
+      try {
+        const data = await api('/api/users');
+        renderUsers(data.users || []);
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" class="px-3 py-6 text-center text-red-300">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#x27;'}[c]));
+    }
+
+    function checkCell(v) {
+      return v ? '<span class="text-emerald-400">&#10003;</span>' : '<span class="text-slate-600">&minus;</span>';
+    }
+
+    function renderUsers(users) {
+      const tbody = document.getElementById('users-tbody');
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-6 text-center text-slate-500">No hay usuarios.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = users.map(u => `
+        <tr class="border-b border-slate-800/60 hover:bg-slate-800/30">
+          <td class="px-3 py-2">
+            <div class="font-medium text-slate-100">${escapeHtml(u.username)}</div>
+            <div class="text-[10px] text-slate-500">#${u.id}</div>
+          </td>
+          <td class="px-3 py-2 text-center">${checkCell(u.is_superadmin)}</td>
+          <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_moodle_cloner)}</td>
+          <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_course_cloner)}</td>
+          <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_plugin_cloner)}</td>
+          <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_manage_users)}</td>
+          <td class="px-3 py-2 text-right">
+            <button data-action="edit" data-id="${u.id}" class="px-2 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 mr-1">Editar</button>
+            <button data-action="delete" data-id="${u.id}" class="px-2 py-1 rounded border border-red-700/60 text-red-300 hover:bg-red-900/30">Eliminar</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = Number(btn.dataset.id);
+          const user = users.find(x => x.id === id);
+          if (!user) return;
+          if (btn.dataset.action === 'edit') openUserModal(user);
+          if (btn.dataset.action === 'delete') deleteUser(user);
+        });
+      });
+    }
+
+    function openUserModal(user) {
+      const modal = document.getElementById('user-modal');
+      const form = document.getElementById('user-form');
+      const title = document.getElementById('user-modal-title');
+      const pwHint = document.getElementById('user-pw-hint');
+      const errEl = document.getElementById('user-form-error');
+      errEl.classList.add('hidden');
+      form.reset();
+      form.elements['id'].value = user ? user.id : '';
+      if (user) {
+        title.textContent = `Editar usuario: ${user.username}`;
+        form.elements['username'].value = user.username;
+        form.elements['username'].disabled = true;
+        form.elements['password'].placeholder = 'Dejar en blanco para no cambiar';
+        form.elements['password'].required = false;
+        pwHint.textContent = 'Deja en blanco para mantener la contrasena actual. Minimo 8 caracteres si se cambia.';
+        form.elements['is_superadmin'].checked = !!user.is_superadmin;
+        form.elements['can_access_moodle_cloner'].checked = !!user.permissions.can_access_moodle_cloner;
+        form.elements['can_access_course_cloner'].checked = !!user.permissions.can_access_course_cloner;
+        form.elements['can_access_plugin_cloner'].checked = !!user.permissions.can_access_plugin_cloner;
+        form.elements['can_manage_users'].checked = !!user.permissions.can_manage_users;
+      } else {
+        title.textContent = 'Nuevo usuario';
+        form.elements['username'].disabled = false;
+        form.elements['password'].placeholder = '';
+        form.elements['password'].required = true;
+        pwHint.textContent = 'Minimo 8 caracteres.';
+      }
+      // Only superadmins can grant the superadmin role
+      form.elements['is_superadmin'].disabled = !currentUser.is_superadmin;
+      modal.classList.remove('hidden');
+    }
+
+    function closeUserModal() {
+      document.getElementById('user-modal').classList.add('hidden');
+    }
+    document.getElementById('user-modal-close').addEventListener('click', closeUserModal);
+    document.getElementById('user-cancel').addEventListener('click', closeUserModal);
+    document.getElementById('new-user-btn').addEventListener('click', () => openUserModal(null));
+
+    document.getElementById('user-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('user-form-error');
+      errEl.classList.add('hidden');
+      const form = e.currentTarget;
+      const id = form.elements['id'].value;
+      const isSuper = form.elements['is_superadmin'].checked;
+      const payload = {
+        username: form.elements['username'].value.trim(),
+        password: form.elements['password'].value,
+        is_superadmin: isSuper,
+        permissions: {
+          can_access_moodle_cloner: form.elements['can_access_moodle_cloner'].checked,
+          can_access_course_cloner: form.elements['can_access_course_cloner'].checked,
+          can_access_plugin_cloner: form.elements['can_access_plugin_cloner'].checked,
+          can_manage_users: form.elements['can_manage_users'].checked,
+        },
+      };
+      try {
+        if (id) {
+          // Don't send empty password
+          if (!payload.password) delete payload.password;
+          // Don't send username on edit
+          delete payload.username;
+          await api(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+          toaster.show('Usuario actualizado.', 'success');
+        } else {
+          await api('/api/users', { method: 'POST', body: JSON.stringify(payload) });
+          toaster.show('Usuario creado.', 'success');
+        }
+        closeUserModal();
+        loadUsers();
+      } catch (err) {
+        errEl.textContent = err.message || 'Error guardando usuario.';
+        errEl.classList.remove('hidden');
+      }
+    });
+
+    async function deleteUser(user) {
+      if (!confirm(`Eliminar al usuario "${user.username}"?`)) return;
+      try {
+        await api(`/api/users/${user.id}`, { method: 'DELETE' });
+        toaster.show('Usuario eliminado.', 'success');
+        loadUsers();
+      } catch (err) {
+        toaster.show(err.message || 'Error eliminando usuario.', 'error');
+      }
+    }
+
+    // ====== Moodle clone form (existing behaviour) ==================
     (function () {
       const form = document.getElementById('clone-form');
       const cloneBtn = document.getElementById('clone-btn');
@@ -484,12 +734,12 @@
       let pollTimer = null;
       let currentJobId = null;
       let lastProgress = 0;
-      let lastPhase = 'Fase: esperando ejecución';
+      let lastPhase = 'Fase: esperando ejecucion';
 
       const phaseRules = [
         { regex: /Starting clone job/i, progress: 5, phase: 'Fase: inicializando proceso' },
         { regex: /Enabling maintenance mode on source/i, progress: 10, phase: 'Fase: activando mantenimiento en origen' },
-        { regex: /Copying code to /i, progress: 20, phase: 'Fase: copiando código Moodle' },
+        { regex: /Copying code to /i, progress: 20, phase: 'Fase: copiando codigo Moodle' },
         { regex: /Copying moodledata to /i, progress: 35, phase: 'Fase: copiando moodledata' },
         { regex: /Dumping database /i, progress: 50, phase: 'Fase: exportando BD origen' },
         { regex: /Sanitizing dump /i, progress: 58, phase: 'Fase: sanitizando dump SQL' },
@@ -498,10 +748,10 @@
         { regex: /Patching .*config.php/i, progress: 82, phase: 'Fase: actualizando config.php' },
         { regex: /Creating Nginx vhost /i, progress: 88, phase: 'Fase: configurando Nginx' },
         { regex: /Replacing URLs in DB:/i, progress: 92, phase: 'Fase: reemplazando URLs en BD' },
-        { regex: /Purging caches /i, progress: 95, phase: 'Fase: limpiando cachés' },
+        { regex: /Purging caches /i, progress: 95, phase: 'Fase: limpiando caches' },
         { regex: /Ensuring cron entry /i, progress: 97, phase: 'Fase: configurando cron' },
-        { regex: /Dry-run enabled\./i, progress: 100, phase: 'Fase: simulación completada' },
-        { regex: /Clone completed\./i, progress: 100, phase: 'Fase: clonación completada' }
+        { regex: /Dry-run enabled\./i, progress: 100, phase: 'Fase: simulacion completada' },
+        { regex: /Clone completed\./i, progress: 100, phase: 'Fase: clonacion completada' }
       ];
 
       function setButtons(disabled) {
@@ -514,14 +764,9 @@
       function setStatus(message, tone) {
         statusEl.textContent = message;
         statusEl.classList.remove('text-amber-300', 'text-red-300', 'text-emerald-300', 'border-amber-600/40', 'border-red-600/40', 'border-emerald-600/40');
-
-        if (tone === 'running') {
-          statusEl.classList.add('text-amber-300', 'border-amber-600/40');
-        } else if (tone === 'error') {
-          statusEl.classList.add('text-red-300', 'border-red-600/40');
-        } else if (tone === 'success') {
-          statusEl.classList.add('text-emerald-300', 'border-emerald-600/40');
-        }
+        if (tone === 'running') statusEl.classList.add('text-amber-300', 'border-amber-600/40');
+        else if (tone === 'error') statusEl.classList.add('text-red-300', 'border-red-600/40');
+        else if (tone === 'success') statusEl.classList.add('text-emerald-300', 'border-emerald-600/40');
       }
 
       function setProgress(progress, phase, tone) {
@@ -531,52 +776,24 @@
         progressEl.textContent = `${safeProgress}%`;
         phaseEl.textContent = phase;
         progressBarEl.style.width = `${safeProgress}%`;
-
         progressBarEl.classList.remove('bg-primary-500', 'bg-emerald-500', 'bg-red-500');
-        if (tone === 'success') {
-          progressBarEl.classList.add('bg-emerald-500');
-        } else if (tone === 'error') {
-          progressBarEl.classList.add('bg-red-500');
-        } else {
-          progressBarEl.classList.add('bg-primary-500');
-        }
+        if (tone === 'success') progressBarEl.classList.add('bg-emerald-500');
+        else if (tone === 'error') progressBarEl.classList.add('bg-red-500');
+        else progressBarEl.classList.add('bg-primary-500');
       }
 
       function inferProgress(output, status) {
         let progress = lastProgress;
         let phase = lastPhase;
-
-        if (status === 'queued') {
-          progress = Math.max(progress, 5);
-          phase = 'Fase: encolado';
-        } else if (status === 'running') {
-          progress = Math.max(progress, 8);
-          phase = phase || 'Fase: en ejecución';
-        }
-
+        if (status === 'queued') { progress = Math.max(progress, 5); phase = 'Fase: encolado'; }
+        else if (status === 'running') { progress = Math.max(progress, 8); phase = phase || 'Fase: en ejecucion'; }
         for (const rule of phaseRules) {
-          if (rule.regex.test(output)) {
-            if (rule.progress >= progress) {
-              progress = rule.progress;
-              phase = rule.phase;
-            }
+          if (rule.regex.test(output) && rule.progress >= progress) {
+            progress = rule.progress; phase = rule.phase;
           }
         }
-
-        if (status === 'success') {
-          progress = 100;
-          if (!phase || phase === 'Fase: en ejecución') {
-            phase = 'Fase: finalizado correctamente';
-          }
-        }
-
-        if (status === 'failed') {
-          progress = Math.min(progress || 50, 99);
-          if (!phase || phase === 'Fase: en ejecución') {
-            phase = 'Fase: error durante el proceso';
-          }
-        }
-
+        if (status === 'success') { progress = 100; if (!phase || phase === 'Fase: en ejecucion') phase = 'Fase: finalizado correctamente'; }
+        if (status === 'failed') { progress = Math.min(progress || 50, 99); if (!phase || phase === 'Fase: en ejecucion') phase = 'Fase: error durante el proceso'; }
         return { progress, phase };
       }
 
@@ -614,48 +831,39 @@
       async function pollJob(jobId) {
         const res = await fetch(`/api/jobs/${jobId}`);
         const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Error consultando el job.');
-        }
-
-        const output = data.output || '(sin salida aún)';
+        if (!res.ok) throw new Error(data.error || 'Error consultando el job.');
+        const output = data.output || '(sin salida aun)';
         outputEl.textContent = output;
         outputEl.scrollTop = outputEl.scrollHeight;
-
         const inferred = inferProgress(output, data.status);
-
         if (data.status === 'queued' || data.status === 'running') {
-          setStatus(`Job ${jobId} en ejecución...`, 'running');
+          setStatus(`Job ${jobId} en ejecucion...`, 'running');
           setProgress(inferred.progress, inferred.phase, 'running');
           return;
         }
-
         clearInterval(pollTimer);
         pollTimer = null;
         setButtons(false);
-
         if (data.status === 'success') {
           setStatus(`Job ${jobId} finalizado correctamente.`, 'success');
           setProgress(100, inferred.phase || 'Fase: finalizado correctamente', 'success');
         } else {
-          setStatus(`Job ${jobId} terminó con error (exit ${data.exit_code ?? 'N/A'}).`, 'error');
+          setStatus(`Job ${jobId} termino con error (exit ${data.exit_code ?? 'N/A'}).`, 'error');
           setProgress(inferred.progress, inferred.phase, 'error');
         }
       }
 
       async function runClone(dryRun) {
-        if (pollTimer) {
-          clearInterval(pollTimer);
-          pollTimer = null;
+        if (!hasPermission('can_access_moodle_cloner')) {
+          toaster.show('No tienes permiso para usar el clonador Moodle.', 'warning');
+          return;
         }
-
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         currentJobId = null;
         outputEl.textContent = '';
         setButtons(true);
-        setStatus(dryRun ? 'Iniciando simulación...' : 'Iniciando clonación...', 'running');
-        setProgress(2, 'Fase: validando parámetros', 'running');
-
+        setStatus(dryRun ? 'Iniciando simulacion...' : 'Iniciando clonacion...', 'running');
+        setProgress(2, 'Fase: validando parametros', 'running');
         try {
           const payload = buildPayload(dryRun);
           const res = await fetch('/api/clone', {
@@ -664,23 +872,31 @@
             body: JSON.stringify(payload)
           });
           const data = await res.json();
-
           if (!res.ok) {
+            if (res.status === 401) {
+              toaster.show('Tu sesion ha expirado. Vuelve a iniciar sesion.', 'error');
+              currentUser = null;
+              showLoginView();
+              return;
+            }
+            if (res.status === 403) {
+              toaster.show(data.error || 'No tienes permiso para esta accion.', 'warning');
+              setButtons(false);
+              setStatus('Sin permisos.', 'error');
+              return;
+            }
             if (res.status === 409 && data.running_job_id) {
-              throw new Error(`Ya hay otro proceso en ejecución (job ${data.running_job_id}).`);
+              throw new Error(`Ya hay otro proceso en ejecucion (job ${data.running_job_id}).`);
             }
             throw new Error(data.error || 'Error al enviar el formulario.');
           }
-
           currentJobId = data.job_id;
           setStatus(`Job ${currentJobId} encolado.`, 'running');
           setProgress(5, 'Fase: encolado', 'running');
-
           await pollJob(currentJobId);
           pollTimer = setInterval(() => {
             pollJob(currentJobId).catch((err) => {
-              clearInterval(pollTimer);
-              pollTimer = null;
+              clearInterval(pollTimer); pollTimer = null;
               setButtons(false);
               setStatus(`Error consultando estado: ${err.message}`, 'error');
               setProgress(lastProgress || 50, 'Fase: error consultando estado', 'error');
@@ -690,19 +906,12 @@
           setButtons(false);
           setStatus(err.message || 'Error inesperado.', 'error');
           setProgress(lastProgress || 5, 'Fase: fallo al iniciar', 'error');
-          if (!outputEl.textContent.trim()) {
-            outputEl.textContent = '(sin salida: la ejecución no llegó a iniciar)';
-          }
+          if (!outputEl.textContent.trim()) outputEl.textContent = '(sin salida: la ejecucion no llego a iniciar)';
         }
       }
 
-      cloneBtn.addEventListener('click', function () {
-        runClone(false);
-      });
-
-      dryRunBtn.addEventListener('click', function () {
-        runClone(true);
-      });
+      cloneBtn.addEventListener('click', () => runClone(false));
+      dryRunBtn.addEventListener('click', () => runClone(true));
 
       const newKeyInput = form.querySelector('input[name="new_key"]');
       const domainInput = form.querySelector('input[name="new_domain"]');
@@ -719,9 +928,7 @@
       function suggestFromKey() {
         const key = (newKeyInput.value || '').trim();
         if (!key) return;
-
         const deployTarget = (deployTargetInput.value || 'local').trim();
-
         domainInput.value = `${key}.awakelab.world`;
         urlInput.value = `https://${key}.awakelab.world`;
         if (deployTarget === 'remote') {
@@ -739,9 +946,7 @@
         const isRemote = deployTarget === 'remote';
         remoteHostInput.disabled = !isRemote;
         remoteHostInput.classList.toggle('opacity-60', !isRemote);
-        if (isRemote && !remoteHostInput.value.trim()) {
-          remoteHostInput.value = '51.44.30.62';
-        }
+        if (isRemote && !remoteHostInput.value.trim()) remoteHostInput.value = '51.44.30.62';
       }
 
       function updateSourceModeUi() {
@@ -752,21 +957,29 @@
         sourceInstanceInput.classList.toggle('opacity-60', isRemoteSource);
       }
 
-      deployTargetInput.addEventListener('change', function () {
-        updateDeployTargetUi();
-        suggestFromKey();
-      });
-
-      sourceModeInput.addEventListener('change', function () {
-        updateSourceModeUi();
-      });
-
+      deployTargetInput.addEventListener('change', () => { updateDeployTargetUi(); suggestFromKey(); });
+      sourceModeInput.addEventListener('change', updateSourceModeUi);
       newKeyInput.addEventListener('blur', suggestFromKey);
       updateDeployTargetUi();
       updateSourceModeUi();
     })();
+
+    // ====== Boot ====================================================
+    (async function init() {
+      try {
+        const data = await api('/api/auth/me');
+        if (data.authenticated) {
+          currentUser = data.user;
+          showAppView();
+          pickInitialSection();
+        } else {
+          showLoginView();
+        }
+      } catch (err) {
+        showLoginView();
+        toaster.show(`Error inicial: ${err.message}`, 'error');
+      }
+    })();
   </script>
-
-
 </body>
 </html>

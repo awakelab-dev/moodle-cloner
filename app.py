@@ -5,10 +5,11 @@ import re
 import threading
 import time
 import uuid
+from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from subprocess import PIPE, STDOUT, Popen
-from typing import Dict, Any
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent
@@ -17,6 +18,8 @@ SCRIPT_FILE = ROOT / "moodle-clone-web.sh"
 ENV_FILE = ROOT / ".env"
 VERSION_FILE = ROOT / "VERSION"
 LOG_DIR = ROOT / "logs"
+
+SESSION_COOKIE_NAME = "mc_session"
 
 
 def read_app_version() -> str:
@@ -49,6 +52,8 @@ def load_dotenv(filepath: Path) -> None:
 
 
 load_dotenv(ENV_FILE)
+
+import db  # noqa: E402 — must load after .env
 
 HOST = os.getenv("APP_HOST", "0.0.0.0")
 PORT = int(os.getenv("APP_PORT", "8787"))
@@ -373,12 +378,53 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
         append_job_output(job_id, f"[{now_iso()}] Unexpected error: {exc}\n")
 
 
+# --- Auth helpers --------------------------------------------------------
+
+class AuthError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+def _parse_cookie_header(header: Optional[str]) -> Dict[str, str]:
+    if not header:
+        return {}
+    c = cookies.SimpleCookie()
+    try:
+        c.load(header)
+    except cookies.CookieError:
+        return {}
+    return {k: morsel.value for k, morsel in c.items()}
+
+
+def _session_cookie_header(token: str, max_age: int) -> str:
+    parts = [
+        f"{SESSION_COOKIE_NAME}={token}",
+        "Path=/",
+        "HttpOnly",
+        "SameSite=Lax",
+        f"Max-Age={max_age}",
+    ]
+    return "; ".join(parts)
+
+
+def _clear_cookie_header() -> str:
+    return f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+
+
 class MoodleCloneHandler(BaseHTTPRequestHandler):
+    # current authenticated user; populated per-request when needed
+    current_user: Optional[Dict[str, Any]] = None
+    response_cookies: Optional[str] = None
+
     def _send_json(self, status: int, payload: Dict[str, Any], send_body: bool = True) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        if self.response_cookies:
+            self.send_header("Set-Cookie", self.response_cookies)
         self.end_headers()
         if send_body:
             self.wfile.write(body)
@@ -395,93 +441,289 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         if send_body:
             self.wfile.write(data)
 
+    def _read_json_body(self) -> Dict[str, Any]:
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0:
+            raise ValueError("Body vacío.")
+        raw = self.rfile.read(content_length)
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError("JSON inválido.") from exc
+
+    def _load_session_user(self) -> Optional[Dict[str, Any]]:
+        cookie_map = _parse_cookie_header(self.headers.get("Cookie"))
+        token = cookie_map.get(SESSION_COOKIE_NAME)
+        if not token:
+            return None
+        return db.get_session_user(token)
+
+    def _require_auth(self) -> Dict[str, Any]:
+        user = self._load_session_user()
+        if not user:
+            raise AuthError(401, "No autenticado.")
+        self.current_user = user
+        return user
+
+    def _require_permission(self, flag: str) -> Dict[str, Any]:
+        user = self._require_auth()
+        if user.get("is_superadmin"):
+            return user
+        if not user.get("permissions", {}).get(flag, False):
+            raise AuthError(403, f"No tienes permiso para esta acción ({flag}).")
+        return user
+
+    # --- HTTP dispatch ---------------------------------------------------
+
     def do_HEAD(self) -> None:
-        parsed = urlparse(self.path)
-
-        if parsed.path in ("/", "/index.html"):
-            self._send_file(INDEX_FILE, "text/html; charset=utf-8", send_body=False)
-            return
-
-        if parsed.path.startswith("/api/jobs/"):
-            job_id = parsed.path.split("/")[-1]
-            with jobs_lock:
-                job = jobs.get(job_id)
-                if not job:
-                    self._send_json(404, {"error": "Job no encontrado."}, send_body=False)
-                    return
-                result = {
-                    "job_id": job["id"],
-                    "status": job["status"],
-                    "exit_code": job.get("exit_code"),
-                    "created_at": job["created_at"],
-                    "updated_at": job["updated_at"],
-                    "request": job["request_preview"],
-                    "output": job.get("output", ""),
-                    "log_path": job.get("log_path", ""),
-                }
-            self._send_json(200, result, send_body=False)
-            return
-
-        if parsed.path == "/api/health":
-            self._send_json(200, {"ok": True, "time": now_iso()}, send_body=False)
-            return
-
-        if parsed.path == "/api/version":
-            self._send_json(200, {"version": APP_VERSION}, send_body=False)
-            return
-
-        self._send_json(404, {"error": "Not found"}, send_body=False)
+        try:
+            self._dispatch(send_body=False)
+        except AuthError as e:
+            self._send_json(e.status, {"error": e.message}, send_body=False)
+        except Exception as e:
+            self._send_json(500, {"error": f"Error interno: {e}"}, send_body=False)
 
     def do_GET(self) -> None:
-        parsed = urlparse(self.path)
-
-        if parsed.path in ("/", "/index.html"):
-            self._send_file(INDEX_FILE, "text/html; charset=utf-8")
-            return
-
-        if parsed.path.startswith("/api/jobs/"):
-            job_id = parsed.path.split("/")[-1]
-            with jobs_lock:
-                job = jobs.get(job_id)
-                if not job:
-                    self._send_json(404, {"error": "Job no encontrado."})
-                    return
-                result = {
-                    "job_id": job["id"],
-                    "status": job["status"],
-                    "exit_code": job.get("exit_code"),
-                    "created_at": job["created_at"],
-                    "updated_at": job["updated_at"],
-                    "request": job["request_preview"],
-                    "output": job.get("output", ""),
-                    "log_path": job.get("log_path", ""),
-                }
-            self._send_json(200, result)
-            return
-
-        if parsed.path == "/api/health":
-            self._send_json(200, {"ok": True, "time": now_iso()})
-            return
-
-        if parsed.path == "/api/version":
-            self._send_json(200, {"version": APP_VERSION})
-            return
-
-        self._send_json(404, {"error": "Not found"})
+        try:
+            self._dispatch(send_body=True)
+        except AuthError as e:
+            self._send_json(e.status, {"error": e.message})
+        except Exception as e:
+            self._send_json(500, {"error": f"Error interno: {e}"})
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path != "/api/clone":
+        try:
+            if parsed.path == "/api/auth/login":
+                return self._handle_login()
+            if parsed.path == "/api/auth/logout":
+                return self._handle_logout()
+            if parsed.path == "/api/users":
+                return self._handle_create_user()
+            if parsed.path == "/api/clone":
+                return self._handle_clone()
             self._send_json(404, {"error": "Not found"})
+        except AuthError as e:
+            self._send_json(e.status, {"error": e.message})
+        except ValueError as e:
+            self._send_json(400, {"error": str(e)})
+        except Exception as e:
+            self._send_json(500, {"error": f"Error interno: {e}"})
+
+    def do_PATCH(self) -> None:
+        parsed = urlparse(self.path)
+        try:
+            m = re.fullmatch(r"/api/users/(\d+)", parsed.path)
+            if m:
+                return self._handle_update_user(int(m.group(1)))
+            self._send_json(404, {"error": "Not found"})
+        except AuthError as e:
+            self._send_json(e.status, {"error": e.message})
+        except ValueError as e:
+            self._send_json(400, {"error": str(e)})
+        except Exception as e:
+            self._send_json(500, {"error": f"Error interno: {e}"})
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        try:
+            m = re.fullmatch(r"/api/users/(\d+)", parsed.path)
+            if m:
+                return self._handle_delete_user(int(m.group(1)))
+            self._send_json(404, {"error": "Not found"})
+        except AuthError as e:
+            self._send_json(e.status, {"error": e.message})
+        except ValueError as e:
+            self._send_json(400, {"error": str(e)})
+        except Exception as e:
+            self._send_json(500, {"error": f"Error interno: {e}"})
+
+    def _dispatch(self, send_body: bool) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        # Public: index, health, version
+        if path in ("/", "/index.html"):
+            self._send_file(INDEX_FILE, "text/html; charset=utf-8", send_body=send_body)
             return
 
-        try:
-            content_length = int(self.headers.get("Content-Length", "0"))
-            if content_length <= 0:
-                raise ValueError("Body vacío.")
+        if path == "/api/health":
+            self._send_json(200, {"ok": True, "time": now_iso()}, send_body=send_body)
+            return
 
-            raw = self.rfile.read(content_length)
-            payload = json.loads(raw.decode("utf-8"))
+        if path == "/api/version":
+            self._send_json(200, {"version": APP_VERSION}, send_body=send_body)
+            return
+
+        # Auth status
+        if path == "/api/auth/me":
+            user = self._load_session_user()
+            if not user:
+                self._send_json(200, {"authenticated": False}, send_body=send_body)
+            else:
+                self._send_json(200, {"authenticated": True, "user": user}, send_body=send_body)
+            return
+
+        # Protected: users
+        if path == "/api/users":
+            user = self._require_auth()
+            if not (user.get("is_superadmin") or user.get("permissions", {}).get("can_manage_users")):
+                raise AuthError(403, "Solo administradores con permiso de gestión de usuarios pueden listar usuarios.")
+            self._send_json(200, {"users": db.list_users()}, send_body=send_body)
+            return
+
+        # Protected: jobs
+        if path.startswith("/api/jobs/"):
+            self._require_permission("can_access_moodle_cloner")
+            job_id = path.split("/")[-1]
+            with jobs_lock:
+                job = jobs.get(job_id)
+                if not job:
+                    self._send_json(404, {"error": "Job no encontrado."}, send_body=send_body)
+                    return
+                result = {
+                    "job_id": job["id"],
+                    "status": job["status"],
+                    "exit_code": job.get("exit_code"),
+                    "created_at": job["created_at"],
+                    "updated_at": job["updated_at"],
+                    "request": job["request_preview"],
+                    "output": job.get("output", ""),
+                    "log_path": job.get("log_path", ""),
+                }
+            self._send_json(200, result, send_body=send_body)
+            return
+
+        self._send_json(404, {"error": "Not found"}, send_body=send_body)
+
+    # --- Auth endpoints --------------------------------------------------
+
+    def _handle_login(self) -> None:
+        payload = self._read_json_body()
+        username = str(payload.get("username", "")).strip()
+        password = str(payload.get("password", ""))
+        if not username or not password:
+            raise ValueError("Usuario y contraseña son obligatorios.")
+        user = db.get_user_by_username(username)
+        if not user or not db.verify_password(password, user["password_hash"]):
+            # Avoid leaking which one failed.
+            time.sleep(0.3)
+            self._send_json(401, {"error": "Credenciales inválidas."})
+            return
+        session = db.create_session(user["id"])
+        self.response_cookies = _session_cookie_header(session["token"], db.SESSION_TTL_SECONDS)
+        # Strip password_hash before returning
+        user.pop("password_hash", None)
+        self._send_json(200, {"user": user})
+
+    def _handle_logout(self) -> None:
+        cookie_map = _parse_cookie_header(self.headers.get("Cookie"))
+        token = cookie_map.get(SESSION_COOKIE_NAME)
+        if token:
+            db.delete_session(token)
+        self.response_cookies = _clear_cookie_header()
+        self._send_json(200, {"ok": True})
+
+    # --- User CRUD -------------------------------------------------------
+
+    def _can_manage_users(self, user: Dict[str, Any]) -> bool:
+        return bool(user.get("is_superadmin") or user.get("permissions", {}).get("can_manage_users"))
+
+    def _handle_create_user(self) -> None:
+        actor = self._require_auth()
+        if not self._can_manage_users(actor):
+            raise AuthError(403, "No tienes permiso para crear usuarios.")
+        payload = self._read_json_body()
+        username = str(payload.get("username", "")).strip()
+        password = str(payload.get("password", ""))
+        is_superadmin = bool(payload.get("is_superadmin", False))
+        permissions = payload.get("permissions") or {}
+
+        if not re.fullmatch(r"[A-Za-z0-9._@-]{3,64}", username):
+            raise ValueError("Nombre de usuario inválido (3-64 caracteres: letras, números, . _ @ -).")
+        if len(password) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres.")
+        if is_superadmin and not actor.get("is_superadmin"):
+            raise AuthError(403, "Solo un superadministrador puede crear otros superadministradores.")
+        if db.get_user_by_username(username):
+            raise ValueError("Ya existe un usuario con ese nombre.")
+
+        clean_perms = {k: bool(permissions.get(k, False)) for k in db.PERMISSION_FLAGS}
+        new_user = db.create_user(
+            username=username,
+            password=password,
+            is_superadmin=is_superadmin,
+            permissions=clean_perms,
+        )
+        self._send_json(201, {"user": new_user})
+
+    def _handle_update_user(self, user_id: int) -> None:
+        actor = self._require_auth()
+        if not self._can_manage_users(actor):
+            raise AuthError(403, "No tienes permiso para editar usuarios.")
+        target = db.get_user(user_id)
+        if not target:
+            self._send_json(404, {"error": "Usuario no encontrado."})
+            return
+        payload = self._read_json_body()
+
+        password = payload.get("password")
+        if password is not None:
+            password = str(password)
+            if password and len(password) < 8:
+                raise ValueError("La contraseña debe tener al menos 8 caracteres.")
+            if not password:
+                password = None
+
+        is_superadmin = payload.get("is_superadmin")
+        if is_superadmin is not None:
+            is_superadmin = bool(is_superadmin)
+            if is_superadmin != target["is_superadmin"] and not actor.get("is_superadmin"):
+                raise AuthError(403, "Solo un superadministrador puede modificar el rol de superadministrador.")
+            # Prevent demoting the last superadmin
+            if target["is_superadmin"] and not is_superadmin and db.count_superadmins() <= 1:
+                raise ValueError("No puedes quitar el rol de superadministrador al último superadministrador.")
+
+        permissions = payload.get("permissions")
+        if permissions is not None:
+            permissions = {k: bool(permissions.get(k, target["permissions"].get(k, False))) for k in db.PERMISSION_FLAGS}
+
+        # Block self-locking-out of user management for non-superadmin actors
+        if target["id"] == actor["id"] and not actor.get("is_superadmin"):
+            if permissions is not None and permissions.get("can_manage_users") is False:
+                raise ValueError("No puedes quitarte a ti mismo el permiso de gestión de usuarios.")
+
+        updated = db.update_user(
+            user_id,
+            password=password,
+            is_superadmin=is_superadmin,
+            permissions=permissions,
+        )
+        self._send_json(200, {"user": updated})
+
+    def _handle_delete_user(self, user_id: int) -> None:
+        actor = self._require_auth()
+        if not self._can_manage_users(actor):
+            raise AuthError(403, "No tienes permiso para eliminar usuarios.")
+        target = db.get_user(user_id)
+        if not target:
+            self._send_json(404, {"error": "Usuario no encontrado."})
+            return
+        if target["id"] == actor["id"]:
+            raise ValueError("No puedes eliminar tu propia cuenta.")
+        if target["is_superadmin"] and db.count_superadmins() <= 1:
+            raise ValueError("No puedes eliminar al último superadministrador.")
+        if target["is_superadmin"] and not actor.get("is_superadmin"):
+            raise AuthError(403, "Solo un superadministrador puede eliminar a otro superadministrador.")
+        db.delete_user(user_id)
+        self._send_json(200, {"ok": True})
+
+    # --- Clone endpoint --------------------------------------------------
+
+    def _handle_clone(self) -> None:
+        self._require_permission("can_access_moodle_cloner")
+        try:
+            payload = self._read_json_body()
             validated = validate_payload(payload)
 
             if not SCRIPT_FILE.exists():
@@ -531,10 +773,6 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             self._send_json(202, {"job_id": job_id, "status": "queued"})
         except ValueError as exc:
             self._send_json(400, {"error": str(exc)})
-        except json.JSONDecodeError:
-            self._send_json(400, {"error": "JSON inválido."})
-        except Exception as exc:
-            self._send_json(500, {"error": f"Error interno: {exc}"})
 
     def log_message(self, format: str, *args: Any) -> None:
         # Keep terminal output concise.
@@ -542,6 +780,17 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    print("Initializing application database...")
+    try:
+        db.init_schema()
+        seeded = db.seed_initial_admin()
+        if seeded:
+            print(f"Seeded initial superadmin: {seeded}")
+        db.get_or_create_session_secret()
+    except Exception as exc:
+        print(f"WARNING: could not initialize app DB: {exc}")
+        print("The login/user-management features will not work until this is resolved.")
+
     server = ThreadingHTTPServer((HOST, PORT), MoodleCloneHandler)
     print(f"Moodle Cloner UI available at http://{HOST}:{PORT}")
     server.serve_forever()
