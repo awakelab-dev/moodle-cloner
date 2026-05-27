@@ -36,18 +36,32 @@ def _cfg() -> Dict[str, Any]:
     return {"host": host, "user": user, "password": password, "db_name": db_name}
 
 
-def _connect(database: Optional[str] = None) -> pymysql.connections.Connection:
+_NO_DB = object()
+
+
+def _connect(database: Any = _NO_DB) -> pymysql.connections.Connection:
+    """Connect to the Aurora cluster.
+
+    By default (database not passed) uses the app database from cfg. Pass
+    ``database=None`` to connect without selecting any database (needed to
+    bootstrap CREATE DATABASE on first run).
+    """
     cfg = _cfg()
-    return pymysql.connect(
-        host=cfg["host"],
-        user=cfg["user"],
-        password=cfg["password"],
-        database=database if database is not None else cfg["db_name"],
-        charset="utf8mb4",
-        cursorclass=DictCursor,
-        autocommit=True,
-        connect_timeout=10,
-    )
+    kwargs: Dict[str, Any] = {
+        "host": cfg["host"],
+        "user": cfg["user"],
+        "password": cfg["password"],
+        "charset": "utf8mb4",
+        "cursorclass": DictCursor,
+        "autocommit": True,
+        "connect_timeout": 10,
+    }
+    if database is _NO_DB:
+        kwargs["database"] = cfg["db_name"]
+    elif database is not None:
+        kwargs["database"] = database
+    # if database is None, omit it entirely (connect with no DB selected)
+    return pymysql.connect(**kwargs)
 
 
 @contextmanager
