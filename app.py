@@ -54,6 +54,7 @@ def load_dotenv(filepath: Path) -> None:
 load_dotenv(ENV_FILE)
 
 import db  # noqa: E402 — must load after .env
+import course_routes  # noqa: E402 — depends on paramiko, must load after .env
 
 HOST = os.getenv("APP_HOST", "0.0.0.0")
 PORT = int(os.getenv("APP_PORT", "8787"))
@@ -502,8 +503,33 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 return self._handle_create_user()
             if parsed.path == "/api/clone":
                 return self._handle_clone()
+            if parsed.path == "/api/cc/admin/servers":
+                return self._handle_cc_create_server()
+            m = re.fullmatch(r"/api/cc/servers/(\d+)/categories", parsed.path)
+            if m:
+                return self._handle_cc_create_category(int(m.group(1)))
+            if parsed.path == "/api/cc/copy-course":
+                return self._handle_cc_copy_course()
             self._send_json(404, {"error": "Not found"})
         except AuthError as e:
+            self._send_json(e.status, {"error": e.message})
+        except course_routes.CourseRouteError as e:
+            self._send_json(e.status, {"error": e.message})
+        except ValueError as e:
+            self._send_json(400, {"error": str(e)})
+        except Exception as e:
+            self._send_json(500, {"error": f"Error interno: {e}"})
+
+    def do_PUT(self) -> None:
+        parsed = urlparse(self.path)
+        try:
+            m = re.fullmatch(r"/api/cc/admin/servers/(\d+)", parsed.path)
+            if m:
+                return self._handle_cc_update_server(int(m.group(1)))
+            self._send_json(404, {"error": "Not found"})
+        except AuthError as e:
+            self._send_json(e.status, {"error": e.message})
+        except course_routes.CourseRouteError as e:
             self._send_json(e.status, {"error": e.message})
         except ValueError as e:
             self._send_json(400, {"error": str(e)})
@@ -530,8 +556,13 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/users/(\d+)", parsed.path)
             if m:
                 return self._handle_delete_user(int(m.group(1)))
+            m = re.fullmatch(r"/api/cc/admin/servers/(\d+)", parsed.path)
+            if m:
+                return self._handle_cc_delete_server(int(m.group(1)))
             self._send_json(404, {"error": "Not found"})
         except AuthError as e:
+            self._send_json(e.status, {"error": e.message})
+        except course_routes.CourseRouteError as e:
             self._send_json(e.status, {"error": e.message})
         except ValueError as e:
             self._send_json(400, {"error": str(e)})
@@ -592,6 +623,35 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                     "log_path": job.get("log_path", ""),
                 }
             self._send_json(200, result, send_body=send_body)
+            return
+
+        # Protected: course-cloner platform listing (public-shaped, no secrets)
+        if path == "/api/cc/servers":
+            self._require_permission("can_access_course_cloner")
+            try:
+                self._send_json(200, course_routes.list_servers(), send_body=send_body)
+            except course_routes.CourseRouteError as e:
+                self._send_json(e.status, {"error": e.message}, send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/cc/servers/(\d+)/categories", path)
+        if m:
+            self._require_permission("can_access_course_cloner")
+            try:
+                self._send_json(200, course_routes.list_categories(int(m.group(1))), send_body=send_body)
+            except course_routes.CourseRouteError as e:
+                self._send_json(e.status, {"error": e.message}, send_body=send_body)
+            return
+
+        # Protected: admin-shaped platform listing (superadmin only)
+        if path == "/api/cc/admin/servers":
+            user = self._require_auth()
+            if not user.get("is_superadmin"):
+                raise AuthError(403, "Solo un superadministrador puede gestionar plataformas.")
+            try:
+                self._send_json(200, course_routes.admin_list_servers(), send_body=send_body)
+            except course_routes.CourseRouteError as e:
+                self._send_json(e.status, {"error": e.message}, send_body=send_body)
             return
 
         self._send_json(404, {"error": "Not found"}, send_body=send_body)
@@ -717,6 +777,46 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             raise AuthError(403, "Solo un superadministrador puede eliminar a otro superadministrador.")
         db.delete_user(user_id)
         self._send_json(200, {"ok": True})
+
+    # --- Course-cloner endpoints ----------------------------------------
+
+    def _require_superadmin(self) -> Dict[str, Any]:
+        user = self._require_auth()
+        if not user.get("is_superadmin"):
+            raise AuthError(403, "Solo un superadministrador puede realizar esta acción.")
+        return user
+
+    def _handle_cc_create_category(self, server_index: int) -> None:
+        self._require_permission("can_access_course_cloner")
+        payload = self._read_json_body()
+        result = course_routes.create_category(server_index, payload)
+        self._send_json(200, result)
+
+    def _handle_cc_create_server(self) -> None:
+        self._require_superadmin()
+        payload = self._read_json_body()
+        result = course_routes.admin_create_server(payload)
+        self._send_json(201, result)
+
+    def _handle_cc_update_server(self, server_index: int) -> None:
+        self._require_superadmin()
+        payload = self._read_json_body()
+        result = course_routes.admin_update_server(server_index, payload)
+        self._send_json(200, result)
+
+    def _handle_cc_delete_server(self, server_index: int) -> None:
+        self._require_superadmin()
+        result = course_routes.admin_delete_server(server_index)
+        self._send_json(200, result)
+
+    def _handle_cc_copy_course(self) -> None:
+        self._require_permission("can_access_course_cloner")
+        payload = self._read_json_body()
+        # The copy itself does SSH/SFTP work that can take minutes; the request
+        # blocks until it returns, like the original FastAPI impl. Phase 2 may
+        # promote this to the same job-pattern used by /api/clone.
+        result = course_routes.copy_course(payload)
+        self._send_json(200, result)
 
     # --- Clone endpoint --------------------------------------------------
 
