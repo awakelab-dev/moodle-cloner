@@ -359,7 +359,7 @@
                       </label>
                     </div>
                   </div>
-                  <div id="cc-server-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div id="cc-server-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     <div class="text-xs text-slate-500 text-center py-6">Cargando plataformas...</div>
                   </div>
                 </section>
@@ -1129,7 +1129,9 @@
           const res = await fetch('/api/cc/servers');
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(payload.error || 'No se pudo cargar inventario.');
-          state.servers = payload.servers || [];
+          state.servers = (payload.servers || []).slice().sort(
+            (a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' })
+          );
           inventoryStatus.textContent = `${payload.count} plataforma(s) en ${payload.inventory_file}`;
           renderSourceOptions();
           renderServers();
