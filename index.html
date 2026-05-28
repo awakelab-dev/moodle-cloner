@@ -92,6 +92,7 @@
 
         <div class="flex items-center gap-2">
           <span id="current-user-label" class="hidden md:inline text-xs text-slate-400"></span>
+          <button id="platforms-btn" class="hidden px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Plataformas</button>
           <button id="users-btn" class="hidden px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Usuarios</button>
           <button id="logout-btn" class="px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Salir</button>
         </div>
@@ -296,11 +297,194 @@
           </div>
         </section>
 
-        <!-- Section: Course cloner (placeholder) -->
+        <!-- Section: Course cloner -->
         <section id="section-course" class="app-section hidden">
-          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-10 text-center">
-            <h1 class="text-2xl font-semibold text-slate-50">Clonador de cursos</h1>
-            <p class="text-sm text-slate-400 mt-2">Esta seccion aun no esta implementada.</p>
+          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between gap-4">
+              <div>
+                <h1 class="text-2xl font-semibold text-slate-50">Clonador de cursos</h1>
+                <p class="text-sm text-slate-400 mt-1">Copia cursos Moodle entre plataformas via SSH (backup, transferencia SFTP y restore).</p>
+              </div>
+              <div id="cc-inventory-status" class="text-xs text-slate-400">Cargando inventario...</div>
+            </div>
+
+            <div class="px-8 py-6 space-y-6">
+              <form id="cc-form" novalidate class="space-y-6">
+                <!-- Step 1: Source -->
+                <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <div class="flex items-start gap-3 mb-4">
+                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">1</span>
+                    <div>
+                      <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Curso origen</h2>
+                      <p class="text-xs text-slate-400 mt-1">Selecciona el Moodle donde existe el curso e indica su ID numerico.</p>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">Plataforma origen</label>
+                      <select id="cc-source-server" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                        <option value="">Cargando plataformas...</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-medium text-slate-300 mb-1">ID del curso a copiar</label>
+                      <input id="cc-course-id" type="number" min="2" step="1" placeholder="Ejemplo: 145" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                      <p class="mt-1 text-xs text-slate-500">El ID debe existir en la plataforma origen.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- Step 2: Destinations -->
+                <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <div class="flex items-start justify-between gap-3 mb-4">
+                    <div class="flex items-start gap-3">
+                      <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">2</span>
+                      <div>
+                        <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plataformas destino</h2>
+                        <p class="text-xs text-slate-400 mt-1">Selecciona uno o varios Moodle y luego define la categoria/ruta en el paso 3.</p>
+                      </div>
+                    </div>
+                    <button type="button" id="cc-toggle-all" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Seleccionar todos</button>
+                  </div>
+                  <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 mb-4">
+                    <span class="block text-[10px] uppercase tracking-wide text-slate-400 mb-2">Modo del paso 3</span>
+                    <div class="flex flex-wrap gap-4 text-xs text-slate-300">
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="cc-mode-reference" type="checkbox" checked class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+                        Plataforma de referencia para categorias
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input id="cc-mode-category-name" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+                        Por nombre de categoria
+                      </label>
+                    </div>
+                  </div>
+                  <div id="cc-server-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="text-xs text-slate-500 text-center py-6">Cargando plataformas...</div>
+                  </div>
+                </section>
+
+                <!-- Step 3: Category resolution -->
+                <section id="cc-reference-card" class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 hidden">
+                  <div class="flex items-start gap-3 mb-4">
+                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">3</span>
+                    <div>
+                      <h2 id="cc-step3-title" class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plataforma de referencia para categorias</h2>
+                      <p id="cc-step3-desc" class="text-xs text-slate-400 mt-1">Selecciona una plataforma (origen o destino) cuyo arbol de categorias usaras como referencia.</p>
+                    </div>
+                  </div>
+                  <div id="cc-reference-selector-field">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Plataforma de referencia</label>
+                    <select id="cc-reference-selector" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                      <option value="">Selecciona plataforma...</option>
+                    </select>
+                    <p class="mt-1 text-xs text-slate-500">La seleccion aqui define que plataforma se toma para categoria/ruta.</p>
+                  </div>
+                  <div id="cc-reference-panel" class="mt-4"></div>
+                  <div id="cc-byname-panel" class="mt-4 hidden"></div>
+                </section>
+
+                <!-- Submit -->
+                <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h2 class="text-sm font-semibold text-slate-200">Ejecutar copia</h2>
+                    <p class="text-xs text-slate-400 mt-1">Se conecta por SSH al origen y a cada destino, transfiere el backup y restaura el curso. Puede tardar varios minutos.</p>
+                  </div>
+                  <button id="cc-submit" type="submit" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-slate-900">Copiar curso</button>
+                </section>
+              </form>
+
+              <div id="cc-message" class="hidden rounded-lg border px-3 py-2 text-xs"></div>
+              <section id="cc-results" class="hidden space-y-3"></section>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section: Platforms admin (superadmin only) -->
+        <section id="section-platforms" class="app-section hidden">
+          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
+              <div>
+                <h1 class="text-2xl font-semibold text-slate-50">Administrar plataformas</h1>
+                <p class="text-sm text-slate-400 mt-1">Las plataformas se guardan en <span class="font-mono">inventario.json</span>.</p>
+              </div>
+              <button id="pf-reset-btn" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar formulario</button>
+            </div>
+
+            <div class="px-8 py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <!-- Form -->
+              <form id="pf-form" novalidate class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <h2 id="pf-form-title" class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Agregar plataforma</h2>
+                <input type="hidden" id="pf-editing-index" value="" />
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Nombre visible</label>
+                    <input id="pf-name" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Host SSH</label>
+                    <input id="pf-host" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Puerto SSH</label>
+                    <input id="pf-port" type="number" min="1" max="65535" value="22" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Usuario SSH</label>
+                    <input id="pf-ssh_user" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena SSH</label>
+                    <input id="pf-ssh_password" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p id="pf-ssh_password_hint" class="mt-1 text-xs text-slate-500">Necesaria si no usas llave SSH.</p>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta llave SSH</label>
+                    <input id="pf-ssh_key_path" type="text" placeholder="/home/user/.ssh/id_rsa" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Passphrase llave SSH</label>
+                    <input id="pf-ssh_key_passphrase" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p id="pf-ssh_key_passphrase_hint" class="mt-1 text-xs text-slate-500">Opcional.</p>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta Moodle</label>
+                    <input id="pf-moodle_path" type="text" placeholder="/var/www/html/moodle" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Usuario web</label>
+                    <input id="pf-web_user" type="text" placeholder="www-data" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Grupo web</label>
+                    <input id="pf-web_group" type="text" placeholder="www-data" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <label class="flex items-center gap-2 text-xs text-slate-300 md:col-span-2">
+                    <input id="pf-sudo_requires_password" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+                    Sudo requiere contrasena
+                  </label>
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena sudo</label>
+                    <input id="pf-sudo_password" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p id="pf-sudo_password_hint" class="mt-1 text-xs text-slate-500">Solo si sudo requiere contrasena.</p>
+                  </div>
+                </div>
+                <div id="pf-form-error" class="hidden text-xs text-red-300 border border-red-600/40 rounded-lg px-3 py-2"></div>
+                <button id="pf-submit" type="submit" class="w-full inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700">Agregar plataforma</button>
+              </form>
+
+              <!-- List -->
+              <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plataformas registradas</h2>
+                  <span id="pf-status" class="text-xs text-slate-400"></span>
+                </div>
+                <div id="pf-message" class="hidden mb-3 rounded-lg border px-3 py-2 text-xs"></div>
+                <div id="pf-list" class="space-y-3">
+                  <div class="text-xs text-slate-500 text-center py-6">Cargando plataformas...</div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -456,12 +640,14 @@
       course: 'Clonador de cursos',
       plugin: 'Clonador de plugins',
       users: 'Gestion de usuarios',
+      platforms: 'Administrar plataformas',
     };
     const SECTION_PERMS = {
       moodle: 'can_access_moodle_cloner',
       course: 'can_access_course_cloner',
       plugin: 'can_access_plugin_cloner',
       users: 'can_manage_users',
+      platforms: null,
     };
 
     function showLoginView() {
@@ -483,16 +669,29 @@
       } else {
         usersBtn.classList.add('hidden');
       }
+      const platformsBtn = document.getElementById('platforms-btn');
+      if (currentUser && currentUser.is_superadmin) {
+        platformsBtn.classList.remove('hidden');
+      } else {
+        platformsBtn.classList.add('hidden');
+      }
       updateNavTabHighlight();
     }
 
     function showSection(name) {
-      const perm = SECTION_PERMS[name];
-      if (perm && !hasPermission(perm)) {
-        // Special case: users tab uses can_manage_users
-        if (name === 'users' && canManageUsers()) {
-          // fall through
-        } else {
+      if (name === 'platforms') {
+        if (!currentUser || !currentUser.is_superadmin) {
+          toaster.show('Solo un superadministrador puede administrar plataformas.', 'warning');
+          return;
+        }
+      } else if (name === 'users') {
+        if (!canManageUsers()) {
+          toaster.show(`No tienes permiso para acceder a "${SECTION_LABELS[name]}".`, 'warning');
+          return;
+        }
+      } else {
+        const perm = SECTION_PERMS[name];
+        if (perm && !hasPermission(perm)) {
           toaster.show(`No tienes permiso para acceder a "${SECTION_LABELS[name]}".`, 'warning');
           return;
         }
@@ -552,11 +751,17 @@
       loadUsers();
     });
 
+    document.getElementById('platforms-btn').addEventListener('click', () => {
+      showSection('platforms');
+      if (window.__pfLoad) window.__pfLoad();
+    });
+
     // ====== Nav tabs ================================================
     document.querySelectorAll('.nav-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         const section = btn.dataset.section;
         showSection(section);
+        if (section === 'course' && window.__ccLoad) window.__ccLoad();
       });
     });
 
@@ -565,12 +770,11 @@
       const allowed = order.find(s => hasPermission(SECTION_PERMS[s]));
       if (allowed) {
         showSection(allowed);
+        if (allowed === 'course' && window.__ccLoad) window.__ccLoad();
       } else if (canManageUsers()) {
         showSection('users');
         loadUsers();
       } else {
-        // No permissions at all — show moodle but it'll just be empty and any
-        // action will be blocked.
         showSection('moodle');
         toaster.show('Tu usuario no tiene permisos asignados. Contacta a un administrador.', 'warning');
       }
@@ -719,6 +923,1165 @@
         toaster.show(err.message || 'Error eliminando usuario.', 'error');
       }
     }
+
+    // ====== Course cloner ===========================================
+    (function () {
+      const state = {
+        loaded: false,
+        servers: [],
+        selectedDestinationIndexes: new Set(),
+        referenceServerIndex: null,
+        categoriesByServer: {},
+        categoryStatusByServer: {},
+        categoryErrorsByServer: {},
+        categoryLoadPromises: {},
+        step4Mode: 'reference-platform',
+        categorySelectionMode: 'existing',
+        selectedReferenceCategoryId: '',
+        newCategoryName: '',
+        newCategoryParentId: '0',
+        categoryNameSearch: '',
+        categoryNameBaseRoute: '',
+        categoryNameSelectedLocations: new Set(),
+        categoryNameMissingModes: {},
+        categoryNameMissingManualCategories: {},
+      };
+
+      const form = document.getElementById('cc-form');
+      const sourceServerEl = document.getElementById('cc-source-server');
+      const courseIdEl = document.getElementById('cc-course-id');
+      const serverListEl = document.getElementById('cc-server-list');
+      const inventoryStatus = document.getElementById('cc-inventory-status');
+      const messageEl = document.getElementById('cc-message');
+      const resultsEl = document.getElementById('cc-results');
+      const submitBtn = document.getElementById('cc-submit');
+      const toggleAllBtn = document.getElementById('cc-toggle-all');
+      const refCard = document.getElementById('cc-reference-card');
+      const refSelector = document.getElementById('cc-reference-selector');
+      const refPanel = document.getElementById('cc-reference-panel');
+      const bynamePanel = document.getElementById('cc-byname-panel');
+      const modeRefEl = document.getElementById('cc-mode-reference');
+      const modeNameEl = document.getElementById('cc-mode-category-name');
+      const step3TitleEl = document.getElementById('cc-step3-title');
+      const step3DescEl = document.getElementById('cc-step3-desc');
+      const refSelectorField = document.getElementById('cc-reference-selector-field');
+
+      // ---- Helpers ------------------------------------------------------
+      function esc(s) {
+        return String(s == null ? '' : s)
+          .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+      }
+      function normalizeName(v) { return String(v || '').trim().toLocaleLowerCase(); }
+      function buildKey(s, c) { return `${s}:${c}`; }
+      function setMessage(text, tone) {
+        if (!text) { messageEl.classList.add('hidden'); messageEl.textContent = ''; return; }
+        messageEl.textContent = text;
+        messageEl.classList.remove('hidden', 'text-amber-300', 'text-red-300', 'text-emerald-300', 'border-amber-600/40', 'border-red-600/40', 'border-emerald-600/40', 'border-slate-700');
+        if (tone === 'error') messageEl.classList.add('text-red-300', 'border-red-600/40');
+        else if (tone === 'success') messageEl.classList.add('text-emerald-300', 'border-emerald-600/40');
+        else messageEl.classList.add('text-slate-300', 'border-slate-700');
+      }
+      function clearResults() {
+        messageEl.classList.add('hidden'); messageEl.textContent = '';
+        resultsEl.classList.add('hidden'); resultsEl.innerHTML = '';
+      }
+      function setBusy(busy) {
+        submitBtn.disabled = busy; toggleAllBtn.disabled = busy;
+        submitBtn.textContent = busy ? 'Copiando...' : 'Copiar curso';
+        submitBtn.classList.toggle('opacity-60', busy);
+      }
+      function selectedIndexes() {
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        return [...state.selectedDestinationIndexes].filter(i => i !== src);
+      }
+      function getServerName(i) {
+        const s = state.servers.find(x => x.index === i);
+        return s ? s.name : `#${i}`;
+      }
+      function getServerNames(indexes) { return indexes.map(getServerName); }
+      function sortCategoriesForTree(cats) {
+        return [...cats].sort((a, b) => {
+          const pc = String(a.path || '').localeCompare(String(b.path || ''), undefined, { numeric: true });
+          return pc !== 0 ? pc : String(a.name || '').localeCompare(String(b.name || ''));
+        });
+      }
+      function getCategoryDepth(c) {
+        const d = Number.parseInt(c.depth, 10);
+        if (!Number.isNaN(d) && d > 0) return d;
+        return String(c.path || '').split('/').filter(Boolean).length || 1;
+      }
+      function renderCategoryOptions(categories, selected, opts = {}) {
+        const sorted = sortCategoriesForTree(categories);
+        const items = sorted.map(c => {
+          const depth = Math.max(getCategoryDepth(c) - 1, 0);
+          const prefix = depth ? '— '.repeat(depth) : '';
+          const label = `${prefix}${c.name} (ID ${c.id})`;
+          const sel = String(c.id) === String(selected) ? ' selected' : '';
+          return `<option value="${c.id}"${sel}>${esc(label)}</option>`;
+        });
+        if (opts.includeTopLevel) {
+          const topSel = String(selected) === '0' ? ' selected' : '';
+          items.unshift(`<option value="0"${topSel}>Top level / Categoria raiz</option>`);
+        } else {
+          items.unshift('<option value="">Selecciona categoria...</option>');
+        }
+        return items.join('');
+      }
+      function getCategoryNamePathById(catId, categories) {
+        if (!catId) return [];
+        const byId = new Map(categories.map(c => [String(c.id), c]));
+        const cat = byId.get(String(catId));
+        if (!cat) return [];
+        const pathIds = String(cat.path || '').split('/').filter(Boolean);
+        const fromPath = pathIds.map(id => byId.get(String(id))).filter(Boolean);
+        if (fromPath.length && String(fromPath[fromPath.length - 1].id) === String(cat.id)) {
+          return fromPath.map(it => String(it.name || '').trim()).filter(Boolean);
+        }
+        const path = [];
+        const visited = new Set();
+        let cur = cat;
+        while (cur && !visited.has(String(cur.id))) {
+          visited.add(String(cur.id));
+          path.unshift(cur);
+          cur = byId.get(String(cur.parent));
+        }
+        return path.map(it => String(it.name || '').trim()).filter(Boolean);
+      }
+      function parseCategoryBaseRoute(raw) {
+        const r = String(raw || '').trim();
+        if (!r) return { isValid: true, parts: [], error: '' };
+        const parts = r.split('>').map(p => p.trim());
+        if (parts.some(p => !p)) {
+          return { isValid: false, parts: [], error: 'La ruta base debe tener formato categoria>subcategoria (sin segmentos vacios).' };
+        }
+        return { isValid: true, parts, error: '' };
+      }
+
+      // ---- Reference helpers --------------------------------------------
+      function getReferenceCandidateIndexes() {
+        const dest = selectedIndexes();
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        if (Number.isNaN(src)) return dest;
+        return [src, ...dest];
+      }
+      function getReferenceServerIndex() {
+        const dest = selectedIndexes();
+        if (!dest.length) return null;
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        const canKeep = state.referenceServerIndex !== null && (
+          dest.includes(state.referenceServerIndex) ||
+          (!Number.isNaN(src) && state.referenceServerIndex === src)
+        );
+        return canKeep ? state.referenceServerIndex : dest[0];
+      }
+      function syncReferenceServer() {
+        const dest = selectedIndexes();
+        if (!dest.length) {
+          state.referenceServerIndex = null;
+          state.selectedReferenceCategoryId = '';
+          state.newCategoryName = '';
+          state.newCategoryParentId = '0';
+          state.categorySelectionMode = 'existing';
+          return;
+        }
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        const canKeep = state.referenceServerIndex !== null && (
+          dest.includes(state.referenceServerIndex) ||
+          (!Number.isNaN(src) && state.referenceServerIndex === src)
+        );
+        const next = canKeep ? state.referenceServerIndex : dest[0];
+        if (state.referenceServerIndex !== next) {
+          state.referenceServerIndex = next;
+          state.selectedReferenceCategoryId = '';
+          state.newCategoryName = '';
+          state.newCategoryParentId = '0';
+        }
+        ensureValidReferenceSelection(next);
+      }
+      function ensureValidReferenceSelection(serverIndex) {
+        if (serverIndex !== state.referenceServerIndex) return;
+        const cats = state.categoriesByServer[serverIndex] || [];
+        const exists = cats.some(c => String(c.id) === String(state.selectedReferenceCategoryId));
+        if (!exists) state.selectedReferenceCategoryId = cats.length ? String(cats[0].id) : '';
+        const parentExists = state.newCategoryParentId === '0' || cats.some(c => String(c.id) === String(state.newCategoryParentId));
+        if (!parentExists) state.newCategoryParentId = '0';
+      }
+      function getReferenceCategories() {
+        const i = getReferenceServerIndex();
+        return i === null ? [] : (state.categoriesByServer[i] || []);
+      }
+      function getDestinationCategoryPath() {
+        const cats = getReferenceCategories();
+        if (state.categorySelectionMode === 'new') {
+          const name = state.newCategoryName.trim();
+          if (!name) return [];
+          const parentPath = state.newCategoryParentId === '0' ? [] : getCategoryNamePathById(state.newCategoryParentId, cats);
+          if (state.newCategoryParentId !== '0' && !parentPath.length) return [];
+          return [...parentPath, name];
+        }
+        return getCategoryNamePathById(state.selectedReferenceCategoryId, cats);
+      }
+
+      // ---- Loaders ------------------------------------------------------
+      async function loadServers() {
+        try {
+          const res = await fetch('/api/cc/servers');
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(payload.error || 'No se pudo cargar inventario.');
+          state.servers = payload.servers || [];
+          inventoryStatus.textContent = `${payload.count} plataforma(s) en ${payload.inventory_file}`;
+          renderSourceOptions();
+          renderServers();
+        } catch (err) {
+          inventoryStatus.textContent = 'Inventario no disponible';
+          serverListEl.innerHTML = `<div class="text-xs text-red-300 text-center py-6 col-span-full">${esc(err.message)}</div>`;
+        }
+      }
+      async function loadCategories(serverIndex, opts = {}) {
+        if (!opts.force && state.categoryStatusByServer[serverIndex] === 'loaded') {
+          ensureValidReferenceSelection(serverIndex);
+          return;
+        }
+        if (!opts.force && state.categoryLoadPromises[serverIndex]) {
+          return state.categoryLoadPromises[serverIndex];
+        }
+        state.categoryStatusByServer[serverIndex] = 'loading';
+        state.categoryErrorsByServer[serverIndex] = '';
+        const p = (async () => {
+          try {
+            const res = await fetch(`/api/cc/servers/${serverIndex}/categories`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'No se pudieron cargar categorias.');
+            state.categoriesByServer[serverIndex] = Array.isArray(data.categories) ? data.categories : [];
+            state.categoryStatusByServer[serverIndex] = 'loaded';
+            ensureValidReferenceSelection(serverIndex);
+          } catch (err) {
+            state.categoriesByServer[serverIndex] = [];
+            state.categoryStatusByServer[serverIndex] = 'error';
+            state.categoryErrorsByServer[serverIndex] = err.message || 'No se pudieron cargar categorias.';
+          } finally {
+            delete state.categoryLoadPromises[serverIndex];
+          }
+        })();
+        state.categoryLoadPromises[serverIndex] = p;
+        return p;
+      }
+      async function loadReferenceCategories() {
+        const i = getReferenceServerIndex();
+        if (i === null) return;
+        await loadCategories(i);
+      }
+      async function loadByNameCategories() {
+        const dest = selectedIndexes();
+        if (!dest.length) return;
+        await Promise.all(dest.map(i => loadCategories(i)));
+      }
+
+      // ---- Render -------------------------------------------------------
+      function renderSourceOptions() {
+        if (!state.servers.length) {
+          sourceServerEl.innerHTML = '<option value="">No hay plataformas disponibles</option>';
+          return;
+        }
+        sourceServerEl.innerHTML = '<option value="">Selecciona plataforma origen...</option>';
+        state.servers.forEach(s => {
+          const o = document.createElement('option');
+          o.value = s.index; o.textContent = `${s.name} · ${s.moodle_path}`;
+          sourceServerEl.appendChild(o);
+        });
+        sourceServerEl.value = String(state.servers[0].index);
+      }
+      function renderServers() {
+        if (!state.servers.length) {
+          serverListEl.innerHTML = '<div class="text-xs text-slate-500 text-center py-6 col-span-full">No hay plataformas en el inventario.</div>';
+          renderReferenceCard();
+          updateToggleAll();
+          return;
+        }
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        state.selectedDestinationIndexes.delete(src);
+        syncReferenceServer();
+        serverListEl.innerHTML = state.servers.map(s => {
+          const isSource = s.index === src;
+          const isSelected = state.selectedDestinationIndexes.has(s.index);
+          const isRef = state.referenceServerIndex === s.index;
+          const ring = isSelected ? 'ring-1 ring-primary-500/60 bg-primary-500/5' : 'bg-slate-950/40';
+          const opacity = isSource ? 'opacity-50' : '';
+          return `
+            <label class="block rounded-lg border border-slate-800 ${ring} ${opacity} p-3 cursor-pointer">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" class="cc-server-checkbox h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" value="${s.index}" ${isSource ? 'disabled' : ''} ${isSelected ? 'checked' : ''}>
+                <span class="text-sm font-medium text-slate-100">${esc(s.name)}</span>
+                ${isRef ? '<span class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary-500/15 text-primary-300 border border-primary-500/30">Referencia</span>' : ''}
+              </div>
+              <div class="mt-1 text-[11px] text-slate-400 truncate">${esc(s.moodle_path)}</div>
+              ${isSource ? '<div class="mt-1 text-[10px] text-amber-300">Origen seleccionado: no disponible como destino</div>' : ''}
+            </label>
+          `;
+        }).join('');
+        renderReferenceCard();
+        updateToggleAll();
+      }
+      function updateToggleAll() {
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        const selectable = state.servers.filter(s => s.index !== src);
+        const hasUnselected = selectable.some(s => !state.selectedDestinationIndexes.has(s.index));
+        toggleAllBtn.disabled = !selectable.length;
+        toggleAllBtn.textContent = hasUnselected ? 'Seleccionar todos' : 'Limpiar seleccion';
+      }
+      function renderReferenceCard() {
+        const dest = selectedIndexes();
+        if (!dest.length) {
+          refCard.classList.add('hidden');
+          return;
+        }
+        syncReferenceServer();
+        refCard.classList.remove('hidden');
+        if (state.step4Mode === 'category-name') {
+          step3TitleEl.textContent = 'Por nombre de categoria';
+          step3DescEl.textContent = 'Busca una categoria por nombre en las plataformas destino. Define una ruta base para crearla si no existe.';
+          refSelectorField.classList.add('hidden');
+          refPanel.innerHTML = '';
+          bynamePanel.classList.remove('hidden');
+          bynamePanel.innerHTML = renderByNamePanel();
+          return;
+        }
+        step3TitleEl.textContent = 'Plataforma de referencia para categorias';
+        step3DescEl.textContent = 'Selecciona una plataforma (origen o destino) cuyo arbol de categorias usaras como referencia.';
+        refSelectorField.classList.remove('hidden');
+        bynamePanel.classList.add('hidden');
+        bynamePanel.innerHTML = '';
+        const refIdx = getReferenceServerIndex();
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        const candidates = getReferenceCandidateIndexes();
+        refSelector.innerHTML = candidates.map(i => {
+          const s = state.servers.find(x => x.index === i);
+          if (!s) return '';
+          const tag = i === src ? ' (origen)' : '';
+          return `<option value="${s.index}">${esc(s.name + tag)} · ${esc(s.moodle_path)}</option>`;
+        }).join('');
+        refSelector.value = refIdx === null ? '' : String(refIdx);
+        refPanel.innerHTML = renderReferencePanel();
+      }
+      function renderReferencePanel() {
+        const refIdx = getReferenceServerIndex();
+        if (refIdx === null) return '';
+        const status = state.categoryStatusByServer[refIdx] || 'idle';
+        const cats = state.categoriesByServer[refIdx] || [];
+        const err = state.categoryErrorsByServer[refIdx] || '';
+        const isLoading = status === 'loading' || status === 'idle';
+        const path = getDestinationCategoryPath();
+        const pathText = path.length ? path.join(' / ') : 'Sin ruta seleccionada';
+        const modeBlock = `
+          <label class="block mb-3">
+            <span class="block text-xs font-medium text-slate-300 mb-1">Accion sobre categoria destino</span>
+            <select class="cc-category-mode w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+              <option value="existing" ${state.categorySelectionMode === 'existing' ? 'selected' : ''}>Seleccionar categoria existente</option>
+              <option value="new" ${state.categorySelectionMode === 'new' ? 'selected' : ''}>Crear categoria nueva por ruta</option>
+            </select>
+          </label>
+        `;
+        let body;
+        if (status === 'error') {
+          body = `${modeBlock}<div class="rounded-lg border border-red-600/40 bg-red-500/10 text-xs text-red-200 px-3 py-2">No se pudieron cargar categorias: ${esc(err)}</div>`;
+        } else if (isLoading) {
+          body = `${modeBlock}<div class="text-xs text-slate-500 text-center py-4">Cargando arbol de categorias...</div>`;
+        } else if (state.categorySelectionMode === 'new') {
+          body = `
+            ${modeBlock}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label class="block">
+                <span class="block text-xs font-medium text-slate-300 mb-1">Categoria padre</span>
+                <select class="cc-new-parent w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+                  ${renderCategoryOptions(cats, state.newCategoryParentId, { includeTopLevel: true })}
+                </select>
+              </label>
+              <label class="block">
+                <span class="block text-xs font-medium text-slate-300 mb-1">Nombre nuevo</span>
+                <input class="cc-new-name w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100" type="text" placeholder="Ejemplo: Diplomados 2026" value="${esc(state.newCategoryName)}">
+              </label>
+            </div>
+            <div class="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300"><strong>Ruta:</strong> <span id="cc-path-preview">${esc(pathText)}</span></div>
+          `;
+        } else if (!cats.length) {
+          body = `${modeBlock}<div class="rounded-lg border border-slate-700 bg-slate-950 text-xs text-slate-400 px-3 py-2">Sin categorias existentes. Cambia a "Crear categoria nueva".</div>`;
+        } else {
+          body = `
+            ${modeBlock}
+            <label class="block">
+              <span class="block text-xs font-medium text-slate-300 mb-1">Categoria existente en la referencia</span>
+              <select class="cc-ref-select w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+                ${renderCategoryOptions(cats, state.selectedReferenceCategoryId)}
+              </select>
+            </label>
+            <div class="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300"><strong>Ruta:</strong> <span id="cc-path-preview">${esc(pathText)}</span></div>
+          `;
+        }
+        return `
+          <div class="flex items-center justify-between mb-3 text-xs text-slate-400">
+            <span>${selectedIndexes().length} plataforma(s) destino seleccionada(s)</span>
+            <button type="button" data-action="reload-ref" class="px-2 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800" ${isLoading ? 'disabled' : ''}>Actualizar arbol</button>
+          </div>
+          ${body}
+        `;
+      }
+
+      function getCategoryNameMatches(rawName) {
+        const target = normalizeName(rawName);
+        if (!target) return [];
+        const out = [];
+        selectedIndexes().forEach(idx => {
+          const server = state.servers.find(s => s.index === idx);
+          const cats = state.categoriesByServer[idx] || [];
+          cats.forEach(c => {
+            if (normalizeName(c.name) !== target) return;
+            const path = getCategoryNamePathById(c.id, cats);
+            out.push({
+              serverIndex: idx,
+              serverName: server ? server.name : `#${idx}`,
+              category: c,
+              path,
+              pathText: path.join(' / '),
+            });
+          });
+        });
+        return out.sort((a, b) => a.serverName.localeCompare(b.serverName) || a.pathText.localeCompare(b.pathText));
+      }
+      function getSelectedMatchRecords(matches) {
+        const byKey = new Map(matches.map(m => [buildKey(m.serverIndex, m.category.id), m]));
+        const out = [];
+        for (const key of state.categoryNameSelectedLocations) {
+          const m = byKey.get(key);
+          if (m) out.push(m);
+        }
+        return out;
+      }
+      function pruneByNameSelections() {
+        const allowed = new Set(selectedIndexes().map(String));
+        for (const k of [...state.categoryNameSelectedLocations]) {
+          const [si] = k.split(':');
+          if (!allowed.has(si)) state.categoryNameSelectedLocations.delete(k);
+        }
+        for (const k of Object.keys(state.categoryNameMissingModes)) if (!allowed.has(k)) delete state.categoryNameMissingModes[k];
+        for (const k of Object.keys(state.categoryNameMissingManualCategories)) if (!allowed.has(k)) delete state.categoryNameMissingManualCategories[k];
+      }
+      function getMissingMode(i) {
+        const m = state.categoryNameMissingModes[String(i)];
+        return m === 'manual-category' ? 'manual-category' : 'base-route';
+      }
+      function getMissingManualId(i) {
+        const k = String(i);
+        const cats = state.categoriesByServer[i] || [];
+        const cur = state.categoryNameMissingManualCategories[k];
+        if (cats.some(c => String(c.id) === String(cur))) return String(cur);
+        const fb = cats.length ? String(cats[0].id) : '';
+        if (fb) state.categoryNameMissingManualCategories[k] = fb;
+        else delete state.categoryNameMissingManualCategories[k];
+        return fb;
+      }
+      function autoSelectUniqueMatches() {
+        const raw = state.categoryNameSearch.trim();
+        if (!raw || raw.includes('>')) return;
+        const matches = getCategoryNameMatches(raw);
+        const grouped = new Map();
+        for (const m of matches) {
+          if (!grouped.has(m.serverIndex)) grouped.set(m.serverIndex, []);
+          grouped.get(m.serverIndex).push(m);
+        }
+        for (const [, ms] of grouped) {
+          if (ms.length === 1) state.categoryNameSelectedLocations.add(buildKey(ms[0].serverIndex, ms[0].category.id));
+        }
+      }
+      function renderMissingItem(serverIndex) {
+        const name = getServerName(serverIndex);
+        const mode = getMissingMode(serverIndex);
+        const cats = state.categoriesByServer[serverIndex] || [];
+        const selId = getMissingManualId(serverIndex);
+        const manualBlock = mode === 'manual-category' ? (cats.length ? `
+            <label class="block mt-2">
+              <span class="block text-[11px] font-medium text-slate-300 mb-1">Categoria manual</span>
+              <select class="cc-missing-cat w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-100" data-server-index="${serverIndex}">
+                ${renderCategoryOptions(cats, selId)}
+              </select>
+            </label>
+          ` : `<div class="mt-2 rounded-lg border border-red-600/40 bg-red-500/10 text-xs text-red-200 px-3 py-2">Sin categorias disponibles en ${esc(name)}.</div>`) : '';
+        return `
+          <article class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+            <div class="text-xs font-medium text-slate-100">${esc(name)}</div>
+            <div class="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-300">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" class="cc-missing-mode" name="cc-missing-${serverIndex}" data-server-index="${serverIndex}" value="base-route" ${mode === 'base-route' ? 'checked' : ''}>
+                Usar Ruta base
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" class="cc-missing-mode" name="cc-missing-${serverIndex}" data-server-index="${serverIndex}" value="manual-category" ${mode === 'manual-category' ? 'checked' : ''}>
+                Elegir categoria existente
+              </label>
+            </div>
+            ${manualBlock}
+          </article>
+        `;
+      }
+      function renderByNamePanel() {
+        const dest = selectedIndexes();
+        const destNames = dest.map(getServerName).join(', ');
+        const rawName = state.categoryNameSearch.trim();
+        const baseRouteVal = parseCategoryBaseRoute(state.categoryNameBaseRoute);
+        const invalidName = rawName.includes('>');
+        const matches = invalidName ? [] : getCategoryNameMatches(rawName);
+        const selectedMatches = getSelectedMatchRecords(matches);
+        const matchedServers = [...new Set(matches.map(m => m.serverIndex))];
+        const missing = dest.filter(i => !matchedServers.includes(i));
+        const baseRouteMissing = missing.filter(i => getMissingMode(i) === 'base-route');
+        const loading = dest.filter(i => {
+          const s = state.categoryStatusByServer[i];
+          return !s || s === 'idle' || s === 'loading';
+        });
+        const errors = dest.filter(i => state.categoryStatusByServer[i] === 'error');
+        const canEval = !loading.length && !errors.length && rawName && !invalidName;
+        const showBase = canEval && baseRouteMissing.length > 0;
+
+        const loadingBlock = loading.length ? `<div class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-400">Cargando categorias destino...</div>` : '';
+        const errorBlock = errors.length ? `<div class="rounded-lg border border-red-600/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">No se pudieron cargar: ${esc(getServerNames(errors).join(', '))}.</div>` : '';
+        const nameSyntaxBlock = invalidName ? `<div class="rounded-lg border border-red-600/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">El nombre no acepta ">". Usa solo el nombre.</div>` : '';
+        let matchesBlock = '';
+        if (canEval && matches.length) {
+          matchesBlock = `
+            <div>
+              <div class="text-xs text-slate-300 mb-1">Coincidencias encontradas (${matches.length}). Selecciona una ubicacion por plataforma.</div>
+              <div class="space-y-2">
+                ${matches.map(m => {
+                  const k = buildKey(m.serverIndex, m.category.id);
+                  const checked = state.categoryNameSelectedLocations.has(k);
+                  return `
+                    <label class="flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 cursor-pointer">
+                      <input type="checkbox" class="cc-match-checkbox mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" data-server-index="${m.serverIndex}" data-category-id="${m.category.id}" ${checked ? 'checked' : ''}>
+                      <span class="text-xs text-slate-200"><strong>${esc(m.serverName)}</strong> · ${esc(m.pathText)}</span>
+                      ${checked ? '<span class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Seleccionada</span>' : ''}
+                    </label>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        } else if (canEval && !matches.length && rawName) {
+          matchesBlock = `<div class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-400">No existe la categoria "${esc(rawName)}" en los destinos. Configura una ruta base para crearla.</div>`;
+        }
+        const missingBlock = canEval && missing.length ? `
+          <div>
+            <div class="text-xs text-slate-300 mb-1">Plataformas sin coincidencia (${missing.length}): ${esc(getServerNames(missing).join(', '))}</div>
+            <div class="space-y-2">${missing.map(renderMissingItem).join('')}</div>
+          </div>
+        ` : '';
+        let baseRouteBlock = '';
+        if (showBase) {
+          const missNames = getServerNames(baseRouteMissing).join(', ');
+          const previewPath = baseRouteVal.isValid ? [...baseRouteVal.parts, rawName].join(' / ') : '';
+          const routeErr = state.categoryNameBaseRoute.trim() && !baseRouteVal.isValid ? `<div class="mt-2 rounded-lg border border-red-600/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">${esc(baseRouteVal.error)}</div>` : '';
+          const previewBlock = previewPath ? `<div class="mt-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300"><strong>Ruta:</strong> ${esc(previewPath)}<br><span class="text-[11px] text-slate-500">Se aplicara en: ${esc(missNames)}</span></div>` : '';
+          baseRouteBlock = `
+            <label class="block">
+              <span class="block text-xs font-medium text-slate-300 mb-1">Ruta base (opcional)</span>
+              <input id="cc-byname-base-route" type="text" placeholder="Ejemplo: Plantillas>Subvencionadas" value="${esc(state.categoryNameBaseRoute)}" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+              <small class="text-[11px] text-slate-500">Formato: categoria>subcategoria. Vacio = raiz.</small>
+            </label>
+            ${routeErr}${previewBlock}
+          `;
+        }
+        const summary = canEval && matches.length ? `<div class="text-xs text-slate-400"><strong>Ubicaciones seleccionadas:</strong> ${selectedMatches.length} / ${matchedServers.length}</div>` : '';
+        return `
+          <div class="space-y-4">
+            <div class="text-xs text-slate-400"><strong>Destinos:</strong> ${esc(destNames)}</div>
+            <label class="block">
+              <span class="block text-xs font-medium text-slate-300 mb-1">Nombre de categoria</span>
+              <input id="cc-byname-search" type="text" placeholder="Ejemplo: Aprobados 2024" value="${esc(state.categoryNameSearch)}" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100">
+              <small class="text-[11px] text-slate-500">Busqueda exacta en cada plataforma destino.</small>
+            </label>
+            ${loadingBlock}${errorBlock}${nameSyntaxBlock}${matchesBlock}${missingBlock}${baseRouteBlock}${summary}
+          </div>
+        `;
+      }
+
+      // ---- Mode toggle --------------------------------------------------
+      function setMode(mode) {
+        state.step4Mode = mode === 'category-name' ? 'category-name' : 'reference-platform';
+        modeRefEl.checked = state.step4Mode === 'reference-platform';
+        modeNameEl.checked = state.step4Mode === 'category-name';
+      }
+
+      // ---- Validation + submit -----------------------------------------
+      function validate() {
+        const cid = Number.parseInt(courseIdEl.value, 10);
+        if (!sourceServerEl.value) return 'Selecciona la plataforma origen.';
+        if (!courseIdEl.value || Number.isNaN(cid)) return 'Ingresa el ID del curso.';
+        if (cid <= 1) return 'El ID del curso debe ser mayor a 1.';
+        const dest = selectedIndexes();
+        if (!dest.length) return 'Selecciona al menos una plataforma destino.';
+        if (state.step4Mode === 'category-name') return validateByName(dest);
+        const refIdx = getReferenceServerIndex();
+        const status = state.categoryStatusByServer[refIdx];
+        const refName = state.servers.find(s => s.index === refIdx)?.name || 'la referencia';
+        if (status === 'loading' || status === 'idle' || !status) return `Espera a que carguen las categorias de ${refName}.`;
+        if (status === 'error') return `No se pudieron cargar las categorias de ${refName}.`;
+        const path = getDestinationCategoryPath();
+        if (!path.length) return 'Selecciona una categoria o define una ruta destino.';
+        if (state.categorySelectionMode === 'new') {
+          if (!state.newCategoryName.trim()) return 'Ingresa el nombre de la nueva categoria.';
+        }
+        return '';
+      }
+      function validateByName(dest) {
+        const name = state.categoryNameSearch.trim();
+        if (!name) return 'Ingresa el nombre de categoria a buscar.';
+        if (name.includes('>')) return 'El nombre de categoria no acepta ">".';
+        const loading = dest.filter(i => {
+          const s = state.categoryStatusByServer[i];
+          return !s || s === 'idle' || s === 'loading';
+        });
+        if (loading.length) return 'Espera a que carguen las categorias de todos los destinos.';
+        const errors = dest.filter(i => state.categoryStatusByServer[i] === 'error');
+        if (errors.length) return `No se pudieron cargar las categorias de: ${getServerNames(errors).join(', ')}.`;
+        const matches = getCategoryNameMatches(name);
+        const resolved = getByNameResolvedIndexes(dest, matches);
+        if (!resolved.length) return 'Selecciona al menos una ubicacion destino.';
+        return '';
+      }
+      function getByNameResolvedIndexes(dest, matches) {
+        const sel = getSelectedMatchRecords(matches);
+        const selSet = new Set(sel.map(m => m.serverIndex));
+        const missing = dest.filter(i => !selSet.has(i));
+        const manual = missing.filter(i => {
+          if (getMissingMode(i) !== 'manual-category') return false;
+          const cid = getMissingManualId(i);
+          const cats = state.categoriesByServer[i] || [];
+          return cats.some(c => String(c.id) === String(cid));
+        });
+        const baseRouteVal = parseCategoryBaseRoute(state.categoryNameBaseRoute);
+        const base = baseRouteVal.isValid ? missing.filter(i => getMissingMode(i) === 'base-route') : [];
+        return [...selSet, ...manual, ...base];
+      }
+      function getByNamePayload() {
+        const dest = selectedIndexes();
+        const name = state.categoryNameSearch.trim();
+        const matches = getCategoryNameMatches(name);
+        const resolved = getByNameResolvedIndexes(dest, matches);
+        const sel = getSelectedMatchRecords(matches);
+        const destCats = {};
+        sel.forEach(m => { destCats[String(m.serverIndex)] = Number.parseInt(m.category.id, 10); });
+        const selSet = new Set(sel.map(m => m.serverIndex));
+        const missing = dest.filter(i => !selSet.has(i));
+        const resolvedSet = new Set(resolved);
+        missing.filter(i => resolvedSet.has(i) && getMissingMode(i) === 'manual-category').forEach(i => {
+          destCats[String(i)] = Number.parseInt(getMissingManualId(i), 10);
+        });
+        const destPaths = {};
+        const baseRouteVal = parseCategoryBaseRoute(state.categoryNameBaseRoute);
+        if (baseRouteVal.isValid) {
+          const fullPath = [...baseRouteVal.parts, name];
+          missing.filter(i => resolvedSet.has(i) && getMissingMode(i) === 'base-route').forEach(i => {
+            destPaths[String(i)] = fullPath;
+          });
+        }
+        return {
+          destination_indexes: resolved,
+          destination_categories: destCats,
+          destination_category_path: [],
+          destination_category_paths: destPaths,
+        };
+      }
+      function getSubmitConfig() {
+        if (state.step4Mode === 'category-name') return getByNamePayload();
+        return {
+          destination_indexes: selectedIndexes(),
+          destination_categories: {},
+          destination_category_path: getDestinationCategoryPath(),
+          destination_category_paths: {},
+        };
+      }
+
+      function renderResults(payload) {
+        resultsEl.classList.remove('hidden');
+        const src = payload.source ? renderResultCard(payload.source, 'Origen') : '';
+        const dests = (payload.results || []).map(r => renderResultCard(r, '')).join('');
+        resultsEl.innerHTML = `
+          <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-slate-200">Resumen final</h2>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-200">Curso origen ID: ${payload.course_id}</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-200">Total: ${payload.summary.total}</span>
+              <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300">Exitos: ${payload.summary.success}</span>
+              <span class="px-2 py-0.5 rounded bg-red-500/15 text-red-300">Fallos: ${payload.summary.failed}</span>
+            </div>
+          </div>
+          <h3 class="text-xs uppercase tracking-wide text-slate-400">Origen</h3>${src}
+          <h3 class="text-xs uppercase tracking-wide text-slate-400">Destinos</h3>${dests}
+        `;
+        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      function renderResultCard(result, label) {
+        const ok = result.success;
+        const cls = ok ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-red-500/40 bg-red-500/5';
+        const statusTxt = ok ? 'Exito' : 'Fallo';
+        const statusCls = ok ? 'text-emerald-300' : 'text-red-300';
+        const d = result.data || {};
+        const newCourse = d.new_course;
+        const srcCourse = d.source_course;
+        const catRes = d.category_resolution;
+        const reqPath = catRes && Array.isArray(catRes.requested_path) ? catRes.requested_path.join(' / ') : '';
+        const courseUrl = newCourse && newCourse.course_url ? newCourse.course_url : '';
+        const blocks = [];
+        if (srcCourse) blocks.push(`<p><strong>Curso origen:</strong> ${esc(srcCourse.fullname || '')} (${esc(srcCourse.shortname || '')})</p>`);
+        if (newCourse) blocks.push(`<p><strong>Nuevo curso:</strong> ID ${esc(newCourse.id || '-')} · ${esc(newCourse.shortname || '')}</p>`);
+        if (catRes) {
+          blocks.push(`<p><strong>Categoria destino:</strong> ID ${esc(catRes.id || '-')}${catRes.name ? ' · ' + esc(catRes.name) : ''}. ${esc(catRes.message || '')}</p>`);
+          if (reqPath) blocks.push(`<p><strong>Ruta:</strong> ${esc(reqPath)}</p>`);
+        }
+        if (result.error_detail) blocks.push(`<p><strong>Detalle:</strong> ${esc(result.error_detail)}</p>`);
+        if (courseUrl) blocks.push(`<p><a href="${esc(courseUrl)}" target="_blank" rel="noopener" class="text-primary-400 underline break-all">${esc(courseUrl)}</a></p>`);
+        return `
+          <article class="rounded-lg border ${cls} px-4 py-3 text-xs text-slate-200">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="font-semibold">${esc(label ? `${label}: ${result.server_name}` : result.server_name)}</span>
+              <span class="text-[11px] font-semibold ${statusCls}">${statusTxt}</span>
+            </div>
+            <div class="space-y-1">${blocks.join('')}</div>
+          </article>
+        `;
+      }
+
+      // ---- Events -------------------------------------------------------
+      sourceServerEl.addEventListener('change', async () => {
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        state.selectedDestinationIndexes.delete(src);
+        clearResults();
+        renderServers();
+        if (state.step4Mode === 'reference-platform') await loadReferenceCategories();
+        else await loadByNameCategories();
+        renderServers();
+      });
+      courseIdEl.addEventListener('input', clearResults);
+
+      serverListEl.addEventListener('change', async (e) => {
+        const target = e.target;
+        if (!target.classList.contains('cc-server-checkbox')) return;
+        const idx = Number.parseInt(target.value, 10);
+        if (Number.isNaN(idx)) return;
+        clearResults();
+        if (target.checked) state.selectedDestinationIndexes.add(idx);
+        else state.selectedDestinationIndexes.delete(idx);
+        pruneByNameSelections();
+        renderServers();
+        if (state.step4Mode === 'reference-platform') await loadReferenceCategories();
+        else await loadByNameCategories();
+        renderServers();
+      });
+
+      toggleAllBtn.addEventListener('click', async () => {
+        const src = Number.parseInt(sourceServerEl.value, 10);
+        const selectable = state.servers.filter(s => s.index !== src);
+        const shouldSelectAll = selectable.some(s => !state.selectedDestinationIndexes.has(s.index));
+        if (shouldSelectAll) {
+          selectable.forEach(s => state.selectedDestinationIndexes.add(s.index));
+          pruneByNameSelections();
+          clearResults();
+          renderServers();
+          if (state.step4Mode === 'reference-platform') await loadReferenceCategories();
+          else await loadByNameCategories();
+        } else {
+          state.selectedDestinationIndexes.clear();
+          state.categoryNameSelectedLocations.clear();
+          state.categoryNameMissingModes = {};
+          state.categoryNameMissingManualCategories = {};
+          clearResults();
+        }
+        renderServers();
+      });
+
+      modeRefEl.addEventListener('change', async () => {
+        if (modeRefEl.checked) setMode('reference-platform');
+        else if (!modeNameEl.checked) { modeRefEl.checked = true; return; }
+        else setMode('category-name');
+        clearResults();
+        if (state.step4Mode === 'reference-platform') await loadReferenceCategories();
+        else await loadByNameCategories();
+        renderReferenceCard();
+      });
+      modeNameEl.addEventListener('change', async () => {
+        if (modeNameEl.checked) setMode('category-name');
+        else if (!modeRefEl.checked) { modeNameEl.checked = true; return; }
+        else setMode('reference-platform');
+        clearResults();
+        if (state.step4Mode === 'category-name') await loadByNameCategories();
+        else await loadReferenceCategories();
+        renderReferenceCard();
+      });
+
+      refCard.addEventListener('change', async (e) => {
+        const t = e.target;
+        if (t === refSelector) {
+          const v = Number.parseInt(t.value, 10);
+          if (Number.isNaN(v)) return;
+          state.referenceServerIndex = v;
+          state.selectedReferenceCategoryId = '';
+          state.newCategoryName = '';
+          state.newCategoryParentId = '0';
+          clearResults();
+          renderServers();
+          if (state.step4Mode === 'reference-platform') await loadReferenceCategories();
+          else await loadByNameCategories();
+          renderServers();
+          return;
+        }
+        if (t.classList.contains('cc-category-mode')) {
+          state.categorySelectionMode = t.value === 'new' ? 'new' : 'existing';
+          clearResults();
+          if (state.step4Mode === 'reference-platform') await loadReferenceCategories();
+          renderReferenceCard();
+          return;
+        }
+        if (t.classList.contains('cc-ref-select')) {
+          state.selectedReferenceCategoryId = t.value;
+          clearResults();
+          renderReferenceCard();
+          return;
+        }
+        if (t.classList.contains('cc-new-parent')) {
+          state.newCategoryParentId = t.value;
+          clearResults();
+          renderReferenceCard();
+          return;
+        }
+        if (t.classList.contains('cc-match-checkbox')) {
+          const si = Number.parseInt(t.dataset.serverIndex || '', 10);
+          const ci = Number.parseInt(t.dataset.categoryId || '', 10);
+          if (Number.isNaN(si) || Number.isNaN(ci)) return;
+          const k = buildKey(si, ci);
+          if (t.checked) {
+            for (const existing of [...state.categoryNameSelectedLocations]) {
+              if (existing.startsWith(`${si}:`)) state.categoryNameSelectedLocations.delete(existing);
+            }
+            state.categoryNameSelectedLocations.add(k);
+          } else {
+            state.categoryNameSelectedLocations.delete(k);
+          }
+          clearResults();
+          renderReferenceCard();
+          return;
+        }
+        if (t.classList.contains('cc-missing-mode')) {
+          const si = Number.parseInt(t.dataset.serverIndex || '', 10);
+          if (Number.isNaN(si)) return;
+          const k = String(si);
+          const mode = t.value === 'manual-category' ? 'manual-category' : 'base-route';
+          state.categoryNameMissingModes[k] = mode;
+          if (mode === 'manual-category') {
+            const cid = getMissingManualId(si);
+            if (cid) state.categoryNameMissingManualCategories[k] = cid;
+          } else {
+            delete state.categoryNameMissingManualCategories[k];
+          }
+          clearResults();
+          renderReferenceCard();
+          return;
+        }
+        if (t.classList.contains('cc-missing-cat')) {
+          const si = Number.parseInt(t.dataset.serverIndex || '', 10);
+          if (Number.isNaN(si)) return;
+          state.categoryNameMissingManualCategories[String(si)] = t.value;
+          clearResults();
+          renderReferenceCard();
+          return;
+        }
+      });
+      refCard.addEventListener('input', (e) => {
+        const t = e.target;
+        if (t.id === 'cc-byname-search') {
+          const sStart = t.selectionStart;
+          const sEnd = t.selectionEnd;
+          state.categoryNameSearch = t.value;
+          state.categoryNameSelectedLocations.clear();
+          autoSelectUniqueMatches();
+          clearResults();
+          renderReferenceCard();
+          const restored = bynamePanel.querySelector('#cc-byname-search');
+          if (restored) { restored.focus(); try { restored.setSelectionRange(sStart, sEnd); } catch(e) {} }
+          return;
+        }
+        if (t.id === 'cc-byname-base-route') {
+          const sStart = t.selectionStart;
+          const sEnd = t.selectionEnd;
+          state.categoryNameBaseRoute = t.value;
+          clearResults();
+          renderReferenceCard();
+          const restored = bynamePanel.querySelector('#cc-byname-base-route');
+          if (restored) { restored.focus(); try { restored.setSelectionRange(sStart, sEnd); } catch(e) {} }
+          return;
+        }
+        if (t.classList.contains('cc-new-name')) {
+          state.newCategoryName = t.value;
+          clearResults();
+          const preview = refPanel.querySelector('#cc-path-preview');
+          if (preview) {
+            const path = getDestinationCategoryPath();
+            preview.textContent = path.length ? path.join(' / ') : 'Sin ruta seleccionada';
+          }
+        }
+      });
+      refCard.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-action="reload-ref"]');
+        if (!btn) return;
+        e.preventDefault();
+        const i = getReferenceServerIndex();
+        if (i === null) return;
+        state.categoryStatusByServer[i] = 'loading';
+        renderReferenceCard();
+        await loadCategories(i, { force: true });
+        renderReferenceCard();
+      });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearResults();
+        const err = validate();
+        if (err) { setMessage(err, 'error'); return; }
+        const cfg = getSubmitConfig();
+        const body = {
+          source_index: Number.parseInt(sourceServerEl.value, 10),
+          course_id: Number.parseInt(courseIdEl.value, 10),
+          destination_indexes: cfg.destination_indexes,
+          destination_categories: cfg.destination_categories,
+          destination_category_path: cfg.destination_category_path,
+          destination_category_paths: cfg.destination_category_paths,
+          destination_use_source_path: false,
+        };
+        setBusy(true);
+        setMessage('Copia en curso. Mantente en esta pagina hasta recibir el resumen.', 'info');
+        try {
+          const res = await fetch('/api/cc/copy-course', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            if (res.status === 401) { toaster.show('Sesion expirada.', 'error'); currentUser = null; showLoginView(); return; }
+            if (res.status === 403) { toaster.show(data.error || 'Sin permisos.', 'warning'); return; }
+            throw new Error(data.error || 'No fue posible copiar el curso.');
+          }
+          renderResults(data);
+          setMessage('Proceso finalizado. Revisa el resumen por plataforma.', 'success');
+        } catch (err) {
+          setMessage(err.message || 'No fue posible copiar el curso.', 'error');
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      // ---- Lazy entry point --------------------------------------------
+      window.__ccLoad = async function () {
+        if (state.loaded) return;
+        state.loaded = true;
+        setMode('reference-platform');
+        await loadServers();
+      };
+    })();
+
+    // ====== Platforms admin =========================================
+    (function () {
+      const state = { servers: [], editingIndex: null };
+      const form = document.getElementById('pf-form');
+      const formTitle = document.getElementById('pf-form-title');
+      const submitBtn = document.getElementById('pf-submit');
+      const resetBtn = document.getElementById('pf-reset-btn');
+      const listEl = document.getElementById('pf-list');
+      const statusEl = document.getElementById('pf-status');
+      const messageEl = document.getElementById('pf-message');
+      const errEl = document.getElementById('pf-form-error');
+      const sshPwdHint = document.getElementById('pf-ssh_password_hint');
+      const sshKeyHint = document.getElementById('pf-ssh_key_passphrase_hint');
+      const sudoPwdHint = document.getElementById('pf-sudo_password_hint');
+
+      function esc(s) {
+        return String(s == null ? '' : s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+      }
+      function val(id) { return document.getElementById('pf-' + id).value.trim(); }
+      function setVal(id, v) { document.getElementById('pf-' + id).value = v == null ? '' : v; }
+      function setMessage(text, tone) {
+        if (!text) { messageEl.classList.add('hidden'); return; }
+        messageEl.textContent = text;
+        messageEl.classList.remove('hidden', 'border-red-600/40', 'text-red-300', 'border-emerald-600/40', 'text-emerald-300', 'border-slate-700', 'text-slate-300');
+        if (tone === 'error') messageEl.classList.add('border-red-600/40', 'text-red-300');
+        else if (tone === 'success') messageEl.classList.add('border-emerald-600/40', 'text-emerald-300');
+        else messageEl.classList.add('border-slate-700', 'text-slate-300');
+      }
+      function setError(text) {
+        if (!text) { errEl.classList.add('hidden'); errEl.textContent = ''; return; }
+        errEl.textContent = text; errEl.classList.remove('hidden');
+      }
+
+      function collectPayload() {
+        return {
+          name: val('name'),
+          host: val('host'),
+          port: Number.parseInt(val('port') || '22', 10),
+          ssh_user: val('ssh_user'),
+          ssh_password: val('ssh_password'),
+          ssh_key_path: val('ssh_key_path'),
+          ssh_key_passphrase: val('ssh_key_passphrase'),
+          moodle_path: val('moodle_path'),
+          web_user: val('web_user'),
+          web_group: val('web_group'),
+          sudo_requires_password: document.getElementById('pf-sudo_requires_password').checked,
+          sudo_password: val('sudo_password'),
+        };
+      }
+      function validate(p) {
+        if (!p.name) return 'Ingresa el nombre visible.';
+        if (!p.host) return 'Ingresa el host SSH.';
+        if (!p.port || Number.isNaN(p.port) || p.port < 1 || p.port > 65535) return 'Puerto SSH invalido.';
+        if (!p.ssh_user) return 'Ingresa el usuario SSH.';
+        if (!p.moodle_path) return 'Ingresa la ruta Moodle.';
+        if (!p.web_user) return 'Ingresa el usuario web.';
+        if (state.editingIndex === null && !p.ssh_password && !p.ssh_key_path) return 'Indica contrasena SSH o ruta de llave SSH.';
+        return '';
+      }
+      function resetForm() {
+        state.editingIndex = null;
+        form.reset();
+        setVal('port', 22);
+        setVal('web_user', 'www-data');
+        setVal('web_group', 'www-data');
+        document.getElementById('pf-editing-index').value = '';
+        formTitle.textContent = 'Agregar plataforma';
+        submitBtn.textContent = 'Agregar plataforma';
+        sshPwdHint.textContent = 'Necesaria si no usas llave SSH.';
+        sshKeyHint.textContent = 'Opcional.';
+        sudoPwdHint.textContent = 'Solo si sudo requiere contrasena.';
+        setError('');
+        document.getElementById('pf-name').focus();
+      }
+      function startEdit(index) {
+        const s = state.servers.find(x => x.index === index);
+        if (!s) return;
+        state.editingIndex = index;
+        document.getElementById('pf-editing-index').value = String(index);
+        formTitle.textContent = `Editar plataforma: ${s.name}`;
+        submitBtn.textContent = 'Actualizar plataforma';
+        setVal('name', s.name);
+        setVal('host', s.host);
+        setVal('port', s.port);
+        setVal('ssh_user', s.ssh_user);
+        setVal('ssh_password', '');
+        setVal('ssh_key_path', s.ssh_key_path || '');
+        setVal('ssh_key_passphrase', '');
+        setVal('moodle_path', s.moodle_path);
+        setVal('web_user', s.web_user);
+        setVal('web_group', s.web_group);
+        document.getElementById('pf-sudo_requires_password').checked = !!s.sudo_requires_password;
+        setVal('sudo_password', '');
+        sshPwdHint.textContent = s.has_ssh_password ? 'Contrasena guardada. Dejala vacia para conservarla.' : 'Sin contrasena guardada.';
+        sshKeyHint.textContent = s.has_ssh_key_passphrase ? 'Passphrase guardada. Dejala vacia para conservarla.' : 'Opcional.';
+        sudoPwdHint.textContent = s.has_sudo_password ? 'Contrasena sudo guardada. Dejala vacia para conservarla.' : 'Solo si sudo requiere contrasena.';
+        setError('');
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      async function load() {
+        try {
+          const res = await fetch('/api/cc/admin/servers');
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'No se pudo cargar inventario.');
+          state.servers = data.servers || [];
+          statusEl.textContent = `${data.count} plataforma(s) en ${data.inventory_file}`;
+          render();
+        } catch (err) {
+          statusEl.textContent = 'Inventario no disponible';
+          listEl.innerHTML = `<div class="text-xs text-red-300 text-center py-6">${esc(err.message)}</div>`;
+        }
+      }
+      function render() {
+        if (!state.servers.length) {
+          listEl.innerHTML = '<div class="text-xs text-slate-500 text-center py-6">No hay plataformas.</div>';
+          return;
+        }
+        listEl.innerHTML = state.servers.map(s => `
+          <article class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-sm font-medium text-slate-100">${esc(s.name)}</div>
+                <div class="text-[11px] text-slate-400 mt-0.5">${esc(s.host)}:${s.port} · ${esc(s.ssh_user)}</div>
+              </div>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 whitespace-nowrap">${esc(s.auth_method)}</span>
+            </div>
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-400">
+              <span class="truncate">Moodle: <span class="text-slate-300">${esc(s.moodle_path)}</span></span>
+              <span>Web: <span class="text-slate-300">${esc(s.web_user)}:${esc(s.web_group)}</span></span>
+              <span>Sudo con contrasena: <span class="text-slate-300">${s.sudo_requires_password ? 'Si' : 'No'}</span></span>
+              <span>Contrasena SSH: <span class="text-slate-300">${s.has_ssh_password ? 'Si' : 'No'}</span></span>
+            </div>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button class="text-[11px] px-2.5 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800" data-action="edit" data-index="${s.index}">Editar</button>
+              <button class="text-[11px] px-2.5 py-1 rounded border border-red-700/60 text-red-300 hover:bg-red-900/30" data-action="delete" data-index="${s.index}">Eliminar</button>
+            </div>
+          </article>
+        `).join('');
+      }
+      listEl.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const idx = Number.parseInt(btn.dataset.index, 10);
+        if (btn.dataset.action === 'edit') return startEdit(idx);
+        if (btn.dataset.action === 'delete') {
+          const s = state.servers.find(x => x.index === idx);
+          if (!s) return;
+          if (!confirm(`Eliminar la plataforma "${s.name}"?`)) return;
+          try {
+            const res = await fetch(`/api/cc/admin/servers/${idx}`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'No fue posible eliminar.');
+            setMessage(data.message, 'success');
+            if (state.editingIndex === idx) resetForm();
+            await load();
+          } catch (err) {
+            setMessage(err.message || 'Error eliminando plataforma.', 'error');
+          }
+        }
+      });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = collectPayload();
+        const verr = validate(payload);
+        if (verr) { setError(verr); return; }
+        setError('');
+        submitBtn.disabled = true;
+        const wasEditing = state.editingIndex !== null;
+        submitBtn.textContent = wasEditing ? 'Actualizando...' : 'Guardando...';
+        try {
+          const url = wasEditing ? `/api/cc/admin/servers/${state.editingIndex}` : '/api/cc/admin/servers';
+          const method = wasEditing ? 'PUT' : 'POST';
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'No fue posible guardar.');
+          setMessage(data.message, 'success');
+          resetForm();
+          await load();
+        } catch (err) {
+          setError(err.message || 'No fue posible guardar.');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = state.editingIndex !== null ? 'Actualizar plataforma' : 'Agregar plataforma';
+        }
+      });
+      resetBtn.addEventListener('click', resetForm);
+
+      window.__pfLoad = load;
+    })();
 
     // ====== Moodle clone form (existing behaviour) ==================
     (function () {
