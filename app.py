@@ -708,7 +708,13 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         if db.get_user_by_username(username):
             raise ValueError("Ya existe un usuario con ese nombre.")
 
-        clean_perms = {k: bool(permissions.get(k, False)) for k in db.PERMISSION_FLAGS}
+        # Only superadmins may grant permissions. Non-superadmin user-managers
+        # create accounts with no permissions; a superadmin must later assign them.
+        if actor.get("is_superadmin"):
+            clean_perms = {k: bool(permissions.get(k, False)) for k in db.PERMISSION_FLAGS}
+        else:
+            clean_perms = {k: False for k in db.PERMISSION_FLAGS}
+
         new_user = db.create_user(
             username=username,
             password=password,
@@ -719,14 +725,25 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
 
     def _handle_update_user(self, user_id: int) -> None:
         actor = self._require_auth()
-        if not self._can_manage_users(actor):
-            raise AuthError(403, "No tienes permiso para editar usuarios.")
         target = db.get_user(user_id)
         if not target:
             self._send_json(404, {"error": "Usuario no encontrado."})
             return
-        payload = self._read_json_body()
 
+        payload = self._read_json_body()
+        is_self = target["id"] == actor["id"]
+        actor_is_super = bool(actor.get("is_superadmin"))
+        target_is_super = bool(target.get("is_superadmin"))
+        can_manage = self._can_manage_users(actor)
+
+        # Authorization gates.
+        if not is_self and not can_manage:
+            raise AuthError(403, "No tienes permiso para editar a otros usuarios.")
+        # Only superadmins can change a superadmin's password / data.
+        if target_is_super and not actor_is_super and not is_self:
+            raise AuthError(403, "Solo un superadministrador puede modificar a otro superadministrador.")
+
+        # Parse fields.
         password = payload.get("password")
         if password is not None:
             password = str(password)
@@ -736,22 +753,34 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 password = None
 
         is_superadmin = payload.get("is_superadmin")
-        if is_superadmin is not None:
-            is_superadmin = bool(is_superadmin)
-            if is_superadmin != target["is_superadmin"] and not actor.get("is_superadmin"):
-                raise AuthError(403, "Solo un superadministrador puede modificar el rol de superadministrador.")
-            # Prevent demoting the last superadmin
-            if target["is_superadmin"] and not is_superadmin and db.count_superadmins() <= 1:
-                raise ValueError("No puedes quitar el rol de superadministrador al último superadministrador.")
-
         permissions = payload.get("permissions")
-        if permissions is not None:
-            permissions = {k: bool(permissions.get(k, target["permissions"].get(k, False))) for k in db.PERMISSION_FLAGS}
 
-        # Block self-locking-out of user management for non-superadmin actors
-        if target["id"] == actor["id"] and not actor.get("is_superadmin"):
-            if permissions is not None and permissions.get("can_manage_users") is False:
-                raise ValueError("No puedes quitarte a ti mismo el permiso de gestión de usuarios.")
+        # Field-level restrictions for non-superadmin actors.
+        if not actor_is_super:
+            # Non-superadmin actors (whether user-manager or just self) can only
+            # change their own / others' password — never permissions or role.
+            if is_superadmin is not None and bool(is_superadmin) != target_is_super:
+                raise AuthError(403, "Solo un superadministrador puede modificar el rol de superadministrador.")
+            is_superadmin = None
+            if permissions is not None:
+                raise AuthError(403, "Solo un superadministrador puede modificar permisos.")
+            permissions = None
+        else:
+            # Superadmin actor: normalize fields, but protect the last superadmin.
+            if is_superadmin is not None:
+                is_superadmin = bool(is_superadmin)
+                if target_is_super and not is_superadmin and db.count_superadmins() <= 1:
+                    raise ValueError("No puedes quitar el rol de superadministrador al último superadministrador.")
+            if permissions is not None:
+                permissions = {
+                    k: bool(permissions.get(k, target["permissions"].get(k, False)))
+                    for k in db.PERMISSION_FLAGS
+                }
+
+        if password is None and is_superadmin is None and permissions is None:
+            # Nothing to do — return current state without error.
+            self._send_json(200, {"user": target})
+            return
 
         updated = db.update_user(
             user_id,

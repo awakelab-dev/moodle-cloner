@@ -94,6 +94,7 @@
           <span id="current-user-label" class="hidden md:inline text-xs text-slate-400"></span>
           <button id="platforms-btn" class="hidden px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Plataformas</button>
           <button id="users-btn" class="hidden px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Usuarios</button>
+          <button id="account-btn" class="px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Mi cuenta</button>
           <button id="logout-btn" class="px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Salir</button>
         </div>
       </div>
@@ -551,7 +552,7 @@
           <input type="password" name="password" autocomplete="new-password" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
           <p id="user-pw-hint" class="mt-1 text-xs text-slate-500">Minimo 8 caracteres.</p>
         </div>
-        <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-2">
+        <div id="user-perms-section" class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-2">
           <label class="flex items-center gap-2 text-xs text-slate-300">
             <input id="perm_super" type="checkbox" name="is_superadmin" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
             Superadministrador (acceso total)
@@ -572,6 +573,7 @@
             <input type="checkbox" name="can_manage_users" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
             Gestion de usuarios
           </label>
+          <p id="user-perms-readonly-note" class="hidden text-[11px] text-slate-400 italic pt-1">Solo un superadministrador puede modificar permisos.</p>
         </div>
         <div id="user-form-error" class="hidden text-xs text-red-300 border border-red-600/40 rounded-lg px-3 py-2"></div>
         <div class="flex items-center justify-end gap-2">
@@ -582,18 +584,74 @@
     </div>
   </div>
 
+  <!-- Self-account modal: change own password -->
+  <div id="account-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-slate-50">Mi cuenta</h2>
+        <button id="account-modal-close" class="text-slate-400 hover:text-slate-200">&times;</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">Sesion: <span id="account-username" class="font-mono text-slate-200"></span></p>
+      <form id="account-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Nueva contrasena</label>
+          <input type="password" name="password" autocomplete="new-password" required minlength="8" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          <p class="mt-1 text-xs text-slate-500">Minimo 8 caracteres.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Confirmar contrasena</label>
+          <input type="password" name="password_confirm" autocomplete="new-password" required minlength="8" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        </div>
+        <div id="account-form-error" class="hidden text-xs text-red-300 border border-red-600/40 rounded-lg px-3 py-2"></div>
+        <div class="flex items-center justify-end gap-2">
+          <button type="button" id="account-cancel" class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-800">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-primary-600 text-sm font-semibold text-white hover:bg-primary-700">Cambiar contrasena</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
+    // ====== Password show/hide toggle ===============================
+    // Decorates every <input type=password> with an eye button. Idempotent.
+    function decoratePasswordFields(root) {
+      const scope = root || document;
+      scope.querySelectorAll('input[type="password"]').forEach((input) => {
+        if (input.dataset.pwToggled === '1') return;
+        input.dataset.pwToggled = '1';
+        // Wrap input with a relative span so the button can sit absolutely on top.
+        const wrap = document.createElement('span');
+        wrap.className = 'relative block';
+        const parent = input.parentNode;
+        parent.insertBefore(wrap, input);
+        wrap.appendChild(input);
+        input.classList.add('pr-9');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.tabIndex = -1;
+        btn.setAttribute('aria-label', 'Mostrar contrasena');
+        btn.className = 'absolute inset-y-0 right-0 flex items-center px-2 text-slate-400 hover:text-slate-200 focus:outline-none';
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        btn.addEventListener('click', () => {
+          const showing = input.type === 'text';
+          input.type = showing ? 'password' : 'text';
+          btn.setAttribute('aria-label', showing ? 'Mostrar contrasena' : 'Ocultar contrasena');
+        });
+        wrap.appendChild(btn);
+      });
+    }
+
     // ====== Toaster =================================================
     const toaster = {
       show(message, tone) {
         const el = document.createElement('div');
         const palette = {
-          success: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
-          error: 'border-red-500/40 bg-red-500/10 text-red-200',
-          warning: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
-          info: 'border-slate-600 bg-slate-900/90 text-slate-200',
+          success: 'border-emerald-500 bg-emerald-950 text-emerald-100',
+          error: 'border-red-500 bg-red-950 text-red-100',
+          warning: 'border-amber-500 bg-amber-950 text-amber-100',
+          info: 'border-slate-600 bg-slate-900 text-slate-100',
         };
-        el.className = `pointer-events-auto rounded-lg border px-4 py-3 text-sm shadow-lg ${palette[tone] || palette.info}`;
+        el.className = `pointer-events-auto rounded-lg border px-4 py-3 text-sm shadow-xl ${palette[tone] || palette.info}`;
         el.textContent = message;
         document.getElementById('toaster').appendChild(el);
         setTimeout(() => {
@@ -756,6 +814,56 @@
       if (window.__pfLoad) window.__pfLoad();
     });
 
+    // ====== Self-account (change own password) ======================
+    (function () {
+      const modal = document.getElementById('account-modal');
+      const form = document.getElementById('account-form');
+      const errEl = document.getElementById('account-form-error');
+      const usernameEl = document.getElementById('account-username');
+
+      function open() {
+        if (!currentUser) return;
+        errEl.classList.add('hidden');
+        form.reset();
+        usernameEl.textContent = currentUser.username;
+        modal.classList.remove('hidden');
+        decoratePasswordFields(modal);
+      }
+      function close() { modal.classList.add('hidden'); }
+
+      document.getElementById('account-btn').addEventListener('click', open);
+      document.getElementById('account-modal-close').addEventListener('click', close);
+      document.getElementById('account-cancel').addEventListener('click', close);
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errEl.classList.add('hidden');
+        const password = form.elements['password'].value;
+        const confirm = form.elements['password_confirm'].value;
+        if (password.length < 8) {
+          errEl.textContent = 'La contrasena debe tener al menos 8 caracteres.';
+          errEl.classList.remove('hidden');
+          return;
+        }
+        if (password !== confirm) {
+          errEl.textContent = 'Las contrasenas no coinciden.';
+          errEl.classList.remove('hidden');
+          return;
+        }
+        try {
+          await api(`/api/users/${currentUser.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ password }),
+          });
+          toaster.show('Contrasena actualizada.', 'success');
+          close();
+        } catch (err) {
+          errEl.textContent = err.message || 'No fue posible cambiar la contrasena.';
+          errEl.classList.remove('hidden');
+        }
+      });
+    })();
+
     // ====== Nav tabs ================================================
     document.querySelectorAll('.nav-tab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -806,7 +914,16 @@
         tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-6 text-center text-slate-500">No hay usuarios.</td></tr>';
         return;
       }
-      tbody.innerHTML = users.map(u => `
+      const actorIsSuper = !!(currentUser && currentUser.is_superadmin);
+      tbody.innerHTML = users.map(u => {
+        const canActOnUser = actorIsSuper || !u.is_superadmin;
+        const editBtn = canActOnUser
+          ? `<button data-action="edit" data-id="${u.id}" class="px-2 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 mr-1">Editar</button>`
+          : '';
+        const delBtn = canActOnUser && (!u.is_superadmin || actorIsSuper)
+          ? `<button data-action="delete" data-id="${u.id}" class="px-2 py-1 rounded border border-red-700/60 text-red-300 hover:bg-red-900/30">Eliminar</button>`
+          : '';
+        return `
         <tr class="border-b border-slate-800/60 hover:bg-slate-800/30">
           <td class="px-3 py-2">
             <div class="font-medium text-slate-100">${escapeHtml(u.username)}</div>
@@ -817,12 +934,9 @@
           <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_course_cloner)}</td>
           <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_plugin_cloner)}</td>
           <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_manage_users)}</td>
-          <td class="px-3 py-2 text-right">
-            <button data-action="edit" data-id="${u.id}" class="px-2 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 mr-1">Editar</button>
-            <button data-action="delete" data-id="${u.id}" class="px-2 py-1 rounded border border-red-700/60 text-red-300 hover:bg-red-900/30">Eliminar</button>
-          </td>
-        </tr>
-      `).join('');
+          <td class="px-3 py-2 text-right">${editBtn}${delBtn || '<span class="text-[10px] text-slate-600">&mdash;</span>'}</td>
+        </tr>`;
+      }).join('');
 
       tbody.querySelectorAll('button[data-action]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -841,6 +955,16 @@
       const title = document.getElementById('user-modal-title');
       const pwHint = document.getElementById('user-pw-hint');
       const errEl = document.getElementById('user-form-error');
+      const permsSection = document.getElementById('user-perms-section');
+      const permsReadonlyNote = document.getElementById('user-perms-readonly-note');
+      const actorIsSuper = !!(currentUser && currentUser.is_superadmin);
+
+      // A non-superadmin trying to edit a superadmin is blocked outright.
+      if (user && user.is_superadmin && !actorIsSuper) {
+        toaster.show('Solo un superadministrador puede editar a otro superadministrador.', 'warning');
+        return;
+      }
+
       errEl.classList.add('hidden');
       form.reset();
       form.elements['id'].value = user ? user.id : '';
@@ -863,9 +987,26 @@
         form.elements['password'].required = true;
         pwHint.textContent = 'Minimo 8 caracteres.';
       }
-      // Only superadmins can grant the superadmin role
-      form.elements['is_superadmin'].disabled = !currentUser.is_superadmin;
+
+      // Permissions: only superadmins can read or write them in this modal.
+      // Non-superadmin user-managers see a "password only" form for edits, and
+      // for new users, the account is created with zero permissions (a
+      // superadmin must later grant them).
+      const permInputs = permsSection.querySelectorAll('input[type="checkbox"]');
+      if (actorIsSuper) {
+        permsSection.classList.remove('hidden');
+        permsReadonlyNote.classList.add('hidden');
+        permInputs.forEach(i => { i.disabled = false; });
+      } else {
+        permsSection.classList.add('hidden');
+        permsReadonlyNote.classList.remove('hidden');
+        permInputs.forEach(i => { i.disabled = true; i.checked = false; });
+      }
+      // Superadmin-role checkbox: only superadmins can ever toggle it.
+      form.elements['is_superadmin'].disabled = !actorIsSuper;
+
       modal.classList.remove('hidden');
+      decoratePasswordFields(modal);
     }
 
     function closeUserModal() {
@@ -881,23 +1022,23 @@
       errEl.classList.add('hidden');
       const form = e.currentTarget;
       const id = form.elements['id'].value;
-      const isSuper = form.elements['is_superadmin'].checked;
+      const actorIsSuper = !!(currentUser && currentUser.is_superadmin);
       const payload = {
         username: form.elements['username'].value.trim(),
         password: form.elements['password'].value,
-        is_superadmin: isSuper,
-        permissions: {
+      };
+      if (actorIsSuper) {
+        payload.is_superadmin = form.elements['is_superadmin'].checked;
+        payload.permissions = {
           can_access_moodle_cloner: form.elements['can_access_moodle_cloner'].checked,
           can_access_course_cloner: form.elements['can_access_course_cloner'].checked,
           can_access_plugin_cloner: form.elements['can_access_plugin_cloner'].checked,
           can_manage_users: form.elements['can_manage_users'].checked,
-        },
-      };
+        };
+      }
       try {
         if (id) {
-          // Don't send empty password
           if (!payload.password) delete payload.password;
-          // Don't send username on edit
           delete payload.username;
           await api(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
           toaster.show('Usuario actualizado.', 'success');
@@ -2343,6 +2484,8 @@
       } catch (err) {
         showLoginView();
         toaster.show(`Error inicial: ${err.message}`, 'error');
+      } finally {
+        decoratePasswordFields();
       }
     })();
   </script>
