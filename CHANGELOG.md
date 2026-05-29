@@ -5,6 +5,13 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.5.1 - 2026-05-29
+
+Cosmetic tweaks.
+
+- Page title changed from "Awake Lab - Plataforma de Clonado" to "Clonador Awakelab".
+- Added an inline SVG favicon (indigo rounded square with a white "A", matching the header badge). Encoded as a `data:image/svg+xml` URI so it ships in `index.html` without needing a static-file route.
+
 ## v0.5.0 - 2026-05-29
 
 User-management UI and authorization refinements.
