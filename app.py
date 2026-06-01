@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
+LOGO_FILE = ROOT / "RESIZED_logo_fondooscuro_horizontal.png"
 SCRIPT_FILE = ROOT / "moodle-clone-web.sh"
 ENV_FILE = ROOT / ".env"
 VERSION_FILE = ROOT / "VERSION"
@@ -576,6 +577,10 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         # Public: index, health, version
         if path in ("/", "/index.html"):
             self._send_file(INDEX_FILE, "text/html; charset=utf-8", send_body=send_body)
+            return
+
+        if path == "/assets/logo.png":
+            self._send_file(LOGO_FILE, "image/png", send_body=send_body)
             return
 
         if path == "/api/health":
