@@ -5,6 +5,12 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.6.1 - 2026-06-01
+
+Cosmetic: header alignment.
+
+- Vertically centered the header logo, the "Plataforma de clonado" label, and the version badge by flattening the leftover nested wrapper into a single `flex items-center` row. No behavior change.
+
 ## v0.6.0 - 2026-06-01
 
 Branding: header logo.
