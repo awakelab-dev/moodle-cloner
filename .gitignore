@@ -3,6 +3,7 @@
 # Local infrastructure config (contains SSH/sudo passwords in plaintext).
 # Use inventario.example.json as the template for new environments.
 inventario.json
+logs
 
 # Python cache/artifacts
 __pycache__/
@@ -10,3 +11,4 @@ __pycache__/
 
 # macOS
 .DS_Store
+package-lock.json
