@@ -81,6 +81,8 @@ def _public_server(server: dict[str, Any], index: int) -> dict[str, Any]:
         "port": int(server.get("port", 22)),
         "ssh_user": server["ssh_user"],
         "moodle_path": server["moodle_path"],
+        "moodledata_path": server.get("moodledata_path") or "",
+        "vhost_path": server.get("vhost_path") or "",
         "web_user": server["web_user"],
         "web_group": server.get("web_group") or server["web_user"],
         "sudo_requires_password": bool(server.get("sudo_requires_password", False)),
@@ -134,6 +136,8 @@ def _server_from_payload(
     host = read_text("host", required=True)
     ssh_user = read_text("ssh_user", required=True)
     moodle_path = read_text("moodle_path", required=True).rstrip("/")
+    moodledata_path = read_text("moodledata_path").rstrip("/")
+    vhost_path = read_text("vhost_path")
     web_user = read_text("web_user", required=True)
     web_group = read_text("web_group") or web_user
     ssh_key_path = read_text("ssh_key_path")
@@ -154,6 +158,8 @@ def _server_from_payload(
         "ssh_key_path": ssh_key_path,
         "ssh_key_passphrase": _secret_value(payload, existing, "ssh_key_passphrase"),
         "moodle_path": moodle_path,
+        "moodledata_path": moodledata_path,
+        "vhost_path": vhost_path,
         "web_user": web_user,
         "web_group": web_group,
         "sudo_requires_password": _as_bool(payload.get("sudo_requires_password", False)),

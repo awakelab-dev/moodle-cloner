@@ -84,6 +84,8 @@ def load_inventory(path: Path) -> list[dict[str, Any]]:
         server.setdefault("port", 22)
         server.setdefault("web_group", server["web_user"])
         server.setdefault("sudo_requires_password", False)
+        server.setdefault("moodledata_path", "")
+        server.setdefault("vhost_path", "")
 
     return servers
 

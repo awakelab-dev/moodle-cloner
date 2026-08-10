@@ -56,10 +56,13 @@ load_dotenv(ENV_FILE)
 
 import db  # noqa: E402 — must load after .env
 import course_routes  # noqa: E402 — depends on paramiko, must load after .env
+import plugin_routes  # noqa: E402
+import alexia_routes  # noqa: E402
 
 HOST = os.getenv("APP_HOST", "0.0.0.0")
 PORT = int(os.getenv("APP_PORT", "8787"))
 MAX_LOG_CHARS = 250_000
+MAX_PLUGIN_ZIP_SIZE = 100 * 1024 * 1024  # 100 MB
 DEFAULT_REMOTE_HOST = "51.44.30.62"
 REMOTE_SSH_KEY = os.path.expanduser(os.getenv("REMOTE_SSH_KEY", str(Path.home() / ".ssh" / "id_ed25519")))
 DEFAULT_SOURCE_SSH_USER = "ubuntu"
@@ -84,28 +87,6 @@ def render_index_html() -> bytes:
     html = html.replace("{{APP_VERSION}}", esc_html(APP_VERSION))
     return html.encode("utf-8")
 
-SOURCE_INSTANCES: Dict[str, Dict[str, str]] = {
-    "base_limpia": {
-        "src_dir": "/var/www/moodle_dev",
-        "src_data": "/var/moodledata_dev",
-        "src_vhost": "/etc/nginx/sites-available/moodle-dev.awakelab.world",
-    },
-    "digit_institute": {
-        "src_dir": "/var/www/moodle_digitinstitute",
-        "src_data": "/var/moodledata_digitinstitute",
-        "src_vhost": "/etc/nginx/sites-available/moodle_digitinstitute",
-    },
-    "hoppers": {
-        "src_dir": "/var/www/moodle_hoppers",
-        "src_data": "/var/moodledata_hoppers",
-        "src_vhost": "/etc/nginx/sites-available/campus.hoppers.academy",
-    },
-    "refactika": {
-        "src_dir": "/var/www/moodle_refactika",
-        "src_data": "/var/moodledata_refactika",
-        "src_vhost": "/etc/nginx/sites-available/campus.refactika.com",
-    },
-}
 
 jobs: Dict[str, Dict[str, Any]] = {}
 jobs_lock = threading.Lock()
@@ -136,7 +117,6 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Payload inválido.")
 
     source_mode = str(payload.get("source_mode", "local")).strip().lower()
-    source_instance = str(payload.get("source_instance", "")).strip()
     source_host = str(payload.get("source_host", "")).strip()
     source_dir = str(payload.get("source_dir", "")).strip()
     source_data = str(payload.get("source_data", "")).strip()
@@ -160,8 +140,26 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Modo de origen inválido. Usa 'local' o 'remote'.")
 
     if source_mode == "local":
-        if source_instance not in SOURCE_INSTANCES:
-            raise ValueError("Instancia origen no válida.")
+        try:
+            source_index = int(payload.get("source_index", -1))
+        except (TypeError, ValueError):
+            raise ValueError("source_index inválido para modo local.")
+        try:
+            inv_servers = course_routes._load_servers()
+        except Exception as exc:
+            raise ValueError(f"No se pudo cargar el inventario de plataformas: {exc}")
+        if source_index < 0 or source_index >= len(inv_servers):
+            raise ValueError("Plataforma origen no encontrada en el inventario.")
+        src_entry = inv_servers[source_index]
+        source_dir = str(src_entry.get("moodle_path") or "").rstrip("/")
+        source_data = str(src_entry.get("moodledata_path") or "")
+        source_vhost = str(src_entry.get("vhost_path") or "")
+        if not source_dir:
+            raise ValueError("La plataforma origen no tiene ruta Moodle configurada (moodle_path).")
+        if not source_data:
+            raise ValueError("La plataforma origen no tiene ruta moodledata configurada (moodledata_path).")
+        if not source_vhost:
+            raise ValueError("La plataforma origen no tiene ruta vhost configurada (vhost_path).")
     else:
         if not re.fullmatch(r"[A-Za-z0-9.-]+", source_host):
             raise ValueError("Host origen inválido.")
@@ -222,7 +220,6 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Nombre de BD destino inválido (solo letras, números y _).")
 
     validated = {
-        "source_instance": source_instance,
         "source_mode": source_mode,
         "source_host": source_host,
         "source_dir": source_dir,
@@ -280,15 +277,9 @@ def update_job(job_id: str, **changes: Any) -> None:
 
 
 def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
-    if payload["source_mode"] == "local":
-        source_cfg = SOURCE_INSTANCES[payload["source_instance"]]
-        src_dir = source_cfg["src_dir"]
-        src_data = source_cfg["src_data"]
-        src_vhost = source_cfg["src_vhost"]
-    else:
-        src_dir = payload["source_dir"]
-        src_data = payload["source_data"]
-        src_vhost = payload["source_vhost"]
+    src_dir = payload["source_dir"]
+    src_data = payload["source_data"]
+    src_vhost = payload["source_vhost"]
 
     env = os.environ.copy()
     env.update(
@@ -378,6 +369,71 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
     except Exception as exc:
         update_job(job_id, status="failed", exit_code=1)
         append_job_output(job_id, f"[{now_iso()}] Unexpected error: {exc}\n")
+
+
+def run_plugin_job(
+    job_id: str,
+    temp_dir: str,
+    zip_path_str: str,
+    plugin_type: str,
+    plugin_folder_name: str,
+    selected_servers: list,
+) -> None:
+    import shutil as _shutil
+    zip_path = Path(zip_path_str)
+    try:
+        update_job(job_id, status="running")
+        total = len(selected_servers)
+        append_job_output(
+            job_id,
+            f"[{now_iso()}] Iniciando instalacion de plugin...\n"
+            f"  Plugin: {plugin_folder_name} (ZIP: {zip_path.name})\n"
+            f"  Tipo: {plugin_type}\n"
+            f"  Plataformas: {total}\n\n",
+        )
+
+        effective_zip = zip_path
+        if plugin_routes.zip_has_backslash_paths(zip_path):
+            append_job_output(job_id, f"[{now_iso()}] Normalizando rutas del ZIP para Linux...\n")
+            normalized = zip_path.parent / f"normalized_{zip_path.name}"
+            plugin_routes.create_normalized_zip_for_linux(zip_path, normalized)
+            effective_zip = normalized
+            plugin_folder_name = plugin_routes.detect_plugin_folder_name(effective_zip)
+
+        all_results = []
+        for i, server in enumerate(selected_servers, 1):
+            append_job_output(job_id, f"[{now_iso()}] --- {server['name']} ({i}/{total}) ---\n")
+            result = plugin_routes.install_plugin_on_server(
+                server, effective_zip, plugin_type, plugin_folder_name,
+                on_output=lambda text, jid=job_id: append_job_output(jid, text),
+            )
+            status_icon = "OK" if result.success else "ERROR"
+            append_job_output(
+                job_id,
+                f"  {result.server_name}: {status_icon}"
+                + (f" - {result.error_detail.split(chr(10))[0]}" if result.error_detail else "")
+                + "\n\n",
+            )
+            all_results.append(plugin_routes.serialize_result(result))
+
+        successes = sum(1 for r in all_results if r["success"])
+        failures = total - successes
+        final_status = "success" if failures == 0 else "failed"
+        update_job(
+            job_id, status=final_status, exit_code=0 if failures == 0 else 1,
+            results=all_results,
+        )
+        append_job_output(
+            job_id,
+            f"[{now_iso()}] Finalizado: {successes}/{total} exitosos"
+            + (f", {failures} fallidos" if failures else "")
+            + ".\n",
+        )
+    except Exception as exc:
+        update_job(job_id, status="failed", exit_code=1)
+        append_job_output(job_id, f"[{now_iso()}] Error inesperado: {exc}\n")
+    finally:
+        _shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # --- Auth helpers --------------------------------------------------------
@@ -511,10 +567,26 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 return self._handle_cc_create_category(int(m.group(1)))
             if parsed.path == "/api/cc/copy-course":
                 return self._handle_cc_copy_course()
+            if parsed.path == "/api/plugin/install":
+                return self._handle_plugin_install()
+            if parsed.path == "/api/alexia/config":
+                return self._handle_alexia_save_config()
+            if parsed.path == "/api/alexia/test-connection":
+                return self._handle_alexia_test_connection()
+            if parsed.path == "/api/alexia/search-courses":
+                return self._handle_alexia_search_courses()
+            if parsed.path == "/api/alexia/export":
+                return self._handle_alexia_export()
+            if parsed.path == "/api/alexia/upload-excel":
+                return self._handle_alexia_upload_excel()
+            if parsed.path == "/api/alexia/export-batch":
+                return self._handle_alexia_export_batch()
             self._send_json(404, {"error": "Not found"})
         except AuthError as e:
             self._send_json(e.status, {"error": e.message})
         except course_routes.CourseRouteError as e:
+            self._send_json(e.status, {"error": e.message})
+        except alexia_routes.AlexiaRouteError as e:
             self._send_json(e.status, {"error": e.message})
         except ValueError as e:
             self._send_json(400, {"error": str(e)})
@@ -610,22 +682,31 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
 
         # Protected: jobs
         if path.startswith("/api/jobs/"):
-            self._require_permission("can_access_moodle_cloner")
             job_id = path.split("/")[-1]
             with jobs_lock:
                 job = jobs.get(job_id)
-                if not job:
-                    self._send_json(404, {"error": "Job no encontrado."}, send_body=send_body)
-                    return
+            if not job:
+                self._require_auth()
+                self._send_json(404, {"error": "Job no encontrado."}, send_body=send_body)
+                return
+            jtype = job.get("job_type", "clone")
+            if jtype == "plugin":
+                self._require_permission("can_access_plugin_cloner")
+            else:
+                self._require_permission("can_access_moodle_cloner")
+            with jobs_lock:
                 result = {
                     "job_id": job["id"],
+                    "job_type": job.get("job_type", "clone"),
                     "status": job["status"],
                     "exit_code": job.get("exit_code"),
                     "created_at": job["created_at"],
                     "updated_at": job["updated_at"],
-                    "request": job["request_preview"],
+                    "request": job.get("request_preview", {}),
                     "output": job.get("output", ""),
                     "log_path": job.get("log_path", ""),
+                    "results": job.get("results"),
+                    "plugin_info": job.get("plugin_info"),
                 }
             self._send_json(200, result, send_body=send_body)
             return
@@ -646,6 +727,46 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 self._send_json(200, course_routes.list_categories(int(m.group(1))), send_body=send_body)
             except course_routes.CourseRouteError as e:
                 self._send_json(e.status, {"error": e.message}, send_body=send_body)
+            return
+
+        # Protected: plugin-cloner
+        if path == "/api/plugin/types":
+            self._require_permission("can_access_plugin_cloner")
+            self._send_json(200, {"types": plugin_routes.list_plugin_types()}, send_body=send_body)
+            return
+
+        if path == "/api/plugin/servers":
+            self._require_permission("can_access_plugin_cloner")
+            try:
+                self._send_json(200, course_routes.list_servers(), send_body=send_body)
+            except course_routes.CourseRouteError as e:
+                self._send_json(e.status, {"error": e.message}, send_body=send_body)
+            return
+
+        # Protected: alexia cloner
+        if path == "/api/alexia/config":
+            self._require_permission("can_access_alexia_cloner")
+            self._send_json(200, alexia_routes.get_config(), send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/alexia/jobs/([a-f0-9]+)", path)
+        if m:
+            self._require_permission("can_access_alexia_cloner")
+            result = alexia_routes.get_job(m.group(1))
+            if not result:
+                self._send_json(404, {"error": "Job no encontrado."}, send_body=send_body)
+            else:
+                self._send_json(200, result, send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/alexia/jobs/batch/([a-f0-9]+)", path)
+        if m:
+            self._require_permission("can_access_alexia_cloner")
+            result = alexia_routes.get_batch_job(m.group(1))
+            if not result:
+                self._send_json(404, {"error": "Batch job no encontrado."}, send_body=send_body)
+            else:
+                self._send_json(200, result, send_body=send_body)
             return
 
         # Protected: admin-shaped platform listing (superadmin only)
@@ -852,6 +973,188 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         result = course_routes.copy_course(payload)
         self._send_json(200, result)
 
+    # --- Plugin-install endpoint -----------------------------------------
+
+    def _handle_plugin_install(self) -> None:
+        import tempfile as _tempfile
+        self._require_permission("can_access_plugin_cloner")
+
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            self._send_json(400, {"error": "Se espera multipart/form-data."})
+            return
+
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0:
+            self._send_json(400, {"error": "Body vacio."})
+            return
+        if content_length > MAX_PLUGIN_ZIP_SIZE:
+            self._send_json(413, {"error": "El archivo excede el limite de 100 MB."})
+            return
+
+        raw_body = self.rfile.read(content_length)
+        fields, files = plugin_routes.parse_multipart_form_data(content_type, raw_body)
+
+        if "plugin_zip" not in files:
+            self._send_json(400, {"error": "Falta el archivo plugin_zip."})
+            return
+        filename, zip_data = files["plugin_zip"]
+        if not filename.lower().endswith(".zip"):
+            self._send_json(400, {"error": "El archivo debe ser un .zip."})
+            return
+
+        plugin_type_path = fields.get("plugin_type", "").strip()
+        try:
+            server_indexes = json.loads(fields.get("server_indexes", "[]"))
+            if not isinstance(server_indexes, list):
+                raise ValueError
+            server_indexes = [int(i) for i in server_indexes]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            self._send_json(400, {"error": "server_indexes invalido."})
+            return
+
+        try:
+            _, selected_servers = plugin_routes.validate_install_request(plugin_type_path, server_indexes)
+        except course_routes.CourseRouteError as e:
+            self._send_json(e.status, {"error": e.message})
+            return
+
+        temp_dir = _tempfile.mkdtemp(prefix="moodle_plugin_upload_")
+        zip_path = Path(temp_dir) / filename
+        zip_path.write_bytes(zip_data)
+
+        try:
+            plugin_folder_name = plugin_routes.detect_plugin_folder_name(zip_path)
+        except ValueError as e:
+            import shutil as _shutil
+            _shutil.rmtree(temp_dir, ignore_errors=True)
+            self._send_json(400, {"error": str(e)})
+            return
+
+        with jobs_lock:
+            running_plugin = next(
+                (jid for jid, j in jobs.items()
+                 if j.get("status") in ("queued", "running")
+                 and j.get("job_type") == "plugin"),
+                None,
+            )
+        if running_plugin:
+            import shutil as _shutil
+            _shutil.rmtree(temp_dir, ignore_errors=True)
+            self._send_json(409, {
+                "error": "Ya hay una instalacion de plugin en ejecucion.",
+                "running_job_id": running_plugin,
+            })
+            return
+
+        job_id = str(uuid.uuid4())
+        now = now_iso()
+        server_names = [s["name"] for s in selected_servers]
+        with jobs_lock:
+            jobs[job_id] = {
+                "id": job_id,
+                "job_type": "plugin",
+                "status": "queued",
+                "exit_code": None,
+                "output": "",
+                "created_at": now,
+                "updated_at": now,
+                "request_preview": {},
+                "plugin_info": {
+                    "filename": filename,
+                    "plugin_folder": plugin_folder_name,
+                    "plugin_type": plugin_type_path,
+                    "servers": server_names,
+                },
+                "results": None,
+            }
+
+        worker = threading.Thread(
+            target=run_plugin_job,
+            args=(job_id, temp_dir, str(zip_path), plugin_type_path,
+                  plugin_folder_name, selected_servers),
+            daemon=True,
+        )
+        worker.start()
+        self._send_json(202, {"job_id": job_id, "status": "queued"})
+
+    # --- Alexia endpoints -----------------------------------------------
+
+    def _handle_alexia_save_config(self) -> None:
+        self._require_permission("can_access_alexia_cloner")
+        payload = self._read_json_body()
+        self._send_json(200, alexia_routes.save_config(payload))
+
+    def _handle_alexia_test_connection(self) -> None:
+        self._require_permission("can_access_alexia_cloner")
+        payload = self._read_json_body()
+        server_name = str(payload.get("server", "catalejo")).strip()
+        try:
+            result = alexia_routes.test_connection(server_name)
+            self._send_json(200, result)
+        except Exception as e:
+            self._send_json(200, {"success": False, "error": str(e)})
+
+    def _handle_alexia_search_courses(self) -> None:
+        self._require_permission("can_access_alexia_cloner")
+        payload = self._read_json_body()
+        query = str(payload.get("query", "")).strip()
+        try:
+            result = alexia_routes.search_courses(query)
+            self._send_json(200, result)
+        except Exception as e:
+            self._send_json(200, {"success": False, "error": str(e)})
+
+    def _handle_alexia_export(self) -> None:
+        self._require_permission("can_access_alexia_cloner")
+        payload = self._read_json_body()
+        course_id = payload.get("course_id")
+        form_data = payload.get("form_data", {})
+        if not course_id:
+            self._send_json(400, {"error": "course_id es requerido"})
+            return
+        result = alexia_routes.start_export(int(course_id), form_data)
+        self._send_json(200, result)
+
+    def _handle_alexia_upload_excel(self) -> None:
+        self._require_permission("can_access_alexia_cloner")
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            self._send_json(400, {"error": "Se espera multipart/form-data."})
+            return
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0:
+            self._send_json(400, {"error": "Body vacio."})
+            return
+        raw_body = self.rfile.read(content_length)
+        boundary = content_type.split("boundary=")[-1].strip()
+        boundary_bytes = f"--{boundary}".encode()
+        parts = raw_body.split(boundary_bytes)
+        file_data = None
+        for part in parts:
+            if b"filename=" in part and b".xlsx" in part.lower():
+                header_end = part.find(b"\r\n\r\n")
+                if header_end != -1:
+                    file_data = part[header_end + 4:]
+                    if file_data.endswith(b"\r\n"):
+                        file_data = file_data[:-2]
+                break
+        if not file_data:
+            self._send_json(400, {"error": "No se encontro archivo .xlsx en la solicitud."})
+            return
+        try:
+            result = alexia_routes.upload_excel(file_data)
+            self._send_json(200, result)
+        except ValueError as e:
+            self._send_json(400, {"error": str(e)})
+
+    def _handle_alexia_export_batch(self) -> None:
+        self._require_permission("can_access_alexia_cloner")
+        payload = self._read_json_body()
+        rows = payload.get("rows", [])
+        result = alexia_routes.start_batch(rows)
+        self._send_json(200, result)
+
     # --- Clone endpoint --------------------------------------------------
 
     def _handle_clone(self) -> None:
@@ -865,7 +1168,9 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
 
             with jobs_lock:
                 running_job_id = next(
-                    (jid for jid, j in jobs.items() if j.get("status") in ("queued", "running")),
+                    (jid for jid, j in jobs.items()
+                     if j.get("status") in ("queued", "running")
+                     and j.get("job_type", "clone") == "clone"),
                     None,
                 )
 
@@ -892,6 +1197,7 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             with jobs_lock:
                 jobs[job_id] = {
                     "id": job_id,
+                    "job_type": "clone",
                     "status": "queued",
                     "exit_code": None,
                     "output": "",

@@ -3,6 +3,10 @@
 # Local infrastructure config (contains SSH/sudo passwords in plaintext).
 # Use inventario.example.json as the template for new environments.
 inventario.json
+
+# Alexia cloner config (contains SSH/sudo passwords in plaintext).
+alexia_config.json
+temp_alexia/
 logs
 
 # Python cache/artifacts

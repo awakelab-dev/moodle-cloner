@@ -1,0 +1,55 @@
+COMO INICIAR ESTA APP (moodle-cloner) - local Windows
+======================================================
+
+1) Arrancar MySQL local (necesario para login/usuarios de la app)
+-------------------------------------------------------------
+MySQL 8.4 ya está instalado pero NO corre como servicio de Windows.
+Cada vez que reinicies el equipo o cierres la terminal donde corría,
+hay que volver a lanzarlo a mano:
+
+  En PowerShell (nota el "&" al inicio, obligatorio cuando la ruta va entre comillas):
+  & "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --defaults-file="C:\ProgramData\MySQL\MySQL84\my.ini" --console
+
+  En cmd.exe (sin "&"):
+  "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --defaults-file="C:\ProgramData\MySQL\MySQL84\my.ini" --console
+
+Déjalo corriendo en esa ventana/proceso (no la cierres). Data dir:
+C:\ProgramData\MySQL\MySQL84\Data (puerto 3306).
+
+Credenciales de la app (definidas en moodle-cloner\.env):
+  TARGET_DB_HOST=127.0.0.1
+  TARGET_DB_ADMIN_USER=admin_moodle
+  TARGET_DB_ADMIN_PASS=ClonadorAWK2026!
+
+Usuario inicial de la app (login web):
+  usuario: admin
+  password: awk2026
+
+2) Arrancar la app (servidor Python)
+-------------------------------------------------------------
+Desde la carpeta del proyecto:
+
+  cd "moodle-cloner"
+  ..\.venv\Scripts\python.exe app.py
+
+Usa el Python del entorno virtual en .venv (ya tiene pymysql y paramiko
+instalados). El puerto por defecto es 8787 (configurable con APP_PORT
+en .env).
+
+3) Abrir la app
+-------------------------------------------------------------
+Navegador: http://127.0.0.1:8787
+
+4) Notas
+-------------------------------------------------------------
+- Si al abrir la app da error de conexión a MySQL, es porque el paso 1
+  no se hizo o el proceso de mysqld se cerró. Vuelve a lanzarlo.
+- Para dejar MySQL arrancando solo con Windows (como servicio), hace
+  falta una terminal como Administrador y ejecutar (PowerShell, con "&"):
+    & "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --install MySQL84 --defaults-file="C:\ProgramData\MySQL\MySQL84\my.ini"
+    Start-Service MySQL84
+  (esto no se hizo porque no había permisos de admin en la sesión actual).
+
+
+
+& "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --defaults-file="C:\ProgramData\MySQL\MySQL84\my.ini" --console

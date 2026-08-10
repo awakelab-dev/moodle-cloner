@@ -26,12 +26,13 @@ The order to land a change:
 - Pure stdlib `http.server` (no Flask/FastAPI). All routes dispatch through `MoodleCloneHandler` in `app.py`. New routes go in `_dispatch` (GETs/HEADs) or in the relevant `do_POST` / `do_PUT` / `do_PATCH` / `do_DELETE`. Auth helpers: `_require_auth`, `_require_permission(flag)`, `_require_superadmin`.
 - Database is Aurora MySQL via PyMySQL. The app reuses `TARGET_DB_HOST` (the Moodle clone target cluster) and stores its own metadata in a separate database, default `moodle_cloner_app`. `db.py` bootstraps the schema on every boot — schema changes go in `SCHEMA` there.
 - Frontend is a single `index.html` served as-is (with `{{TARGET_DB_HOST}}` and `{{APP_VERSION}}` string-replaced). Tailwind CDN, no build step. All JS is inline; new features get an IIFE with its own `window.__xLoad` lazy entry point.
-- SSH out to Moodle targets is via paramiko, called from `course_copier.py`. `inventario.json` holds plaintext SSH/sudo passwords and is gitignored — `inventario.example.json` is the committed template.
+- SSH out to Moodle targets is via paramiko, called from `course_copier.py` and `plugin_routes.py`. `inventario.json` holds plaintext SSH/sudo passwords and is gitignored — `inventario.example.json` is the committed template.
 
 ## What's gitignored on purpose
 
 - `.env` — has Aurora admin credentials and the initial-admin password.
 - `inventario.json` — has plaintext SSH and sudo passwords for the Moodle targets.
+- `alexia_config.json` — has SSH/sudo passwords for the Catalejo and Alexia servers.
 
 Don't ask to commit either. If the server is missing them after `git pull`, the user uploads them manually (SCP / heredoc paste). This is the standard pattern, same as how `.env` is handled.
 
@@ -50,6 +51,8 @@ If a change adds a Python dependency, the user installs it via `sudo apt-get ins
 
 - `is_superadmin`: implicit access to everything, including the Plataformas admin and user-management. Last superadmin cannot be demoted or deleted.
 - `can_manage_users`: list/create users, change their passwords. Cannot grant permissions or edit superadmins (only superadmins can).
-- `can_access_moodle_cloner` / `can_access_course_cloner` / `can_access_plugin_cloner`: tab access. Tabs are visible to everyone; clicking one you don't have permission for shows a toaster.
+- `can_access_moodle_cloner` / `can_access_course_cloner` / `can_access_plugin_cloner` / `can_access_alexia_cloner`: tab access. Tabs are visible to everyone; clicking one you don't have permission for shows a toaster.
 
-The plugin cloner section is currently a placeholder — Phase 4 (port of `moodle_plugin_installer.py`) is not yet done.
+The plugin cloner section (`plugin_routes.py`, IIFE `__pluginLoad`) ports `moodle_plugin_installer.py` — file upload, type auto-detection, multi-server SSH install with job polling.
+
+The Alexia cloner section (`alexia_routes.py`, IIFE `__alexiaLoad`) ports `alexia-exportar-curso` — Catalejo→Alexia course migration via SSH/SFTP, with batch Excel import and individual export. Config in `alexia_config.json` (gitignored, same pattern as `inventario.json`).

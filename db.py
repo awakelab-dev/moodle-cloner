@@ -17,6 +17,7 @@ PERMISSION_FLAGS = (
     "can_access_moodle_cloner",
     "can_access_course_cloner",
     "can_access_plugin_cloner",
+    "can_access_alexia_cloner",
     "can_manage_users",
 )
 
@@ -118,6 +119,7 @@ SCHEMA = [
         can_access_moodle_cloner TINYINT(1) NOT NULL DEFAULT 0,
         can_access_course_cloner TINYINT(1) NOT NULL DEFAULT 0,
         can_access_plugin_cloner TINYINT(1) NOT NULL DEFAULT 0,
+        can_access_alexia_cloner TINYINT(1) NOT NULL DEFAULT 0,
         can_manage_users TINYINT(1) NOT NULL DEFAULT 0,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -219,7 +221,7 @@ def list_users() -> List[Dict[str, Any]]:
     with conn() as c, c.cursor() as cur:
         cur.execute(
             "SELECT id, username, is_superadmin, "
-            "can_access_moodle_cloner, can_access_course_cloner, can_access_plugin_cloner, can_manage_users, "
+            "can_access_moodle_cloner, can_access_course_cloner, can_access_plugin_cloner, can_access_alexia_cloner, can_manage_users, "
             "created_at, updated_at FROM users ORDER BY id ASC"
         )
         return [_row_to_user(r) for r in cur.fetchall()]
@@ -229,7 +231,7 @@ def get_user(user_id: int) -> Optional[Dict[str, Any]]:
     with conn() as c, c.cursor() as cur:
         cur.execute(
             "SELECT id, username, is_superadmin, "
-            "can_access_moodle_cloner, can_access_course_cloner, can_access_plugin_cloner, can_manage_users, "
+            "can_access_moodle_cloner, can_access_course_cloner, can_access_plugin_cloner, can_access_alexia_cloner, can_manage_users, "
             "created_at, updated_at FROM users WHERE id=%s",
             (user_id,),
         )
@@ -240,7 +242,7 @@ def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     with conn() as c, c.cursor() as cur:
         cur.execute(
             "SELECT id, username, password_hash, is_superadmin, "
-            "can_access_moodle_cloner, can_access_course_cloner, can_access_plugin_cloner, can_manage_users, "
+            "can_access_moodle_cloner, can_access_course_cloner, can_access_plugin_cloner, can_access_alexia_cloner, can_manage_users, "
             "created_at, updated_at FROM users WHERE username=%s",
             (username,),
         )
@@ -272,8 +274,8 @@ def create_user(
     with conn() as c, c.cursor() as cur:
         cur.execute(
             "INSERT INTO users (username, password_hash, is_superadmin, "
-            "can_access_moodle_cloner, can_access_course_cloner, can_access_plugin_cloner, can_manage_users) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            "can_access_moodle_cloner, can_access_course_cloner, can_access_plugin_cloner, can_access_alexia_cloner, can_manage_users) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 username,
                 password_hash,
@@ -281,6 +283,7 @@ def create_user(
                 1 if perms["can_access_moodle_cloner"] else 0,
                 1 if perms["can_access_course_cloner"] else 0,
                 1 if perms["can_access_plugin_cloner"] else 0,
+                1 if perms["can_access_alexia_cloner"] else 0,
                 1 if perms["can_manage_users"] else 0,
             ),
         )
@@ -350,7 +353,7 @@ def get_session_user(token: str) -> Optional[Dict[str, Any]]:
     with conn() as c, c.cursor() as cur:
         cur.execute(
             "SELECT u.id, u.username, u.is_superadmin, "
-            "u.can_access_moodle_cloner, u.can_access_course_cloner, u.can_access_plugin_cloner, u.can_manage_users, "
+            "u.can_access_moodle_cloner, u.can_access_course_cloner, u.can_access_plugin_cloner, u.can_access_alexia_cloner, u.can_manage_users, "
             "u.created_at, u.updated_at "
             "FROM sessions s JOIN users u ON u.id = s.user_id "
             "WHERE s.token=%s AND s.expires_at > NOW()",
