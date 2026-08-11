@@ -83,6 +83,14 @@ def esc_html(value: str) -> str:
 
 def render_index_html() -> bytes:
     html = INDEX_FILE.read_text(encoding="utf-8")
+    # A truncated index.html (interrupted upload, unquoted-heredoc paste) leaves
+    # an unterminated <script> that browsers discard silently — blank page, no
+    # console error, nothing in the server log. Fail loudly instead.
+    if not html.rstrip().endswith("</html>"):
+        raise RuntimeError(
+            f"index.html looks truncated ({len(html)} chars, does not end with </html>). "
+            "Re-upload it (git checkout -- index.html) — a partial file renders as a blank page."
+        )
     html = html.replace("{{TARGET_DB_HOST}}", esc_html(TARGET_DB_HOST_ENV.strip()))
     html = html.replace("{{APP_VERSION}}", esc_html(APP_VERSION))
     return html.encode("utf-8")
@@ -1219,20 +1227,40 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         return
 
 
-def main() -> None:
-    print("Initializing application database...")
+def log_boot(message: str) -> None:
+    # pm2 captures stdout as a pipe, so Python block-buffers it and short boot
+    # messages never reach `pm2 logs`. Flush every line explicitly.
+    print(message, flush=True)
+
+
+def init_app_db() -> None:
+    log_boot("Initializing application database...")
     try:
-        db.init_schema()
+        added = db.init_schema()
+        if added:
+            log_boot(f"Schema migration: added users columns {', '.join(added)}")
+        else:
+            log_boot("Schema up to date.")
         seeded = db.seed_initial_admin()
         if seeded:
-            print(f"Seeded initial superadmin: {seeded}")
+            log_boot(f"Seeded initial superadmin: {seeded}")
         db.get_or_create_session_secret()
+        log_boot("Application database ready.")
     except Exception as exc:
-        print(f"WARNING: could not initialize app DB: {exc}")
-        print("The login/user-management features will not work until this is resolved.")
+        log_boot(f"WARNING: could not initialize app DB: {type(exc).__name__}: {exc}")
+        log_boot("The login/user-management features will not work until this is resolved.")
 
+
+def main() -> None:
+    # Bind the port BEFORE touching Aurora. A slow, unreachable or lock-blocked
+    # database used to stall this function before serve_forever(), so nothing
+    # was listening and the browser got a blank page with no clue why. Now the
+    # login screen always renders and any DB problem surfaces as an API error.
     server = ThreadingHTTPServer((HOST, PORT), MoodleCloneHandler)
-    print(f"Moodle Cloner UI available at http://{HOST}:{PORT}")
+    log_boot(f"Moodle Cloner UI available at http://{HOST}:{PORT} (v{APP_VERSION})")
+
+    threading.Thread(target=init_app_db, name="db-init", daemon=True).start()
+
     server.serve_forever()
 
 

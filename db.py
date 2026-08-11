@@ -56,6 +56,11 @@ def _connect(database: Any = _NO_DB) -> pymysql.connections.Connection:
         "cursorclass": DictCursor,
         "autocommit": True,
         "connect_timeout": 10,
+        # Without these a stalled Aurora endpoint (or a DDL waiting on a
+        # metadata lock) blocks the caller forever. At boot that means the
+        # process never reaches serve_forever() and nothing is served at all.
+        "read_timeout": 30,
+        "write_timeout": 30,
     }
     if database is _NO_DB:
         kwargs["database"] = cfg["db_name"]
@@ -148,11 +153,70 @@ SCHEMA = [
 ]
 
 
-def init_schema() -> None:
+# Columns that must exist on `users`, in order. `CREATE TABLE IF NOT EXISTS` is
+# a no-op on an already-deployed database, so every column added after the first
+# production deploy has to be reconciled here on boot. Declared as
+# (column, definition, after_column) — keep in sync with PERMISSION_FLAGS.
+USERS_COLUMNS = [
+    ("is_superadmin", "TINYINT(1) NOT NULL DEFAULT 0", "password_hash"),
+    ("can_access_moodle_cloner", "TINYINT(1) NOT NULL DEFAULT 0", "is_superadmin"),
+    ("can_access_course_cloner", "TINYINT(1) NOT NULL DEFAULT 0", "can_access_moodle_cloner"),
+    ("can_access_plugin_cloner", "TINYINT(1) NOT NULL DEFAULT 0", "can_access_course_cloner"),
+    ("can_access_alexia_cloner", "TINYINT(1) NOT NULL DEFAULT 0", "can_access_plugin_cloner"),
+    ("can_manage_users", "TINYINT(1) NOT NULL DEFAULT 0", "can_access_alexia_cloner"),
+]
+
+
+def _existing_columns(cur, table: str) -> set:
+    cur.execute(
+        "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s",
+        (table,),
+    )
+    return {row["COLUMN_NAME"] for row in cur.fetchall()}
+
+
+def _migrate_users_columns(cur) -> List[str]:
+    """Add any missing `users` columns. Returns the names of columns added.
+
+    Driven by information_schema rather than by catching duplicate-column
+    errors, so it is idempotent by construction and a genuine failure (no ALTER
+    privilege, table locked) surfaces instead of being swallowed.
+    """
+    present = _existing_columns(cur, "users")
+    if not present:
+        # Table does not exist — SCHEMA just created it, nothing to migrate.
+        return []
+    added: List[str] = []
+    for column, definition, after in USERS_COLUMNS:
+        if column in present:
+            continue
+        clause = f"ADD COLUMN `{column}` {definition}"
+        if after and after in present:
+            clause += f" AFTER `{after}`"
+        cur.execute(f"ALTER TABLE users {clause}")
+        present.add(column)
+        added.append(column)
+    return added
+
+
+def init_schema() -> List[str]:
+    """Create the database/tables if needed and reconcile added columns.
+
+    Returns the list of columns added by this run (empty when already current).
+    """
     _ensure_database()
     with conn() as c, c.cursor() as cur:
+        # Never let DDL block the boot indefinitely: the server default for
+        # lock_wait_timeout is a year, so an ALTER waiting on a metadata lock
+        # would hang the process before it binds the HTTP port.
+        try:
+            cur.execute("SET SESSION lock_wait_timeout = 15")
+        except pymysql.err.MySQLError:
+            pass
         for stmt in SCHEMA:
             cur.execute(stmt)
+        return _migrate_users_columns(cur)
 
 
 def _get_setting(key: str) -> Optional[str]:
@@ -372,3 +436,34 @@ def delete_session(token: str) -> None:
 def purge_expired_sessions() -> None:
     with conn() as c, c.cursor() as cur:
         cur.execute("DELETE FROM sessions WHERE expires_at <= NOW()")
+
+
+# --- Manual migration entry point ---------------------------------------
+# `python3 db.py` reconciles the schema and reports what it did, without
+# restarting the API. Loads .env the same way app.py does.
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+
+    env_file = Path(__file__).resolve().parent / ".env"
+    if env_file.exists():
+        for raw in env_file.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            v = v.strip()
+            if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                v = v[1:-1]
+            os.environ.setdefault(k.strip(), v)
+
+    try:
+        added_cols = init_schema()
+    except Exception as exc:  # noqa: BLE001 — CLI: report and exit non-zero
+        print(f"FAILED: {type(exc).__name__}: {exc}", flush=True)
+        sys.exit(1)
+    if added_cols:
+        print("Added users columns: " + ", ".join(added_cols), flush=True)
+    else:
+        print("Schema already up to date.", flush=True)

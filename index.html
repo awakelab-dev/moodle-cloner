@@ -34,7 +34,12 @@
   <div id="toaster" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
   <!-- Login view -->
-  <div id="login-view" class="hidden min-h-screen items-center justify-center px-4 py-10">
+  <!-- Visible by default on purpose: if the inline script below ever fails to
+       parse or arrives truncated, the browser discards it silently (no console
+       error) and a JS-gated login screen would leave the page completely blank.
+       Rendering it by default degrades to "login shown" instead. The boot code
+       hides it via showAppView() when there is already a valid session. -->
+  <div id="login-view" class="flex min-h-screen items-center justify-center px-4 py-10">
     <div class="w-full max-w-md bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-8">
       <h1 class="text-2xl font-semibold text-slate-50">Iniciar sesion</h1>
       <p class="text-sm text-slate-400 mt-1 mb-6">Accede a la plataforma de clonado.</p>
