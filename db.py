@@ -148,11 +148,30 @@ SCHEMA = [
 ]
 
 
+MIGRATIONS = [
+    # Add can_access_alexia_cloner column if it doesn't exist (added after
+    # initial production deploy where CREATE TABLE IF NOT EXISTS was a no-op).
+    """
+    ALTER TABLE users
+        ADD COLUMN can_access_alexia_cloner TINYINT(1) NOT NULL DEFAULT 0
+            AFTER can_access_plugin_cloner
+    """,
+]
+
+
 def init_schema() -> None:
     _ensure_database()
     with conn() as c, c.cursor() as cur:
         for stmt in SCHEMA:
             cur.execute(stmt)
+        # Run idempotent migrations for columns added after the initial deploy.
+        for migration in MIGRATIONS:
+            try:
+                cur.execute(migration)
+            except pymysql.err.OperationalError as exc:
+                # 1060 = Duplicate column name → column already exists, skip.
+                if exc.args[0] != 1060:
+                    raise
 
 
 def _get_setting(key: str) -> Optional[str]:
