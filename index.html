@@ -79,7 +79,7 @@
       <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <img src="/assets/logo.png" alt="AWAKELAB" class="h-9 w-auto" />
-          <div class="flex items-center gap-2 text-xs text-slate-400">
+          <div class="hidden sm:flex items-center gap-2 text-xs text-slate-400">
             <span>Plataforma de clonado</span>
             <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-slate-300">v{{APP_VERSION}}</span>
           </div>
@@ -89,14 +89,33 @@
           <button data-section="moodle" data-perm="can_access_moodle_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador Moodle</button>
           <button data-section="course" data-perm="can_access_course_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador de cursos</button>
           <button data-section="plugin" data-perm="can_access_plugin_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador de plugins</button>
+          <button data-section="alexia" data-perm="can_access_alexia_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador Alexia</button>
         </nav>
 
         <div class="flex items-center gap-2">
-          <span id="current-user-label" class="hidden md:inline text-xs text-slate-400"></span>
-          <button id="platforms-btn" class="hidden px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Plataformas</button>
-          <button id="users-btn" class="hidden px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Usuarios</button>
-          <button id="account-btn" class="px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Mi cuenta</button>
-          <button id="logout-btn" class="px-3 py-1.5 rounded-lg text-xs border border-slate-700 text-slate-200 hover:bg-slate-800">Salir</button>
+          <!-- Hamburger button — wraps admin controls -->
+          <button id="hamburger-btn" class="p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu">
+            <svg id="hamburger-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <svg id="hamburger-close-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- Hidden originals kept for JS compatibility -->
+        <button id="platforms-btn" class="hidden"></button>
+        <button id="users-btn" class="hidden"></button>
+        <button id="account-btn" class="hidden"></button>
+        <button id="logout-btn" class="hidden"></button>
+        <span id="current-user-label" class="hidden"></span>
+      </div>
+
+      <!-- Dropdown menu panel (admin controls) -->
+      <div id="mobile-menu" class="hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur">
+        <div class="max-w-6xl mx-auto px-6 py-3 flex flex-col gap-1">
+          <div id="menu-user-label" class="px-3 py-1.5 text-xs text-slate-400"></div>
+          <button id="mobile-platforms-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plataformas</button>
+          <button id="mobile-users-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Usuarios</button>
+          <button id="mobile-account-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Mi cuenta</button>
+          <button id="mobile-logout-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white text-red-400">Salir</button>
         </div>
       </div>
     </header>
@@ -129,11 +148,8 @@
                       </div>
                       <div>
                         <label class="block text-xs font-medium text-slate-300 mb-1">Instancia Moodle Origen</label>
-                        <select name="source_instance" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                          <option value="base_limpia">Base Limpia</option>
-                          <option value="digit_institute" selected>Digit Institute</option>
-                          <option value="hoppers">Hoppers</option>
-                          <option value="refactika">Refactika</option>
+                        <select name="source_index" id="clone-source-index" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                          <option value="">Cargando plataformas...</option>
                         </select>
                         <p class="mt-1 text-xs text-slate-500">Selecciona la instancia que se usara como origen para la clonacion.</p>
                       </div>
@@ -454,6 +470,16 @@
                     <input id="pf-moodle_path" type="text" placeholder="/var/www/html/moodle" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
                   <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta Moodledata</label>
+                    <input id="pf-moodledata_path" type="text" placeholder="/var/www/data/moodle/ejemplo" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p class="mt-1 text-xs text-slate-500">Necesaria para el Clonador Moodle.</p>
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta vhost Nginx</label>
+                    <input id="pf-vhost_path" type="text" placeholder="/etc/nginx/sites-available/ejemplo.awakelab.world" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p class="mt-1 text-xs text-slate-500">Necesaria para el Clonador Moodle.</p>
+                  </div>
+                  <div>
                     <label class="block text-xs font-medium text-slate-300 mb-1">Usuario web</label>
                     <input id="pf-web_user" type="text" placeholder="www-data" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
@@ -490,11 +516,349 @@
           </div>
         </section>
 
-        <!-- Section: Plugin cloner (placeholder) -->
+        <!-- Section: Plugin cloner -->
         <section id="section-plugin" class="app-section hidden">
-          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-10 text-center">
-            <h1 class="text-2xl font-semibold text-slate-50">Clonador de plugins</h1>
-            <p class="text-sm text-slate-400 mt-2">Esta seccion aun no esta implementada.</p>
+          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6">
+              <h1 class="text-2xl font-semibold text-slate-50">Clonador de plugins</h1>
+              <p class="text-sm text-slate-400 mt-1">Instala plugins Moodle (.zip) en multiples plataformas simultaneamente por SSH.</p>
+            </div>
+            <div class="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <!-- Left: Plugin + Servers -->
+              <div class="space-y-6">
+                <!-- Step 1: Plugin -->
+                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <h2 class="text-sm font-semibold text-slate-200 mb-3">1. Plugin</h2>
+                  <div id="pi-dropzone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 transition-colors">
+                    <input type="file" id="pi-file-input" accept=".zip" class="hidden" />
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mx-auto mb-2 h-10 w-10 text-slate-500">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                    <p class="text-sm text-slate-400">Arrastra un archivo <b class="text-slate-300">.zip</b> aqui o haz clic para seleccionar</p>
+                  </div>
+                  <div id="pi-file-info" class="hidden flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-3 mt-3">
+                    <div class="min-w-0">
+                      <span id="pi-file-name" class="text-sm text-slate-200 font-medium truncate block"></span>
+                      <span id="pi-file-size" class="text-xs text-slate-500"></span>
+                    </div>
+                    <button id="pi-file-clear" type="button" class="text-xs text-red-400 hover:text-red-300 ml-3 shrink-0">Quitar</button>
+                  </div>
+                  <label class="block mt-4">
+                    <span class="text-xs text-slate-400 mb-1 block">Tipo de plugin (frankenstyle)</span>
+                    <select id="pi-type" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                      <option value="">Cargando tipos...</option>
+                    </select>
+                  </label>
+                  <div id="pi-type-hint" class="text-xs text-emerald-400 mt-1 hidden"></div>
+                </div>
+                <!-- Step 2: Servers -->
+                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <h2 class="text-sm font-semibold text-slate-200 mb-3">2. Plataformas destino</h2>
+                  <div class="flex items-center gap-3 mb-3">
+                    <button id="pi-select-all" type="button" class="text-xs text-primary-500 hover:text-primary-700">Seleccionar todo</button>
+                    <button id="pi-clear-all" type="button" class="text-xs text-slate-500 hover:text-slate-400">Limpiar</button>
+                    <span id="pi-server-count" class="ml-auto text-xs text-slate-500">0 seleccionadas</span>
+                  </div>
+                  <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+                    <div class="text-xs text-slate-500 text-center py-4 col-span-full">Cargando plataformas...</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Right: Actions + Output -->
+              <div class="space-y-6">
+                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <h2 class="text-sm font-semibold text-slate-200 mb-3">3. Instalar</h2>
+                  <button id="pi-install-btn" type="button" disabled class="w-full px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    Instalar plugin
+                  </button>
+                  <div id="pi-status-bar" class="hidden mt-4">
+                    <div class="flex justify-between items-center mb-1">
+                      <span id="pi-phase" class="text-xs text-slate-400">Esperando...</span>
+                      <span id="pi-percent" class="text-xs text-slate-400 font-mono">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div id="pi-progress-bar" class="h-1.5 rounded-full bg-primary-500 transition-all duration-300" style="width:0%"></div>
+                    </div>
+                  </div>
+                  <pre id="pi-output" class="hidden mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 max-h-80 overflow-auto font-mono whitespace-pre-wrap"></pre>
+                </div>
+                <!-- Results -->
+                <div id="pi-results" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <h2 class="text-sm font-semibold text-slate-200 mb-3">Resultados</h2>
+                  <div id="pi-results-list" class="space-y-2"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section: Alexia cloner -->
+        <section id="section-alexia" class="app-section hidden">
+          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
+              <div>
+                <h1 class="text-2xl font-semibold text-slate-50">Clonador Alexia</h1>
+                <p class="text-sm text-slate-400 mt-1">Exporta cursos de Catalejo a Alexia via SSH.</p>
+              </div>
+              <div class="flex items-center gap-3">
+                <div id="ax-status-catalejo" class="flex items-center gap-1.5 text-xs">
+                  <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                  <span class="text-slate-400">Catalejo</span>
+                </div>
+                <div id="ax-status-alexia" class="flex items-center gap-1.5 text-xs">
+                  <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                  <span class="text-slate-400">Alexia</span>
+                </div>
+                <button id="ax-config-toggle" class="text-slate-400 hover:text-slate-200 ml-2 p-1.5 rounded-lg hover:bg-slate-800" title="Configuracion">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Alexia Config Panel (hidden by default) -->
+            <div id="ax-config-panel" class="hidden border-b border-slate-800 px-8 py-5 bg-slate-950/40">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                  <h3 class="text-xs font-semibold text-emerald-400 mb-3 uppercase tracking-wide">Catalejo (Origen)</h3>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Host</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-host" placeholder="10.0.0.1"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Puerto</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-port" value="22" type="number"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-user" placeholder="ubuntu"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-pass" type="password" placeholder="(opcional)"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta clave SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-key" placeholder="~/.ssh/id_ed25519"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password Sudo</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-sudo" type="password" placeholder="(opcional)"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodle</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-moodle" placeholder="/var/www/html/moodle"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodledata</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-data" placeholder="/var/www/moodledata"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario Web</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-webuser" value="www-data"></div>
+                    <div class="flex items-end"><button onclick="window.__axTestConn('catalejo')" class="w-full rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">Probar</button></div>
+                  </div>
+                </div>
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                  <h3 class="text-xs font-semibold text-blue-400 mb-3 uppercase tracking-wide">Alexia (Destino)</h3>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Host</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-host" placeholder="10.0.0.2"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Puerto</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-port" value="22" type="number"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-user" placeholder="ubuntu"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-pass" type="password" placeholder="(opcional)"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta clave SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-key" placeholder="~/.ssh/id_ed25519"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password Sudo</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-sudo" type="password" placeholder="(opcional)"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodle</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-moodle" placeholder="/var/www/html/moodle"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodledata</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-data" placeholder="/var/www/moodledata"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario Web</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-webuser" value="www-data"></div>
+                    <div class="flex items-end"><button onclick="window.__axTestConn('alexia')" class="w-full rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">Probar</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-4 flex justify-end">
+                <button onclick="window.__axSaveConfig()" class="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700">Guardar configuracion</button>
+              </div>
+            </div>
+
+            <!-- Alexia Sub-tabs -->
+            <div class="border-b border-slate-800 px-8 flex gap-1">
+              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="batch">Importacion Masiva</button>
+              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="single">Exportacion Individual</button>
+            </div>
+
+            <!-- ====== TAB: BATCH ====== -->
+            <div id="ax-tab-batch" class="ax-tab-content hidden px-8 py-6">
+              <!-- Upload Zone -->
+              <div id="ax-upload-section">
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-5">
+                  <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    Subir archivo Excel
+                  </h2>
+                  <div id="ax-drop-zone" class="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition-colors">
+                    <svg class="w-10 h-10 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <p class="text-slate-300 text-sm">Arrastra tu archivo <strong class="text-primary-500">.xlsx</strong> aqui</p>
+                    <p class="text-slate-500 text-xs mt-1">o haz clic para seleccionar</p>
+                    <input type="file" id="ax-file-input" accept=".xlsx" class="hidden">
+                  </div>
+                  <div id="ax-upload-loading" class="hidden mt-4 text-center">
+                    <div class="inline-flex items-center gap-2 text-primary-500 text-sm">
+                      <div class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                      Procesando archivo...
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Batch Results (hidden until upload) -->
+              <div id="ax-batch-results" class="hidden">
+                <!-- Summary -->
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 mb-5">
+                  <div class="flex items-center justify-between flex-wrap gap-3">
+                    <div class="flex items-center gap-4">
+                      <div class="flex items-center gap-2">
+                        <span class="text-2xl font-bold text-emerald-400" id="ax-count-exportable">0</span>
+                        <span class="text-xs text-slate-400">exportables</span>
+                      </div>
+                      <div class="h-6 w-px bg-slate-700"></div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-2xl font-bold text-slate-500" id="ax-count-ignored">0</span>
+                        <span class="text-xs text-slate-400">ignoradas</span>
+                      </div>
+                      <div class="h-6 w-px bg-slate-700"></div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold text-white" id="ax-count-selected">0</span>
+                        <span class="text-xs text-slate-400">seleccionadas</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button id="ax-btn-reset" class="px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800">Cambiar archivo</button>
+                      <button id="ax-btn-batch-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        Exportar seleccionados
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Batch Progress -->
+                <div id="ax-batch-progress-card" class="hidden rounded-xl border border-slate-800 bg-slate-900/60 p-4 mb-5">
+                  <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                      Progreso de exportacion
+                    </h3>
+                    <div class="flex items-center gap-3 text-xs">
+                      <span class="text-emerald-400"><span id="ax-bp-completed">0</span> completados</span>
+                      <span class="text-red-400"><span id="ax-bp-errors">0</span> errores</span>
+                      <span class="text-slate-400"><span id="ax-bp-pending">0</span> pendientes</span>
+                    </div>
+                  </div>
+                  <div class="w-full bg-slate-800 rounded-full h-2.5">
+                    <div id="ax-batch-progress-bar" class="h-2.5 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
+                  </div>
+                  <div id="ax-batch-progress-pct" class="text-xs text-slate-400 text-right mt-1">0%</div>
+                  <div id="ax-batch-steps" class="mt-3 max-h-32 overflow-y-auto space-y-1"></div>
+                </div>
+
+                <!-- Rows Table -->
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+                  <div class="p-3 border-b border-slate-800 flex items-center justify-between">
+                    <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                      <input type="checkbox" id="ax-select-all" checked class="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-primary-500">
+                      Seleccionar todos
+                    </label>
+                    <input class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-table-filter" placeholder="Filtrar..." style="width:180px">
+                  </div>
+                  <div class="overflow-auto" style="max-height: 50vh;">
+                    <table class="w-full border-collapse">
+                      <thead>
+                        <tr class="text-left">
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:36px"></th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Reducido</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">CodOficial</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Centro</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Ejercicio</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Especialidad</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Modalidad</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Shortname</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:90px">Estado</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:36px"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="ax-batch-table-body"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ====== TAB: SINGLE ====== -->
+            <div id="ax-tab-single" class="ax-tab-content hidden px-8 py-6">
+              <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div class="lg:col-span-3 space-y-5">
+                  <!-- Course Search -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                      Buscar Curso en Catalejo
+                    </h2>
+                    <div class="flex gap-2">
+                      <input class="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-search-input" placeholder="Buscar por nombre, shortname o ID...">
+                      <button id="ax-search-btn" class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 whitespace-nowrap">Buscar</button>
+                    </div>
+                    <div id="ax-search-results" class="mt-2 hidden">
+                      <div class="rounded-lg border border-slate-800 bg-slate-900 max-h-48 overflow-y-auto" id="ax-search-list"></div>
+                    </div>
+                    <div id="ax-selected-course" class="mt-3 hidden">
+                      <div class="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-primary-600/40">
+                        <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        <span class="text-sm text-white" id="ax-selected-course-name"></span>
+                        <span class="text-xs text-slate-400 ml-auto" id="ax-selected-course-id"></span>
+                        <button id="ax-clear-course" class="text-slate-400 hover:text-red-400 ml-2">&times;</button>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Course Data Form -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                      Datos del Curso
+                    </h2>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Ejercicio *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-ejercicio" placeholder="2026"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">ID Centro *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-id-centro" placeholder="5545"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Nombre Centro</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-nombre-centro" placeholder="Nombre del centro"></div>
+                      <div class="md:col-span-2"><label class="block text-[11px] text-slate-400 mb-0.5">Especialidad *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-especialidad" placeholder="(SYMA33) Coordinacion en emergencias"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Pertenece Curso *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-pertenece-curso" placeholder="1"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Codigo Oficial *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-codigo-oficial" placeholder="1505"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Reducido Grupo *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-reducido-grupo" placeholder="1CEPC-P"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Modalidad</label><div class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm" id="ax-f-modalidad-display"><span class="text-slate-500">Auto-detectada</span></div></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Estudio</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-estudio" placeholder="Estudio"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 1</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat1" placeholder="Mat1"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 2</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat2" placeholder="Mat2"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Area</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-area" placeholder="Area"></div>
+                    </div>
+                    <div class="mt-5 flex justify-end">
+                      <button id="ax-btn-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-700">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        Exportar Curso
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="lg:col-span-2 space-y-5">
+                  <!-- Category Tree Preview -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                      Arbol de Categorias
+                    </h2>
+                    <div id="ax-tree-preview" class="text-sm space-y-1">
+                      <p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>
+                    </div>
+                  </div>
+                  <!-- Export Status -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 hidden" id="ax-export-status-card">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                      Estado de Exportacion
+                    </h2>
+                    <div class="w-full bg-slate-800 rounded-full h-2 mb-4">
+                      <div id="ax-progress-bar" class="h-2 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
+                    </div>
+                    <div id="ax-progress-percent" class="text-xs text-slate-400 text-right -mt-3 mb-3">0%</div>
+                    <div id="ax-export-steps" class="space-y-2 text-sm"></div>
+                    <div id="ax-export-result" class="mt-4 hidden"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tree Preview Modal -->
+            <div id="ax-tree-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+              <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-sm font-semibold text-slate-100">Arbol de categorias</h3>
+                  <button id="ax-tree-modal-close" class="text-slate-400 hover:text-white">&times;</button>
+                </div>
+                <div id="ax-tree-modal-content" class="text-sm space-y-1"></div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -518,6 +882,7 @@
                       <th class="px-3 py-2 text-center">Moodle</th>
                       <th class="px-3 py-2 text-center">Cursos</th>
                       <th class="px-3 py-2 text-center">Plugins</th>
+                      <th class="px-3 py-2 text-center">Alexia</th>
                       <th class="px-3 py-2 text-center">Usuarios</th>
                       <th class="px-3 py-2 text-right">Acciones</th>
                     </tr>
@@ -569,6 +934,10 @@
           <label class="flex items-center gap-2 text-xs text-slate-300">
             <input type="checkbox" name="can_access_plugin_cloner" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
             Acceso al clonador de plugins
+          </label>
+          <label class="flex items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" name="can_access_alexia_cloner" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+            Acceso al clonador Alexia
           </label>
           <label class="flex items-center gap-2 text-xs text-slate-300">
             <input type="checkbox" name="can_manage_users" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
@@ -698,6 +1067,7 @@
       moodle: 'Clonador Moodle',
       course: 'Clonador de cursos',
       plugin: 'Clonador de plugins',
+      alexia: 'Clonador Alexia',
       users: 'Gestion de usuarios',
       platforms: 'Administrar plataformas',
     };
@@ -705,6 +1075,7 @@
       moodle: 'can_access_moodle_cloner',
       course: 'can_access_course_cloner',
       plugin: 'can_access_plugin_cloner',
+      alexia: 'can_access_alexia_cloner',
       users: 'can_manage_users',
       platforms: null,
     };
@@ -722,17 +1093,25 @@
       document.getElementById('app-view').classList.add('flex');
 
       document.getElementById('current-user-label').textContent = currentUser ? `Sesion: ${currentUser.username}` : '';
+      const menuUserLabel = document.getElementById('menu-user-label');
+      if (menuUserLabel) menuUserLabel.textContent = currentUser ? `Sesion: ${currentUser.username}` : '';
       const usersBtn = document.getElementById('users-btn');
+      const mobileUsersBtn = document.getElementById('mobile-users-btn');
       if (canManageUsers()) {
         usersBtn.classList.remove('hidden');
+        mobileUsersBtn.classList.remove('hidden');
       } else {
         usersBtn.classList.add('hidden');
+        mobileUsersBtn.classList.add('hidden');
       }
       const platformsBtn = document.getElementById('platforms-btn');
+      const mobilePlatformsBtn = document.getElementById('mobile-platforms-btn');
       if (currentUser && currentUser.is_superadmin) {
         platformsBtn.classList.remove('hidden');
+        mobilePlatformsBtn.classList.remove('hidden');
       } else {
         platformsBtn.classList.add('hidden');
+        mobilePlatformsBtn.classList.add('hidden');
       }
       updateNavTabHighlight();
     }
@@ -865,21 +1244,70 @@
       });
     })();
 
+    // ====== Hamburger menu ============================================
+    (function() {
+      const hamburgerBtn = document.getElementById('hamburger-btn');
+      const mobileMenu = document.getElementById('mobile-menu');
+      const iconOpen = document.getElementById('hamburger-icon');
+      const iconClose = document.getElementById('hamburger-close-icon');
+
+      function closeMobileMenu() {
+        mobileMenu.classList.add('hidden');
+        iconOpen.classList.remove('hidden');
+        iconClose.classList.add('hidden');
+      }
+
+      hamburgerBtn.addEventListener('click', () => {
+        const isOpen = !mobileMenu.classList.contains('hidden');
+        if (isOpen) {
+          closeMobileMenu();
+        } else {
+          mobileMenu.classList.remove('hidden');
+          iconOpen.classList.add('hidden');
+          iconClose.classList.remove('hidden');
+        }
+      });
+
+      document.getElementById('mobile-account-btn').addEventListener('click', () => {
+        closeMobileMenu();
+        document.getElementById('account-btn').click();
+      });
+      document.getElementById('mobile-logout-btn').addEventListener('click', () => {
+        closeMobileMenu();
+        document.getElementById('logout-btn').click();
+      });
+      document.getElementById('mobile-platforms-btn').addEventListener('click', () => {
+        closeMobileMenu();
+        document.getElementById('platforms-btn').click();
+      });
+      document.getElementById('mobile-users-btn').addEventListener('click', () => {
+        closeMobileMenu();
+        document.getElementById('users-btn').click();
+      });
+
+    })();
+
     // ====== Nav tabs ================================================
     document.querySelectorAll('.nav-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         const section = btn.dataset.section;
         showSection(section);
         if (section === 'course' && window.__ccLoad) window.__ccLoad();
+        if (section === 'moodle' && window.__moodleLoad) window.__moodleLoad();
+        if (section === 'plugin' && window.__pluginLoad) window.__pluginLoad();
+        if (section === 'alexia' && window.__alexiaLoad) window.__alexiaLoad();
       });
     });
 
     function pickInitialSection() {
-      const order = ['moodle', 'course', 'plugin'];
+      const order = ['moodle', 'course', 'plugin', 'alexia'];
       const allowed = order.find(s => hasPermission(SECTION_PERMS[s]));
       if (allowed) {
         showSection(allowed);
         if (allowed === 'course' && window.__ccLoad) window.__ccLoad();
+        if (allowed === 'moodle' && window.__moodleLoad) window.__moodleLoad();
+        if (allowed === 'plugin' && window.__pluginLoad) window.__pluginLoad();
+        if (allowed === 'alexia' && window.__alexiaLoad) window.__alexiaLoad();
       } else if (canManageUsers()) {
         showSection('users');
         loadUsers();
@@ -934,6 +1362,7 @@
           <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_moodle_cloner)}</td>
           <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_course_cloner)}</td>
           <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_plugin_cloner)}</td>
+          <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_access_alexia_cloner)}</td>
           <td class="px-3 py-2 text-center">${checkCell(u.permissions.can_manage_users)}</td>
           <td class="px-3 py-2 text-right">${editBtn}${delBtn || '<span class="text-[10px] text-slate-600">&mdash;</span>'}</td>
         </tr>`;
@@ -980,6 +1409,7 @@
         form.elements['can_access_moodle_cloner'].checked = !!user.permissions.can_access_moodle_cloner;
         form.elements['can_access_course_cloner'].checked = !!user.permissions.can_access_course_cloner;
         form.elements['can_access_plugin_cloner'].checked = !!user.permissions.can_access_plugin_cloner;
+        form.elements['can_access_alexia_cloner'].checked = !!user.permissions.can_access_alexia_cloner;
         form.elements['can_manage_users'].checked = !!user.permissions.can_manage_users;
       } else {
         title.textContent = 'Nuevo usuario';
@@ -1034,6 +1464,7 @@
           can_access_moodle_cloner: form.elements['can_access_moodle_cloner'].checked,
           can_access_course_cloner: form.elements['can_access_course_cloner'].checked,
           can_access_plugin_cloner: form.elements['can_access_plugin_cloner'].checked,
+          can_access_alexia_cloner: form.elements['can_access_alexia_cloner'].checked,
           can_manage_users: form.elements['can_manage_users'].checked,
         };
       }
@@ -1331,7 +1762,7 @@
         sourceServerEl.innerHTML = '<option value="">Selecciona plataforma origen...</option>';
         state.servers.forEach(s => {
           const o = document.createElement('option');
-          o.value = s.index; o.textContent = `${s.name} · ${s.moodle_path}`;
+          o.value = s.index; o.textContent = s.name;
           sourceServerEl.appendChild(o);
         });
         sourceServerEl.value = String(state.servers[0].index);
@@ -2074,6 +2505,8 @@
           ssh_key_path: val('ssh_key_path'),
           ssh_key_passphrase: val('ssh_key_passphrase'),
           moodle_path: val('moodle_path'),
+          moodledata_path: val('moodledata_path'),
+          vhost_path: val('vhost_path'),
           web_user: val('web_user'),
           web_group: val('web_group'),
           sudo_requires_password: document.getElementById('pf-sudo_requires_password').checked,
@@ -2120,6 +2553,8 @@
         setVal('ssh_key_path', s.ssh_key_path || '');
         setVal('ssh_key_passphrase', '');
         setVal('moodle_path', s.moodle_path);
+        setVal('moodledata_path', s.moodledata_path || '');
+        setVal('vhost_path', s.vhost_path || '');
         setVal('web_user', s.web_user);
         setVal('web_group', s.web_group);
         document.getElementById('pf-sudo_requires_password').checked = !!s.sudo_requires_password;
@@ -2161,6 +2596,8 @@
             <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-400">
               <span class="truncate">Moodle: <span class="text-slate-300">${esc(s.moodle_path)}</span></span>
               <span>Web: <span class="text-slate-300">${esc(s.web_user)}:${esc(s.web_group)}</span></span>
+              ${s.moodledata_path ? `<span class="truncate sm:col-span-2">Moodledata: <span class="text-slate-300">${esc(s.moodledata_path)}</span></span>` : ''}
+              ${s.vhost_path ? `<span class="truncate sm:col-span-2">Vhost: <span class="text-slate-300">${esc(s.vhost_path)}</span></span>` : ''}
               <span>Sudo con contrasena: <span class="text-slate-300">${s.sudo_requires_password ? 'Si' : 'No'}</span></span>
               <span>Contrasena SSH: <span class="text-slate-300">${s.has_ssh_password ? 'Si' : 'No'}</span></span>
             </div>
@@ -2310,7 +2747,7 @@
         const sourceMode = String(fd.get('source_mode') || 'local').trim();
         return {
           source_mode: sourceMode,
-          source_instance: String(fd.get('source_instance') || '').trim(),
+          source_index: sourceMode === 'local' ? Number.parseInt(String(fd.get('source_index') || '-1'), 10) : undefined,
           source_host: sourceMode === 'remote' ? String(fd.get('source_host') || '').trim() : '',
           source_dir: sourceMode === 'remote' ? String(fd.get('source_dir') || '').trim() : '',
           source_data: sourceMode === 'remote' ? String(fd.get('source_data') || '').trim() : '',
@@ -2429,7 +2866,7 @@
       const deployTargetInput = form.querySelector('select[name="deploy_target"]');
       const remoteHostInput = form.querySelector('input[name="remote_host"]');
       const sourceModeInput = form.querySelector('select[name="source_mode"]');
-      const sourceInstanceInput = form.querySelector('select[name="source_instance"]');
+      const sourceIndexInput = form.querySelector('select[name="source_index"]');
       const remoteSourceFields = document.getElementById('remote-source-fields');
 
       function suggestFromKey() {
@@ -2460,8 +2897,31 @@
         const sourceMode = (sourceModeInput.value || 'local').trim();
         const isRemoteSource = sourceMode === 'remote';
         remoteSourceFields.classList.toggle('hidden', !isRemoteSource);
-        sourceInstanceInput.disabled = isRemoteSource;
-        sourceInstanceInput.classList.toggle('opacity-60', isRemoteSource);
+        sourceIndexInput.disabled = isRemoteSource;
+        sourceIndexInput.classList.toggle('opacity-60', isRemoteSource);
+      }
+
+      async function loadMoodleSources() {
+        try {
+          const res = await fetch('/api/cc/servers');
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(payload.error || 'No se pudo cargar inventario.');
+          const servers = (payload.servers || []).slice().sort(
+            (a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' })
+          );
+          sourceIndexInput.innerHTML = servers.length
+            ? '<option value="">Selecciona instancia origen...</option>'
+            : '<option value="">No hay plataformas en el inventario</option>';
+          servers.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.index;
+            o.textContent = s.name;
+            sourceIndexInput.appendChild(o);
+          });
+          if (servers.length) sourceIndexInput.value = String(servers[0].index);
+        } catch (err) {
+          sourceIndexInput.innerHTML = `<option value="">Error: ${err.message}</option>`;
+        }
       }
 
       deployTargetInput.addEventListener('change', () => { updateDeployTargetUi(); suggestFromKey(); });
@@ -2469,6 +2929,799 @@
       newKeyInput.addEventListener('blur', suggestFromKey);
       updateDeployTargetUi();
       updateSourceModeUi();
+
+      window.__moodleLoad = (function () {
+        let loaded = false;
+        return async function () {
+          if (loaded) return;
+          loaded = true;
+          await loadMoodleSources();
+        };
+      })();
+    })();
+
+    // ====== Plugin cloner ============================================
+    (function () {
+      let loaded = false;
+      let servers = [];
+      let pluginTypes = [];
+      let selectedFile = null;
+      const selectedIndexes = new Set();
+      let currentJobId = null;
+      let pollTimer = null;
+      let numServersForJob = 0;
+
+      const dropzone = document.getElementById('pi-dropzone');
+      const fileInput = document.getElementById('pi-file-input');
+      const fileInfo = document.getElementById('pi-file-info');
+      const fileNameEl = document.getElementById('pi-file-name');
+      const fileSizeEl = document.getElementById('pi-file-size');
+      const fileClear = document.getElementById('pi-file-clear');
+      const typeSelect = document.getElementById('pi-type');
+      const typeHint = document.getElementById('pi-type-hint');
+      const serverGrid = document.getElementById('pi-server-grid');
+      const selectAllBtn = document.getElementById('pi-select-all');
+      const clearAllBtn = document.getElementById('pi-clear-all');
+      const serverCountEl = document.getElementById('pi-server-count');
+      const installBtn = document.getElementById('pi-install-btn');
+      const statusBar = document.getElementById('pi-status-bar');
+      const phaseEl = document.getElementById('pi-phase');
+      const percentEl = document.getElementById('pi-percent');
+      const progressBar = document.getElementById('pi-progress-bar');
+      const outputEl = document.getElementById('pi-output');
+      const resultsEl = document.getElementById('pi-results');
+      const resultsList = document.getElementById('pi-results-list');
+
+      function esc(s) {
+        return String(s == null ? '' : s)
+          .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+      }
+
+      function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      // --- File handling ---
+      function handleFile(file) {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.zip')) {
+          toaster.show('Solo se aceptan archivos .zip', 'warning');
+          return;
+        }
+        if (file.size > 100 * 1024 * 1024) {
+          toaster.show('El archivo excede el limite de 100 MB.', 'warning');
+          return;
+        }
+        selectedFile = file;
+        fileNameEl.textContent = file.name;
+        fileSizeEl.textContent = formatSize(file.size);
+        fileInfo.classList.remove('hidden');
+        dropzone.classList.add('hidden');
+        inferType(file.name);
+        updateInstallBtn();
+      }
+
+      function clearFile() {
+        selectedFile = null;
+        fileInput.value = '';
+        fileInfo.classList.add('hidden');
+        dropzone.classList.remove('hidden');
+        typeHint.classList.add('hidden');
+        updateInstallBtn();
+      }
+
+      function inferType(filename) {
+        const stem = filename.replace(/\.zip$/i, '').toLowerCase();
+        for (const t of pluginTypes) {
+          if (stem.startsWith(t.key + '_')) {
+            typeSelect.value = t.path;
+            typeHint.textContent = 'Auto-detectado: ' + t.key + ' (' + t.path + ')';
+            typeHint.classList.remove('hidden');
+            return;
+          }
+        }
+        typeHint.classList.add('hidden');
+      }
+
+      dropzone.addEventListener('click', () => fileInput.click());
+      dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('border-primary-500'); });
+      dropzone.addEventListener('dragleave', () => dropzone.classList.remove('border-primary-500'));
+      dropzone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropzone.classList.remove('border-primary-500');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+      });
+      fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+      fileClear.addEventListener('click', clearFile);
+
+      // --- Plugin types ---
+      async function loadTypes() {
+        try {
+          const data = await api('/api/plugin/types');
+          pluginTypes = data.types || [];
+          typeSelect.innerHTML = '<option value="">Selecciona tipo de plugin...</option>' +
+            pluginTypes.map(t => `<option value="${esc(t.path)}">${esc(t.key)} &mdash; /${esc(t.path)}</option>`).join('');
+        } catch (err) {
+          typeSelect.innerHTML = '<option value="">Error cargando tipos</option>';
+        }
+      }
+
+      // --- Server list ---
+      function renderServers() {
+        if (!servers.length) {
+          serverGrid.innerHTML = '<div class="text-xs text-slate-500 text-center py-4 col-span-full">No hay plataformas en el inventario.</div>';
+          updateServerCount();
+          return;
+        }
+        serverGrid.innerHTML = servers.map(s => {
+          const checked = selectedIndexes.has(s.index) ? 'checked' : '';
+          const ring = selectedIndexes.has(s.index) ? 'ring-1 ring-primary-500/60 bg-primary-500/5' : 'bg-slate-950/40';
+          return `<label class="block rounded-lg border border-slate-800 ${ring} p-2 cursor-pointer text-center">
+            <input type="checkbox" class="pi-server-cb hidden" value="${s.index}" ${checked}>
+            <span class="text-xs font-medium text-slate-200 block truncate">${esc(s.name)}</span>
+          </label>`;
+        }).join('');
+        serverGrid.querySelectorAll('.pi-server-cb').forEach(cb => {
+          cb.addEventListener('change', () => {
+            const idx = Number.parseInt(cb.value, 10);
+            if (cb.checked) selectedIndexes.add(idx); else selectedIndexes.delete(idx);
+            renderServers();
+            updateInstallBtn();
+          });
+        });
+        updateServerCount();
+      }
+
+      function updateServerCount() {
+        serverCountEl.textContent = selectedIndexes.size + ' seleccionada' + (selectedIndexes.size !== 1 ? 's' : '');
+      }
+
+      selectAllBtn.addEventListener('click', () => {
+        servers.forEach(s => selectedIndexes.add(s.index));
+        renderServers();
+        updateInstallBtn();
+      });
+      clearAllBtn.addEventListener('click', () => {
+        selectedIndexes.clear();
+        renderServers();
+        updateInstallBtn();
+      });
+
+      async function loadServers() {
+        try {
+          const data = await api('/api/plugin/servers');
+          servers = (data.servers || []).slice().sort(
+            (a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' })
+          );
+          renderServers();
+        } catch (err) {
+          serverGrid.innerHTML = `<div class="text-xs text-red-300 text-center py-4 col-span-full">${esc(err.message)}</div>`;
+        }
+      }
+
+      // --- Install ---
+      function updateInstallBtn() {
+        installBtn.disabled = !selectedFile || !typeSelect.value || selectedIndexes.size === 0 || pollTimer !== null;
+      }
+      typeSelect.addEventListener('change', updateInstallBtn);
+
+      function setProgress(pct, phase, tone) {
+        const safe = Math.max(0, Math.min(100, Math.round(pct)));
+        percentEl.textContent = safe + '%';
+        phaseEl.textContent = phase;
+        progressBar.style.width = safe + '%';
+        progressBar.classList.remove('bg-primary-500', 'bg-emerald-500', 'bg-red-500');
+        if (tone === 'success') progressBar.classList.add('bg-emerald-500');
+        else if (tone === 'error') progressBar.classList.add('bg-red-500');
+        else progressBar.classList.add('bg-primary-500');
+      }
+
+      function inferProgress(output, status) {
+        const steps = (output.match(/Paso \d+\/5/g) || []).length;
+        const total = numServersForJob * 5;
+        if (status === 'success') return { pct: 100, phase: 'Instalacion completada' };
+        if (status === 'failed') {
+          const p = total > 0 ? Math.min(99, Math.round((steps / total) * 100)) : 50;
+          return { pct: p, phase: 'Error durante la instalacion' };
+        }
+        if (total === 0) return { pct: 5, phase: 'Iniciando...' };
+        const p = Math.min(99, Math.max(5, Math.round((steps / total) * 100)));
+        return { pct: p, phase: steps + '/' + total + ' pasos completados' };
+      }
+
+      function renderResults(results) {
+        if (!results || !results.length) return;
+        resultsEl.classList.remove('hidden');
+        resultsList.innerHTML = results.map(r => {
+          const color = r.success ? 'border-emerald-600/40' : 'border-red-600/40';
+          const icon = r.success
+            ? '<span class="text-emerald-400 text-lg mr-2">&#10003;</span>'
+            : '<span class="text-red-400 text-lg mr-2">&#10007;</span>';
+          const detail = r.error_detail
+            ? `<p class="text-xs text-red-300 mt-1 break-words">${esc(r.error_detail.split('\n')[0])}</p>`
+            : '';
+          return `<div class="border ${color} rounded-lg px-4 py-3 flex items-start">
+            ${icon}
+            <div class="min-w-0">
+              <span class="text-sm font-medium text-slate-100">${esc(r.server_name)}</span>
+              ${detail}
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      async function pollJob(jobId) {
+        try {
+          const data = await api('/api/jobs/' + jobId);
+          const output = data.output || '(sin salida aun)';
+          outputEl.textContent = output;
+          outputEl.scrollTop = outputEl.scrollHeight;
+          const inf = inferProgress(output, data.status);
+          if (data.status === 'queued' || data.status === 'running') {
+            setProgress(inf.pct, inf.phase, 'running');
+            return;
+          }
+          clearInterval(pollTimer);
+          pollTimer = null;
+          installBtn.disabled = false;
+          installBtn.textContent = 'Instalar plugin';
+          if (data.status === 'success') {
+            setProgress(100, 'Instalacion completada', 'success');
+          } else {
+            setProgress(inf.pct, inf.phase, 'error');
+          }
+          if (data.results) renderResults(data.results);
+          updateInstallBtn();
+        } catch (err) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          installBtn.disabled = false;
+          installBtn.textContent = 'Instalar plugin';
+          setProgress(50, 'Error consultando estado', 'error');
+          updateInstallBtn();
+        }
+      }
+
+      installBtn.addEventListener('click', async () => {
+        if (!selectedFile || !typeSelect.value || selectedIndexes.size === 0) return;
+        if (!hasPermission('can_access_plugin_cloner')) {
+          toaster.show('No tienes permiso para usar el clonador de plugins.', 'warning');
+          return;
+        }
+
+        installBtn.disabled = true;
+        installBtn.textContent = 'Instalando...';
+        statusBar.classList.remove('hidden');
+        outputEl.classList.remove('hidden');
+        outputEl.textContent = '';
+        resultsEl.classList.add('hidden');
+        resultsList.innerHTML = '';
+        setProgress(2, 'Enviando archivo...', 'running');
+
+        numServersForJob = selectedIndexes.size;
+
+        const formData = new FormData();
+        formData.append('plugin_zip', selectedFile);
+        formData.append('plugin_type', typeSelect.value);
+        formData.append('server_indexes', JSON.stringify([...selectedIndexes]));
+
+        try {
+          const res = await fetch('/api/plugin/install', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (!res.ok) {
+            if (res.status === 401) {
+              toaster.show('Tu sesion ha expirado. Vuelve a iniciar sesion.', 'error');
+              currentUser = null;
+              showLoginView();
+              return;
+            }
+            if (res.status === 409 && data.running_job_id) {
+              throw new Error('Ya hay otra instalacion en ejecucion.');
+            }
+            throw new Error(data.error || 'Error al enviar el formulario.');
+          }
+          currentJobId = data.job_id;
+          setProgress(5, 'Job encolado', 'running');
+          await pollJob(currentJobId);
+          pollTimer = setInterval(() => pollJob(currentJobId), 1500);
+        } catch (err) {
+          installBtn.disabled = false;
+          installBtn.textContent = 'Instalar plugin';
+          setProgress(0, err.message || 'Error inesperado', 'error');
+          if (!outputEl.textContent.trim()) outputEl.textContent = '(sin salida: la ejecucion no llego a iniciar)';
+          updateInstallBtn();
+        }
+      });
+
+      window.__pluginLoad = async function () {
+        if (loaded) return;
+        loaded = true;
+        await Promise.all([loadTypes(), loadServers()]);
+      };
+    })();
+
+    // ====== Alexia Cloner IIFE ========================================
+    (function () {
+      let loaded = false;
+      let axBatchData = null;
+      let axCurrentJobId = null;
+      let axPollInterval = null;
+      let axCurrentBatchId = null;
+      let axBatchPollInterval = null;
+      let axSelectedCourseId = null;
+
+      const $ = id => document.getElementById(id);
+
+      // --- Config ---
+      async function loadAxConfig() {
+        try {
+          const cfg = await api('/api/alexia/config');
+          for (const server of ['catalejo', 'alexia']) {
+            const s = cfg[server] || {};
+            $(`ax-cfg-${server}-host`).value = s.host || '';
+            $(`ax-cfg-${server}-port`).value = s.port || 22;
+            $(`ax-cfg-${server}-user`).value = s.ssh_user || '';
+            $(`ax-cfg-${server}-key`).value = s.ssh_key_path || '';
+            $(`ax-cfg-${server}-moodle`).value = s.moodle_path || '';
+            $(`ax-cfg-${server}-data`).value = s.moodledata_path || '';
+            $(`ax-cfg-${server}-webuser`).value = s.web_user || 'www-data';
+          }
+        } catch (e) { console.error('Error loading alexia config:', e); }
+      }
+
+      window.__axSaveConfig = async function () {
+        const data = {};
+        for (const server of ['catalejo', 'alexia']) {
+          data[server] = {
+            host: $(`ax-cfg-${server}-host`).value,
+            port: parseInt($(`ax-cfg-${server}-port`).value) || 22,
+            ssh_user: $(`ax-cfg-${server}-user`).value,
+            ssh_key_path: $(`ax-cfg-${server}-key`).value,
+            moodle_path: $(`ax-cfg-${server}-moodle`).value,
+            moodledata_path: $(`ax-cfg-${server}-data`).value,
+            web_user: $(`ax-cfg-${server}-webuser`).value,
+          };
+          const pass = $(`ax-cfg-${server}-pass`).value;
+          if (pass) data[server].ssh_password = pass;
+          const sudo = $(`ax-cfg-${server}-sudo`).value;
+          if (sudo) data[server].sudo_password = sudo;
+        }
+        try {
+          const res = await api('/api/alexia/config', { method: 'POST', body: JSON.stringify(data) });
+          toaster.show(res.success ? 'Configuracion guardada' : ('Error: ' + (res.error || 'desconocido')), res.success ? 'success' : 'error');
+        } catch (e) { toaster.show('Error guardando configuracion', 'error'); }
+      };
+
+      window.__axTestConn = async function (server) {
+        const dot = document.querySelector(`#ax-status-${server} span:first-child`);
+        dot.className = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse';
+        try {
+          const res = await api('/api/alexia/test-connection', { method: 'POST', body: JSON.stringify({ server }) });
+          dot.className = res.success ? 'w-2 h-2 rounded-full bg-emerald-400' : 'w-2 h-2 rounded-full bg-red-400';
+          toaster.show(`${server}: ${res.success ? 'conexion exitosa' : (res.error || 'fallo')}`, res.success ? 'success' : 'error');
+        } catch (e) {
+          dot.className = 'w-2 h-2 rounded-full bg-red-400';
+          toaster.show(`${server}: error de conexion`, 'error');
+        }
+      };
+
+      // --- Config panel toggle ---
+      $('ax-config-toggle').addEventListener('click', () => {
+        $('ax-config-panel').classList.toggle('hidden');
+      });
+
+      // --- Sub-tabs ---
+      function switchAxTab(tab) {
+        document.querySelectorAll('.ax-tab').forEach(b => {
+          b.classList.remove('text-white', 'border-primary-500');
+          b.classList.add('text-slate-400', 'border-transparent');
+        });
+        document.querySelectorAll('.ax-tab-content').forEach(c => c.classList.add('hidden'));
+        const btn = document.querySelector(`.ax-tab[data-ax-tab="${tab}"]`);
+        if (btn) {
+          btn.classList.remove('text-slate-400', 'border-transparent');
+          btn.classList.add('text-white', 'border-primary-500');
+        }
+        const content = $(`ax-tab-${tab}`);
+        if (content) content.classList.remove('hidden');
+      }
+
+      document.querySelectorAll('.ax-tab').forEach(btn => {
+        btn.addEventListener('click', () => switchAxTab(btn.dataset.axTab));
+      });
+
+      // --- Batch Upload ---
+      const dropZone = $('ax-drop-zone');
+      const fileInput = $('ax-file-input');
+
+      dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-primary-500', 'bg-primary-500/5'); });
+      dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-primary-500', 'bg-primary-500/5'); });
+      dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('border-primary-500', 'bg-primary-500/5');
+        if (e.dataTransfer.files[0]) uploadAxFile(e.dataTransfer.files[0]);
+      });
+      dropZone.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files[0]) uploadAxFile(fileInput.files[0]);
+        fileInput.value = '';
+      });
+
+      async function uploadAxFile(file) {
+        if (!file.name.endsWith('.xlsx')) { toaster.show('Solo se aceptan archivos .xlsx', 'error'); return; }
+        $('ax-upload-loading').classList.remove('hidden');
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const r = await fetch('/api/alexia/upload-excel', { method: 'POST', body: formData });
+          const data = await r.json();
+          if (!data.success) { toaster.show(data.error || 'Error procesando archivo', 'error'); return; }
+          axBatchData = data;
+          renderAxBatchResults();
+        } catch (e) { toaster.show('Error subiendo archivo: ' + e.message, 'error'); }
+        finally { $('ax-upload-loading').classList.add('hidden'); }
+      }
+
+      function resetAxUpload() {
+        axBatchData = null;
+        axCurrentBatchId = null;
+        if (axBatchPollInterval) { clearInterval(axBatchPollInterval); axBatchPollInterval = null; }
+        $('ax-batch-results').classList.add('hidden');
+        $('ax-upload-section').classList.remove('hidden');
+        $('ax-batch-progress-card').classList.add('hidden');
+      }
+
+      $('ax-btn-reset').addEventListener('click', resetAxUpload);
+
+      function renderAxBatchResults() {
+        $('ax-upload-section').classList.add('hidden');
+        $('ax-batch-results').classList.remove('hidden');
+        $('ax-count-exportable').textContent = axBatchData.exportable_count;
+        $('ax-count-ignored').textContent = axBatchData.ignored_count;
+        axBatchData.exportable.forEach(r => { if (r._selected === undefined) r._selected = true; });
+        renderAxTable();
+        updateAxSelectedCount();
+      }
+
+      function renderAxTable(filter) {
+        const tbody = $('ax-batch-table-body');
+        const lf = (filter || '').toLowerCase();
+        let html = '';
+        axBatchData.exportable.forEach((r, i) => {
+          if (lf) {
+            const searchable = `${r.reducido_grupo} ${r.codigo_oficial} ${r.id_centro} ${r.especialidad} ${r.shortname_alexia}`.toLowerCase();
+            if (!searchable.includes(lf)) return;
+          }
+          const statusClass = r._status ? `ax-st-${r._status}` : 'ax-st-pending';
+          const statusLabel = r._statusLabel || 'Pendiente';
+          const checked = r._selected ? 'checked' : '';
+          const disabled = r._status && r._status !== 'pending' ? 'disabled' : '';
+          const modBadge = r.modalidad_derivada === 'VIRTUAL'
+            ? '<span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-600/30 text-purple-300">VIRTUAL</span>'
+            : '<span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-600/30 text-emerald-300">PRESENCIAL</span>';
+          html += `<tr class="border-b border-slate-800/40 hover:bg-slate-800/20" data-ax-idx="${i}">
+            <td class="px-2.5 py-1.5"><input type="checkbox" ${checked} ${disabled} data-ax-row="${i}" class="ax-row-check h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-primary-500"></td>
+            <td class="px-2.5 py-1.5 text-xs text-slate-200 max-w-[120px] truncate" title="${escapeHtml(r.reducido_grupo)}">${escapeHtml(r.reducido_grupo)}</td>
+            <td class="px-2.5 py-1.5 text-xs font-medium text-primary-400">${escapeHtml(r.codigo_oficial)}</td>
+            <td class="px-2.5 py-1.5 text-xs text-slate-300 max-w-[100px] truncate" title="${escapeHtml(r.nombre_centro)}">${escapeHtml(r.id_centro)}</td>
+            <td class="px-2.5 py-1.5 text-xs text-slate-300">${escapeHtml(r.ejercicio)}</td>
+            <td class="px-2.5 py-1.5 text-xs text-slate-300 max-w-[160px] truncate" title="${escapeHtml(r.especialidad)}">${escapeHtml(r.especialidad)}</td>
+            <td class="px-2.5 py-1.5">${modBadge}</td>
+            <td class="px-2.5 py-1.5 text-xs max-w-[160px] truncate" title="${escapeHtml(r.shortname_alexia)}"><code class="text-primary-300">${escapeHtml(r.shortname_alexia)}</code></td>
+            <td class="px-2.5 py-1.5"><span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${statusClass}">${statusLabel}</span></td>
+            <td class="px-2.5 py-1.5"><button data-ax-tree="${i}" class="ax-tree-btn text-slate-500 hover:text-primary-400" title="Ver arbol">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+            </button></td>
+          </tr>`;
+        });
+        if (!html) html = '<tr><td colspan="10" class="text-center text-slate-500 py-6 text-xs">No se encontraron filas</td></tr>';
+        tbody.innerHTML = html;
+        tbody.querySelectorAll('.ax-row-check').forEach(cb => {
+          cb.addEventListener('change', () => {
+            axBatchData.exportable[Number(cb.dataset.axRow)]._selected = cb.checked;
+            updateAxSelectedCount();
+          });
+        });
+        tbody.querySelectorAll('.ax-tree-btn').forEach(btn => {
+          btn.addEventListener('click', () => showAxTreePreview(Number(btn.dataset.axTree)));
+        });
+      }
+
+      $('ax-select-all').addEventListener('change', function () {
+        axBatchData.exportable.forEach(r => { if (!r._status || r._status === 'pending') r._selected = this.checked; });
+        renderAxTable($('ax-table-filter').value);
+        updateAxSelectedCount();
+      });
+
+      $('ax-table-filter').addEventListener('input', function () { renderAxTable(this.value); });
+
+      function updateAxSelectedCount() {
+        const count = axBatchData.exportable.filter(r => r._selected).length;
+        $('ax-count-selected').textContent = count;
+        $('ax-btn-batch-export').disabled = count === 0;
+      }
+
+      // --- Tree Modal ---
+      function showAxTreePreview(idx) {
+        const row = axBatchData.exportable[idx];
+        const path = row.category_path;
+        let html = '';
+        path.forEach((name, i) => {
+          const pad = i * 24;
+          const isLast = i === path.length - 1;
+          const connector = i === 0 ? '' : `<span class="text-primary-500 mr-1">${isLast ? '└' : '├'}─</span>`;
+          const textClass = isLast ? 'text-primary-300 font-semibold' : 'text-white';
+          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5">${connector}<span class="${textClass}">${escapeHtml(name)}</span></div>`;
+        });
+        const coursePad = path.length * 24;
+        html += `<div style="padding-left:${coursePad}px" class="flex items-center gap-1 py-0.5 mt-1">
+          <span class="text-primary-400 mr-1">└─</span>
+          <code class="text-primary-300 text-xs font-semibold">${escapeHtml(row.shortname_alexia)}</code>
+        </div>`;
+        $('ax-tree-modal-content').innerHTML = html;
+        $('ax-tree-modal').classList.remove('hidden');
+      }
+
+      $('ax-tree-modal-close').addEventListener('click', () => $('ax-tree-modal').classList.add('hidden'));
+      $('ax-tree-modal').addEventListener('click', function (e) { if (e.target === this) this.classList.add('hidden'); });
+
+      // --- Batch Export ---
+      $('ax-btn-batch-export').addEventListener('click', async function () {
+        const selected = axBatchData.exportable.filter(r => r._selected);
+        if (!selected.length) { toaster.show('Seleccione al menos una fila', 'warning'); return; }
+        this.disabled = true;
+        const rows = selected.map(r => ({ form_data: r.form_data, shortname_alexia: r.shortname_alexia, category_path: r.category_path }));
+        selected.forEach(r => { r._status = 'pending'; r._statusLabel = 'Pendiente'; });
+        renderAxTable($('ax-table-filter').value);
+        $('ax-batch-progress-card').classList.remove('hidden');
+        $('ax-batch-steps').innerHTML = '';
+        $('ax-batch-progress-bar').style.width = '0%';
+        $('ax-batch-progress-pct').textContent = '0%';
+        try {
+          const data = await api('/api/alexia/export-batch', { method: 'POST', body: JSON.stringify({ rows }) });
+          if (data.error) { toaster.show(data.error, 'error'); this.disabled = false; return; }
+          axCurrentBatchId = data.batch_id;
+          pollAxBatch();
+        } catch (e) { toaster.show('Error iniciando batch: ' + e.message, 'error'); this.disabled = false; }
+      });
+
+      function pollAxBatch() {
+        if (!axCurrentBatchId) return;
+        if (axBatchPollInterval) clearInterval(axBatchPollInterval);
+        axBatchPollInterval = setInterval(async () => {
+          try {
+            const job = await api(`/api/alexia/jobs/batch/${axCurrentBatchId}`);
+            renderAxBatchProgress(job);
+            if (job.status === 'completed' || job.status === 'failed') {
+              clearInterval(axBatchPollInterval);
+              axBatchPollInterval = null;
+              $('ax-btn-batch-export').disabled = false;
+            }
+          } catch (e) { console.error('Batch poll error:', e); }
+        }, 2000);
+      }
+
+      function renderAxBatchProgress(job) {
+        $('ax-batch-progress-bar').style.width = job.progress + '%';
+        $('ax-batch-progress-pct').textContent = job.progress + '%';
+        $('ax-bp-completed').textContent = job.completed_count || 0;
+        $('ax-bp-errors').textContent = job.error_count || 0;
+        $('ax-bp-pending').textContent = (job.total - (job.completed_count || 0) - (job.error_count || 0));
+        const stepsEl = $('ax-batch-steps');
+        stepsEl.innerHTML = (job.steps || []).slice(-8).map(s =>
+          `<div class="text-xs text-slate-400 flex items-center gap-1.5"><span class="text-primary-500">&rsaquo;</span> ${escapeHtml(s.message)}</div>`
+        ).join('');
+        stepsEl.scrollTop = stepsEl.scrollHeight;
+        if (job.rows && axBatchData) {
+          const selected = axBatchData.exportable.filter(r => r._selected);
+          const labels = { pending:'Pendiente', searching:'Buscando...', backing_up:'Backup...', restoring:'Restaurando...', completed:'Completado', error:'Error' };
+          job.rows.forEach((jr, i) => {
+            if (i < selected.length) {
+              selected[i]._status = jr.status;
+              selected[i]._statusLabel = labels[jr.status] || jr.status;
+              if (jr.error) selected[i]._error = jr.error;
+              if (jr.result) selected[i]._result = jr.result;
+            }
+          });
+          renderAxTable($('ax-table-filter').value);
+        }
+      }
+
+      // --- Single Export ---
+      $('ax-search-btn').addEventListener('click', searchAxCourses);
+      $('ax-search-input').addEventListener('keydown', e => { if (e.key === 'Enter') searchAxCourses(); });
+
+      async function searchAxCourses() {
+        const query = $('ax-search-input').value.trim();
+        if (!query) return;
+        const list = $('ax-search-list');
+        const results = $('ax-search-results');
+        list.innerHTML = '<div class="p-3 text-sm text-slate-400">Buscando...</div>';
+        results.classList.remove('hidden');
+        try {
+          const data = await api('/api/alexia/search-courses', { method: 'POST', body: JSON.stringify({ query }) });
+          if (!data.success) { list.innerHTML = `<div class="p-3 text-sm text-red-400">${escapeHtml(data.error)}</div>`; return; }
+          if (!data.courses || !data.courses.length) { list.innerHTML = '<div class="p-3 text-sm text-slate-400">No se encontraron cursos</div>'; return; }
+          list.innerHTML = data.courses.map(c => `
+            <div class="cursor-pointer px-3 py-2 border-b border-slate-800 hover:bg-slate-800 last:border-0" data-ax-cid="${c.id}" data-ax-cfull="${escapeHtml(c.fullname)}" data-ax-cshort="${escapeHtml(c.shortname)}">
+              <div class="text-sm text-white">${escapeHtml(c.fullname)}</div>
+              <div class="text-xs text-slate-400">${escapeHtml(c.shortname)} | ID: ${c.id} | ${escapeHtml(c.category_name)}</div>
+            </div>`).join('');
+          list.querySelectorAll('[data-ax-cid]').forEach(el => {
+            el.addEventListener('click', () => {
+              axSelectedCourseId = Number(el.dataset.axCid);
+              $('ax-selected-course').classList.remove('hidden');
+              $('ax-selected-course-name').textContent = el.dataset.axCfull;
+              $('ax-selected-course-id').textContent = `ID: ${el.dataset.axCid} | ${el.dataset.axCshort}`;
+              results.classList.add('hidden');
+            });
+          });
+        } catch (e) { list.innerHTML = `<div class="p-3 text-sm text-red-400">Error: ${escapeHtml(e.message)}</div>`; }
+      }
+
+      $('ax-clear-course').addEventListener('click', () => {
+        axSelectedCourseId = null;
+        $('ax-selected-course').classList.add('hidden');
+      });
+
+      function axDeriveModalidad(reducido) {
+        if (!reducido || !reducido.trim()) return '';
+        const last = reducido.trim().slice(-1).toUpperCase();
+        if (last === 'V') return 'VIRTUAL';
+        if (last === 'P') return 'PRESENCIAL';
+        return 'PRESENCIAL';
+      }
+
+      function updateAxTree() {
+        const ejercicio = $('ax-f-ejercicio').value.trim();
+        const idCentro = $('ax-f-id-centro').value.trim();
+        const reducido = $('ax-f-reducido-grupo').value.trim();
+        const especialidad = $('ax-f-especialidad').value.trim();
+        const pertenece = $('ax-f-pertenece-curso').value.trim();
+        const codigo = $('ax-f-codigo-oficial').value.trim();
+        const modalidad = axDeriveModalidad(reducido);
+        const modDisplay = $('ax-f-modalidad-display');
+        if (modalidad) {
+          const cls = modalidad === 'PRESENCIAL' ? 'bg-emerald-600/30 text-emerald-300' : 'bg-purple-600/30 text-purple-300';
+          modDisplay.innerHTML = `<span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${cls}">${modalidad}</span>`;
+        } else {
+          modDisplay.innerHTML = '<span class="text-slate-500">Auto-detectada</span>';
+        }
+        const tree = $('ax-tree-preview');
+        const levels = [
+          { label: 'Ejercicio', value: ejercicio },
+          { label: 'ID Centro', value: idCentro },
+          { label: 'Modalidad', value: modalidad },
+          { label: 'Especialidad', value: especialidad },
+          { label: 'Pertenece Curso', value: pertenece },
+        ];
+        if (!levels.some(l => l.value)) { tree.innerHTML = '<p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>'; return; }
+        let html = '';
+        for (let i = 0; i < levels.length; i++) {
+          const l = levels[i];
+          const isLast = i === levels.length - 1;
+          const value = l.value || '...';
+          const valueClass = l.value ? (isLast ? 'text-primary-300 font-semibold' : 'text-white') : 'text-slate-600 italic';
+          const pad = i * 20;
+          const connector = i === 0 ? '' : `<span class="text-primary-500 mr-1">${isLast ? '└' : '├'}─</span>`;
+          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5">
+            ${connector}<span class="text-slate-400 text-xs">${l.label}:</span><span class="${valueClass} text-sm">${escapeHtml(value)}</span></div>`;
+        }
+        if (levels[levels.length - 1].value) {
+          const shortname = [reducido, codigo, idCentro, ejercicio].filter(Boolean).join('_');
+          const pad = levels.length * 20;
+          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5 mt-1">
+            <span class="text-primary-400 mr-1">└─</span>
+            <span class="text-primary-300 text-xs italic">Curso importado aqui</span></div>`;
+          if (shortname) {
+            html += `<div style="padding-left:${pad + 20}px" class="mt-2 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 inline-block">
+              <span class="text-slate-400 text-xs">Codigo Alexia:</span>
+              <span class="text-primary-300 text-sm font-semibold ml-1">${escapeHtml(shortname)}</span></div>`;
+          }
+        }
+        tree.innerHTML = html;
+      }
+
+      ['ax-f-ejercicio', 'ax-f-id-centro', 'ax-f-especialidad', 'ax-f-pertenece-curso', 'ax-f-codigo-oficial', 'ax-f-reducido-grupo'].forEach(id => {
+        $(id).addEventListener('input', updateAxTree);
+      });
+
+      $('ax-btn-export').addEventListener('click', async function () {
+        if (!axSelectedCourseId) { toaster.show('Seleccione un curso de Catalejo primero', 'warning'); return; }
+        const fields = {
+          ejercicio: $('ax-f-ejercicio').value.trim(),
+          id_centro: $('ax-f-id-centro').value.trim(),
+          nombre_centro: $('ax-f-nombre-centro').value.trim(),
+          especialidad: $('ax-f-especialidad').value.trim(),
+          pertenece_curso: $('ax-f-pertenece-curso').value.trim(),
+          codigo_oficial: $('ax-f-codigo-oficial').value.trim(),
+          reducido_grupo: $('ax-f-reducido-grupo').value.trim(),
+          estudio: $('ax-f-estudio').value.trim(),
+          mat1: $('ax-f-mat1').value.trim(),
+          mat2: $('ax-f-mat2').value.trim(),
+          area: $('ax-f-area').value.trim(),
+        };
+        const required = ['ejercicio','id_centro','especialidad','pertenece_curso','codigo_oficial','reducido_grupo'];
+        if (required.some(f => !fields[f])) { toaster.show('Complete los campos obligatorios (*)', 'warning'); return; }
+        this.disabled = true;
+        const statusCard = $('ax-export-status-card');
+        statusCard.classList.remove('hidden');
+        $('ax-export-steps').innerHTML = '';
+        $('ax-export-result').classList.add('hidden');
+        $('ax-progress-bar').style.width = '0%';
+        $('ax-progress-percent').textContent = '0%';
+        try {
+          const data = await api('/api/alexia/export', { method: 'POST', body: JSON.stringify({ course_id: axSelectedCourseId, form_data: fields }) });
+          if (data.error) { toaster.show(data.error, 'error'); this.disabled = false; return; }
+          axCurrentJobId = data.job_id;
+          pollAxJob();
+        } catch (e) { toaster.show('Error: ' + e.message, 'error'); this.disabled = false; }
+      });
+
+      function pollAxJob() {
+        if (!axCurrentJobId) return;
+        if (axPollInterval) clearInterval(axPollInterval);
+        axPollInterval = setInterval(async () => {
+          try {
+            const job = await api(`/api/alexia/jobs/${axCurrentJobId}`);
+            renderAxJobStatus(job);
+            if (job.status === 'completed' || job.status === 'failed') {
+              clearInterval(axPollInterval); axPollInterval = null;
+              $('ax-btn-export').disabled = false;
+            }
+          } catch (e) { console.error('Poll error:', e); }
+        }, 1500);
+      }
+
+      function renderAxJobStatus(job) {
+        $('ax-progress-bar').style.width = job.progress + '%';
+        $('ax-progress-percent').textContent = job.progress + '%';
+        const stepsEl = $('ax-export-steps');
+        stepsEl.innerHTML = (job.steps || []).map((s, i) => {
+          const isLast = i === job.steps.length - 1;
+          const icon = job.status === 'failed' && isLast
+            ? '<svg class="w-4 h-4 text-red-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>'
+            : job.status === 'completed' || !isLast
+              ? '<svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>'
+              : '<div class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin shrink-0"></div>';
+          const textClass = isLast && job.status === 'failed' ? 'text-red-400' : isLast && job.status !== 'completed' ? 'text-white' : 'text-slate-400';
+          return `<div class="flex items-start gap-2">${icon}<span class="${textClass} text-xs">${escapeHtml(s.message)}</span></div>`;
+        }).join('');
+        const resultEl = $('ax-export-result');
+        if (job.status === 'completed' && job.result) {
+          resultEl.classList.remove('hidden');
+          resultEl.innerHTML = `<div class="bg-slate-800 border border-emerald-600/40 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-2">
+              <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+              <span class="text-emerald-300 font-semibold text-sm">Curso exportado exitosamente</span>
+            </div>
+            <div class="text-xs text-slate-300 space-y-1">
+              <p><strong class="text-slate-100">Curso:</strong> ${escapeHtml(job.result.course_fullname)}</p>
+              <p><strong class="text-slate-100">ID:</strong> ${job.result.course_id}</p>
+              ${job.result.course_url ? `<a href="${job.result.course_url}" target="_blank" class="inline-block mt-2 text-primary-400 hover:text-primary-300 underline">Abrir curso en Alexia &rarr;</a>` : ''}
+            </div></div>`;
+        } else if (job.status === 'failed') {
+          resultEl.classList.remove('hidden');
+          resultEl.innerHTML = `<div class="bg-slate-800 border border-red-600/40 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-1">
+              <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+              <span class="text-red-400 font-semibold text-sm">Error en la exportacion</span>
+            </div>
+            <p class="text-xs text-red-300 mt-1">${escapeHtml(job.error)}</p></div>`;
+        }
+      }
+
+      // --- Init ---
+      window.__alexiaLoad = async function () {
+        if (loaded) return;
+        loaded = true;
+        switchAxTab('batch');
+        await loadAxConfig();
+        updateAxTree();
+      };
     })();
 
     // ====== Boot ====================================================

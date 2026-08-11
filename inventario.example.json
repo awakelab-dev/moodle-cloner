@@ -8,6 +8,8 @@
     "ssh_key_path": "/home/ubuntu/.ssh/id_ed25519",
     "ssh_key_passphrase": "",
     "moodle_path": "/var/www/html/moodle/ejemplo",
+    "moodledata_path": "/var/www/data/moodle/ejemplo",
+    "vhost_path": "/etc/nginx/sites-available/ejemplo.awakelab.world",
     "web_user": "www-data",
     "web_group": "www-data",
     "sudo_requires_password": false,
