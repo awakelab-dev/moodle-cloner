@@ -40,7 +40,7 @@
        Rendering it by default degrades to "login shown" instead. The boot code
        hides it via showAppView() when there is already a valid session. -->
   <div id="login-view" class="flex min-h-screen items-center justify-center px-4 py-10">
-    <div class="w-full max-w-md bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-8">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-8">
       <h1 class="text-2xl font-semibold text-slate-50">Iniciar sesion</h1>
       <p class="text-sm text-slate-400 mt-1 mb-6">Accede a la plataforma de clonado.</p>
       <form id="login-form" class="space-y-4">
@@ -80,14 +80,10 @@
   <div id="app-view" class="hidden min-h-screen flex flex-col">
 
     <!-- Top header / nav -->
-    <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-30">
+    <header class="border-b border-slate-800 bg-slate-900 sticky top-0 z-30">
       <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <img src="/assets/logo.png" alt="AWAKELAB" class="h-9 w-auto" />
-          <div class="hidden sm:flex items-center gap-2 text-xs text-slate-400">
-            <span>Plataforma de clonado</span>
-            <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-slate-300">v{{APP_VERSION}}</span>
-          </div>
         </div>
 
         <nav class="flex items-center gap-1">
@@ -114,7 +110,7 @@
       </div>
 
       <!-- Dropdown menu panel (admin controls) -->
-      <div id="mobile-menu" class="hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur">
+      <div id="mobile-menu" class="hidden border-t border-slate-800 bg-slate-900">
         <div class="max-w-6xl mx-auto px-6 py-3 flex flex-col gap-1">
           <div id="menu-user-label" class="px-3 py-1.5 text-xs text-slate-400"></div>
           <button id="mobile-platforms-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plataformas</button>
@@ -130,7 +126,7 @@
 
         <!-- Section: Moodle cloner (the original form) -->
         <section id="section-moodle" class="app-section">
-          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
               <div>
                 <h1 class="text-2xl font-semibold text-slate-50">Clonador de Instancias Moodle</h1>
@@ -322,7 +318,7 @@
 
         <!-- Section: Course cloner -->
         <section id="section-course" class="app-section hidden">
-          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between gap-4">
               <div>
                 <h1 class="text-2xl font-semibold text-slate-50">Clonador de cursos</h1>
@@ -523,7 +519,7 @@
 
         <!-- Section: Plugin cloner -->
         <section id="section-plugin" class="app-section hidden">
-          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6">
               <h1 class="text-2xl font-semibold text-slate-50">Clonador de plugins</h1>
               <p class="text-sm text-slate-400 mt-1">Instala plugins Moodle (.zip) en multiples plataformas simultaneamente por SSH.</p>
@@ -599,7 +595,7 @@
 
         <!-- Section: Alexia cloner -->
         <section id="section-alexia" class="app-section hidden">
-          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
               <div>
                 <h1 class="text-2xl font-semibold text-slate-50">Clonador Alexia</h1>
@@ -855,7 +851,7 @@
             </div>
 
             <!-- Tree Preview Modal -->
-            <div id="ax-tree-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+            <div id="ax-tree-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
               <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
                 <div class="flex items-center justify-between mb-4">
                   <h3 class="text-sm font-semibold text-slate-100">Arbol de categorias</h3>
@@ -906,7 +902,7 @@
   </div>
 
   <!-- User editor modal -->
-  <div id="user-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+  <div id="user-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
     <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 id="user-modal-title" class="text-lg font-semibold text-slate-50">Nuevo usuario</h2>
@@ -960,7 +956,7 @@
   </div>
 
   <!-- Self-account modal: change own password -->
-  <div id="account-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+  <div id="account-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
     <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-slate-50">Mi cuenta</h2>
@@ -985,6 +981,16 @@
       </form>
     </div>
   </div>
+
+  <!-- Etiqueta de version fija al pie. Fuera de #login-view y #app-view a
+       proposito, para que se vea en las dos. pointer-events-none para no tapar
+       clicks, y z-20 para quedar debajo del header (z-30) y de los modales (z-40). -->
+  <footer class="fixed inset-x-0 bottom-0 z-20 pointer-events-none flex justify-center pb-2">
+    <div class="flex items-center gap-2 text-[10px] text-slate-500">
+      <span>Plataforma de clonado</span>
+      <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-400">v{{APP_VERSION}}</span>
+    </div>
+  </footer>
 
   <script>
     // ====== Password show/hide toggle ===============================
