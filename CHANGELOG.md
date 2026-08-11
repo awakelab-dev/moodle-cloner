@@ -5,6 +5,15 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.11.2 - 2026-08-11
+
+Limpieza de repo: quitados de git 6 archivos vacios que se colaron en el commit `4fad552`.
+
+- **`_to_delete/git-stale-locks/*` destrackeado** (`git rm -r --cached`). Eran `.lock` vacios que dejo git al operar sobre la carpeta montada desde una sesion de Cowork, donde `rm` esta bloqueado: en vez de borrarse se movieron a `_to_delete/` y de ahi entraron al commit del merge. No afectan a la app, pero ensucian el arbol y aparecen en cualquier `git diff` entre ramas.
+- **`.gitignore`: agregado `_to_delete/`** para que no vuelva a pasar.
+- Los archivos siguen en disco (destrackear no los borra); la carpeta `_to_delete/` se elimina a mano.
+- Nota de deploy: el checkout del servidor habia divergido de `origin/main` por un merge hecho ahi mismo (`4c9f2a0`). Un checkout de deploy no debe tener historia propia — alinearlo con `git reset --hard origin/main` y fijar `git config pull.ff only` para que un pull divergente falle en vez de mergear.
+
 ## v0.11.1 - 2026-08-11
 
 Fix: eliminado `backdrop-blur` de toda la UI — en Safari 26 dejaba la pantalla completamente oscura, con el contenido presente y seleccionable pero sin pintar.
