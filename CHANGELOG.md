@@ -5,6 +5,18 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.18.0 - 2026-08-12
+
+UI: en Administrar plataformas el formulario pasa a modal y la lista ocupa todo el ancho con dos tarjetas por fila.
+
+- **El formulario de crear/editar es un modal** (`#pf-modal`). Antes ocupaba la mitad del ancho de la seccion de forma permanente, incluso cuando no se estaba editando nada. El `<form id="pf-form">` se movio tal cual dentro del modal, asi que toda la logica existente (`collectPayload`, `validate`, `startEdit`, los hints de contrasena guardada) sigue igual; solo cambio el contenedor.
+- **Nuevo boton "Agregar plataforma"** en la cabecera de la seccion, que abre el modal en blanco. Reemplaza a "Limpiar formulario", que ya no tenia sentido en la cabecera y ahora vive dentro del modal como "Limpiar", junto a "Cancelar".
+- **"Editar" en una tarjeta** abre el modal precargado, con el titulo "Editar plataforma: `<nombre>`". Antes hacia `scrollIntoView` hasta el formulario.
+- El modal cierra por la X, por "Cancelar", con **Escape** y con click en el velo — pero no con click dentro del panel (se compara `e.target === modalEl`, que es el velo). **Al cerrar siempre se limpia el formulario**, incluso con "Cancelar": si no, `state.editingIndex` quedaba apuntando a la plataforma que se estaba editando y los datos sobrevivian hasta el proximo abrir. Guardar con exito tambien cierra el modal.
+- **La lista pasa a grilla de dos tarjetas por fila** (`grid-cols-1 lg:grid-cols-2`), de izquierda a derecha y de arriba abajo, en vez de una sola columna de tarjetas estiradas a todo el ancho. Con la seccion completa disponible cada tarjeta queda en ~516px, practicamente el mismo ancho que tenia cuando compartia el espacio con el formulario.
+- **`items-start` en la grilla**: una tarjeta con el detalle de la verificacion desplegado (hasta 7 lineas) no estira a su vecina de fila. Los mensajes de "Cargando...", "No hay plataformas" y el de error llevan `col-span-full` para no quedar apretados en media fila.
+- Verificado en el navegador con las 35 plataformas: dos por fila con el orden correcto (18 filas, x=228 y x=756), el formulario ausente de la seccion, apertura desde "Agregar plataforma" (campos vacios, puerto 22, `www-data` por defecto, foco en Nombre) y desde "Editar" (precarga completa, titulo y boton correctos), los cuatro modos de cierre, que el click dentro del panel no cierre, que "Cancelar" limpie el estado de edicion, que guardar cierre el modal y refresque la lista, que la validacion de URL mantenga el modal abierto con el error visible, y que la verificacion masiva siga funcionando sobre la grilla. Cero errores de consola.
+
 ## v0.17.0 - 2026-08-12
 
 Feature: boton de verificacion en Administrar plataformas. Comprueba, plataforma por plataforma, que el sitio responda, que el SSH funcione y que las rutas existan de verdad en el servidor.
