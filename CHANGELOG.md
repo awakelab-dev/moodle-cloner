@@ -5,6 +5,16 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.12.1 - 2026-08-12
+
+Fix: restaurado el bit de ejecucion de `moodle-clone-web.sh`, que se perdio en v0.12.0, y el script ahora se invoca via `bash` para que ese permiso no pueda volver a romper el clonado.
+
+- **Causa**: el commit de v0.12.0 reescribio `moodle-clone-web.sh` desde fuera de git y el modo quedo en `100644` (antes era `100755`). Git versiona el bit de ejecucion, asi que el `git pull` en el servidor dejo el archivo sin permiso de ejecucion y los jobs morian con `[Errno 13] Permission denied: '/projects/moodle-cloner/moodle-clone-web.sh'`.
+- **`git update-index --chmod=+x moodle-clone-web.sh`**: el modo vuelve a `100755`.
+- **`app.py` invoca `["bash", str(SCRIPT_FILE)]`** en vez de `[str(SCRIPT_FILE)]`. El bit de ejecucion deja de ser un punto unico de fallo: el mensaje que producia era `[Errno 13] Permission denied` a secas, que no dice que el problema es el permiso del script y no algo del proceso de clonado.
+- **Chequeo previo mas claro**: antes de lanzar el job se valida `os.access(SCRIPT_FILE, os.R_OK)` y el error de "no encontrado" ahora incluye la ruta completa.
+- Verificado quitando el bit de ejecucion: la invocacion directa reproduce el `PermissionError` exacto de produccion, y via `bash` el script arranca normalmente.
+
 ## v0.12.0 - 2026-08-12
 
 Fix: `moodle-clone-web.sh` ahora dice en que maquina busco `config.php`, y puede leerlo cuando el usuario SSH no tiene permiso directo.

@@ -334,8 +334,13 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
     append_job_output(job_id, f"[{now_iso()}] Starting clone job...\n")
 
     try:
+        # Invocado como `bash <script>` en vez de ejecutarlo directo: asi el bit
+        # de ejecucion deja de ser un punto de fallo. Se perdio una vez al
+        # reescribir el archivo desde fuera de git (el modo quedo en 100644) y
+        # el job moria con un [Errno 13] Permission denied opaco, que no dice
+        # que el problema es el permiso del script y no algo del clonado.
         process = Popen(
-            [str(SCRIPT_FILE)],
+            ["bash", str(SCRIPT_FILE)],
             cwd=str(ROOT),
             env=env,
             stdout=PIPE,
@@ -1210,7 +1215,12 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             validated = validate_payload(payload)
 
             if not SCRIPT_FILE.exists():
-                raise ValueError("No se encontró moodle-clone-web.sh")
+                raise ValueError(f"No se encontró moodle-clone-web.sh en {SCRIPT_FILE}")
+            if not os.access(SCRIPT_FILE, os.R_OK):
+                raise ValueError(
+                    f"moodle-clone-web.sh existe en {SCRIPT_FILE} pero no se puede leer. "
+                    "Revisa permisos: debe ser legible por el usuario que corre la API."
+                )
 
             with jobs_lock:
                 running_job_id = next(
