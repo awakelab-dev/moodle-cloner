@@ -5,6 +5,20 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.15.0 - 2026-08-12
+
+Feature: si la base destino ya tiene datos, el clonado se detiene y pide permiso explicito para eliminarla. Y el error de SSH al destino ahora nombra el firewall de Lightsail.
+
+- **Que pasaba antes con una base destino preexistente**: `CREATE DATABASE IF NOT EXISTS` + import **no falla**, pero tampoco limpia. El dump trae `DROP TABLE`/`CREATE TABLE` por tabla, asi que sobreescribe las que trae y **deja intactas las que no**. Una base de una clonacion anterior a medias quedaba mezclada con restos desactualizados, en silencio.
+- **Nueva verificacion en el preflight del script**: cuenta las tablas de `DEST_DB` en `information_schema`. Corre **despues** de las guardas de seguridad (que ya garantizaron que `DEST_DB` no es la base de origen, que no esta en `PROTECTED_DATABASES` y que el host esta en la allowlist) y **antes** de habilitar el modo mantenimiento y del dump: si hay que abortar, se aborta sin haber tocado el origen. Esto importa porque origen y destino viven en el mismo cluster Aurora.
+- **`DROP_DEST_DB`** (default `0`): con tablas preexistentes y sin confirmacion, el script aborta con `Nada fue modificado` y sugiere confirmar el borrado o cambiar el nombre de la base. Con `DROP_DEST_DB=1` hace `DROP DATABASE` y la recrea vacia. En dry-run solo informa que la eliminaria.
+- **Nuevo endpoint `GET /api/clone/dest-db?name=<db>`** (permiso `can_access_moodle_cloner`): devuelve `{name, exists, tables}` consultando `information_schema` en el cluster destino. No modifica nada.
+- **Confirmacion en la UI antes de lanzar el job**: al pulsar Clonar (o Simular) se consulta ese endpoint y, si la base tiene tablas, se abre un modal que dice cuantas son, explica que importar encima deja restos, avisa que se va a eliminar la base completa de forma irreversible, y ofrece la alternativa de cambiar el nombre. Para habilitar el boton hay que **escribir el nombre exacto de la base**. Solo entonces se manda `drop_dest_db: true`.
+- Si el endpoint falla, no bloquea: se avisa por toaster y se sigue, porque el script hace la misma verificacion y aborta por su cuenta.
+- El Summary del script ahora imprime `Dest DB tables` y `Drop dest DB`.
+- **Mensaje de SSH al destino reescrito**: lista en orden el firewall IPv4 de Lightsail (con la nota de que la lista IPv6 es aparte), el security group de EC2, y el estado/IP de la instancia. Incluye el comando de metadata para obtener la IP publica del clonador, que es la que hay que habilitar.
+- Verificado: los 4 caminos del script (base con datos sin confirmar → aborta con exit 1; con datos confirmado → elimina; dry-run con datos → solo informa; base vacia → sigue) y los 5 del modal, extrayendo el codigo real del archivo (oculto al cargar, se abre con nombre y conteo correctos, boton deshabilitado con nombre parcial, habilitado con el exacto, y aceptar/cancelar/Escape/Enter devolviendo el valor esperado).
+
 ## v0.14.0 - 2026-08-12
 
 Fix: la conectividad SSH a origen y destino se prueba en el preflight, antes de tocar nada. Antes se probaba el destino al 74% del job, despues del dump y del import.

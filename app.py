@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from subprocess import PIPE, STDOUT, Popen
 from typing import Any, Callable, Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
@@ -104,6 +104,33 @@ jobs_lock = threading.Lock()
 
 def now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def dest_db_status(name: str) -> Dict[str, Any]:
+    """Cuenta las tablas de `name` en el cluster destino.
+
+    `tables > 0` significa que una clonacion anterior dejo datos ahi. El
+    caller decide que hacer; aca no se modifica nada.
+    """
+    try:
+        conn = db._connect(database=None)
+    except Exception as exc:
+        raise ValueError(f"No se pudo conectar al cluster destino: {exc}")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = %s",
+                (name,),
+            )
+            tables = int((cur.fetchone() or {}).get("n") or 0)
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = %s",
+                (name,),
+            )
+            exists = int((cur.fetchone() or {}).get("n") or 0) > 0
+    finally:
+        conn.close()
+    return {"name": name, "exists": exists, "tables": tables}
 
 
 def bool_to_env(value: Any) -> str:
@@ -333,6 +360,9 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "target_db_admin_pass": target_db_admin_pass,
         "dest_db": dest_db,
         "maintenance_source": bool(payload.get("maintenance_source", True)),
+        # Solo lo manda la UI tras una confirmacion explicita del usuario. El
+        # script aborta si la base destino tiene tablas y esto no viene en true.
+        "drop_dest_db": bool(payload.get("drop_dest_db", False)),
         "opt_replace": bool(payload.get("opt_replace", True)),
         "opt_purge": bool(payload.get("opt_purge", True)),
         "opt_nginx": bool(payload.get("opt_nginx", True)),
@@ -403,6 +433,7 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "DB_USER": payload["target_db_user"],
             "DB_PASS": payload["target_db_pass"],
             "ENABLE_SRC_MAINT": bool_to_env(payload["maintenance_source"]),
+            "DROP_DEST_DB": bool_to_env(payload["drop_dest_db"]),
             "ENABLE_REPLACE": bool_to_env(payload["opt_replace"]),
             "ENABLE_PURGE": bool_to_env(payload["opt_purge"]),
             "ENABLE_NGINX": bool_to_env(payload["opt_nginx"]),
@@ -799,6 +830,17 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
 
         if path == "/api/version":
             self._send_json(200, {"version": APP_VERSION}, send_body=send_body)
+            return
+
+        # Estado de una BD destino, para que la UI pueda advertir ANTES de
+        # lanzar el job (y pedir confirmacion del borrado) en vez de que el
+        # usuario descubra la base preexistente leyendo el log.
+        if path == "/api/clone/dest-db":
+            self._require_permission("can_access_moodle_cloner")
+            name = (parse_qs(parsed.query).get("name") or [""])[0].strip()
+            if not re.fullmatch(r"[A-Za-z0-9_]+", name):
+                raise ValueError("Nombre de base destino inválido.")
+            self._send_json(200, dest_db_status(name), send_body=send_body)
             return
 
         # Auth status

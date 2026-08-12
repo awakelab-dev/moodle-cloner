@@ -982,6 +982,46 @@
     </div>
   </div>
 
+  <!-- Confirmacion de borrado de la BD destino. Se abre solo si la base ya
+       tiene tablas: es una operacion destructiva sobre el mismo cluster Aurora
+       donde vive produccion, asi que exige escribir el nombre de la base. -->
+  <div id="destdb-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
+    <div class="w-full max-w-lg bg-slate-900 border border-amber-700/60 rounded-2xl shadow-2xl shadow-slate-950/60 p-6">
+      <div class="flex items-start gap-3">
+        <svg class="w-6 h-6 text-amber-400 shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="min-w-0">
+          <h3 class="text-lg font-semibold text-slate-50">La base destino ya tiene datos</h3>
+          <p class="text-sm text-slate-300 mt-2">
+            <span class="font-mono text-amber-300" id="destdb-name"></span>
+            existe con <span class="font-semibold text-amber-300" id="destdb-tables"></span> tablas,
+            probablemente de una clonacion anterior que quedo a medias.
+          </p>
+          <p class="text-sm text-slate-400 mt-2">
+            Importar encima no falla, pero sobreescribe solo las tablas que trae el dump y
+            <span class="text-slate-200">deja las que no</span>, asi que la instancia quedaria
+            mezclada con restos desactualizados.
+          </p>
+          <p class="text-sm text-slate-300 mt-3">
+            Para continuar se va a <span class="font-semibold text-red-300">ELIMINAR la base completa</span>
+            y recrearla vacia. Esto es irreversible.
+          </p>
+          <p class="text-xs text-slate-500 mt-2">
+            Alternativa sin borrar nada: cerra esto y cambia el nombre de la base destino.
+          </p>
+          <label class="block text-xs font-medium text-slate-300 mt-4 mb-1">
+            Escribi el nombre de la base para confirmar
+          </label>
+          <input type="text" id="destdb-confirm-input" autocomplete="off" spellcheck="false"
+                 class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm font-mono text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent" />
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2 mt-5">
+        <button type="button" id="destdb-cancel" class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-800">Cancelar</button>
+        <button type="button" id="destdb-accept" disabled class="px-4 py-2 rounded-lg bg-red-600 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">Eliminar y clonar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Etiqueta de version fija al pie. Fuera de #login-view y #app-view a
        proposito, para que se vea en las dos. pointer-events-none para no tapar
        clicks, y z-20 para quedar debajo del header (z-30) y de los modales (z-40). -->
@@ -2754,7 +2794,7 @@
         return { progress, phase };
       }
 
-      function buildPayload(dryRun) {
+      function buildPayload(dryRun, dropDestDb) {
         const fd = new FormData(form);
         const deployTarget = String(fd.get('deploy_target') || 'local').trim();
         const sourceOrigin = String(fd.get('source_origin') || 'inventory').trim();
@@ -2781,8 +2821,47 @@
           opt_nginx: fd.get('opt_nginx') === 'on',
           opt_certbot: fd.get('opt_certbot') === 'on',
           opt_cron: fd.get('opt_cron') === 'on',
+          drop_dest_db: dropDestDb,
           dry_run: dryRun
         };
+      }
+
+      // Confirmacion de borrado de la BD destino ------------------------------
+      // Resuelve a true solo si el usuario escribio el nombre de la base y
+      // acepto. Si la base no tiene tablas no se muestra nada y sigue de largo.
+      function confirmDropDestDb(dbName, tables) {
+        const modal = document.getElementById('destdb-modal');
+        const input = document.getElementById('destdb-confirm-input');
+        const accept = document.getElementById('destdb-accept');
+        const cancel = document.getElementById('destdb-cancel');
+        document.getElementById('destdb-name').textContent = dbName;
+        document.getElementById('destdb-tables').textContent = String(tables);
+        input.value = '';
+        accept.disabled = true;
+        modal.classList.remove('hidden');
+        input.focus();
+
+        return new Promise(resolve => {
+          function cleanup(result) {
+            modal.classList.add('hidden');
+            input.removeEventListener('input', onInput);
+            accept.removeEventListener('click', onAccept);
+            cancel.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
+            resolve(result);
+          }
+          function onInput() { accept.disabled = input.value.trim() !== dbName; }
+          function onAccept() { if (!accept.disabled) cleanup(true); }
+          function onCancel() { cleanup(false); }
+          function onKey(e) {
+            if (e.key === 'Escape') cleanup(false);
+            if (e.key === 'Enter' && !accept.disabled) cleanup(true);
+          }
+          input.addEventListener('input', onInput);
+          accept.addEventListener('click', onAccept);
+          cancel.addEventListener('click', onCancel);
+          document.addEventListener('keydown', onKey);
+        });
       }
 
       async function pollJob(jobId) {
@@ -2811,10 +2890,32 @@
       }
 
       async function runClone(dryRun) {
+        let dropDestDb = false;
         if (!hasPermission('can_access_moodle_cloner')) {
           toaster.show('No tienes permiso para usar el clonador Moodle.', 'warning');
           return;
         }
+        // Se consulta ANTES de lanzar el job: si la base destino ya tiene datos
+        // (p.ej. una clonacion anterior que quedo a medias) hay que pedir
+        // permiso explicito para eliminarla, no descubrirlo leyendo el log.
+        const destDbName = String(new FormData(form).get('dest_db') || '').trim();
+        if (/^[A-Za-z0-9_]+$/.test(destDbName)) {
+          try {
+            const st = await api(`/api/clone/dest-db?name=${encodeURIComponent(destDbName)}`);
+            if (st && st.tables > 0) {
+              dropDestDb = await confirmDropDestDb(destDbName, st.tables);
+              if (!dropDestDb) {
+                toaster.show('Cancelado. Cambia el nombre de la base destino si no queres eliminarla.', 'warning');
+                return;
+              }
+            }
+          } catch (err) {
+            // No poder consultarlo no debe bloquear el clonado: el script hace
+            // la misma verificacion y aborta por su cuenta si hace falta.
+            toaster.show(`No se pudo verificar la base destino: ${err.message}`, 'warning');
+          }
+        }
+
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         currentJobId = null;
         outputEl.textContent = '';
@@ -2822,7 +2923,7 @@
         setStatus(dryRun ? 'Iniciando simulacion...' : 'Iniciando clonacion...', 'running');
         setProgress(2, 'Fase: validando parametros', 'running');
         try {
-          const payload = buildPayload(dryRun);
+          const payload = buildPayload(dryRun, dropDestDb);
           const res = await fetch('/api/clone', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

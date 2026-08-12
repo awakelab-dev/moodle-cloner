@@ -216,6 +216,9 @@ DISABLE_NEW_MAINT="${DISABLE_NEW_MAINT:-1}"
 DISABLE_SRC_MAINT_AFTER="${DISABLE_SRC_MAINT_AFTER:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 SAFE_MODE="${SAFE_MODE:-1}"
+# Eliminar la BD destino si ya existe con datos. Default 0: sin confirmacion
+# explicita del usuario el script aborta en vez de importar encima.
+DROP_DEST_DB="${DROP_DEST_DB:-0}"
 RDS_HOST_ALLOWLIST="${RDS_HOST_ALLOWLIST:-}"
 PROTECTED_DATABASES="${PROTECTED_DATABASES:-}"
 
@@ -256,10 +259,17 @@ if [[ "$DEPLOY_TARGET" == "remote" ]]; then
   log "Preflight: probando SSH al destino $REMOTE_SSH_TARGET ..."
   if ! ssh "${SSH_OPTS[@]}" "$REMOTE_SSH_TARGET" true; then
     err "No se pudo conectar por SSH al destino $REMOTE_SSH_TARGET (puerto 22)."
-    err "Un 'Connection timed out' es de red, no de credenciales: revisa que la"
-    err "instancia este encendida, que su IP sea la correcta (una EC2 sin IP"
-    err "elastica la cambia al reiniciarse) y que el security group permita el"
-    err "puerto 22 desde $(hostname) ($(hostname -I 2>/dev/null | awk '{print $1}'))."
+    err "Un 'Connection timed out' es de red, no de credenciales: si fuera la llave"
+    err "diria 'Permission denied', y si el puerto estuviera cerrado, 'Connection refused'."
+    err "Revisa, en este orden:"
+    err "  1) Si el destino es Lightsail: instancia > Networking > IPv4 Firewall,"
+    err "     regla SSH/TCP 22. Una lista de IPs permitidas no incluye por defecto"
+    err "     la del clonador. (La lista IPv6 es aparte.)"
+    err "  2) Si el destino es EC2: el security group debe permitir el 22."
+    err "  3) Que la instancia este encendida y que la IP sea la correcta: una"
+    err "     instancia sin IP elastica la cambia al reiniciarse."
+    err "La IP a habilitar es la de salida de este host, $(hostname)."
+    err "Obtenela con: curl -s -H \"X-aws-ec2-metadata-token: \$TOKEN\" http://169.254.169.254/latest/meta-data/public-ipv4"
     err "Nada fue modificado en el origen ni en el destino."
     exit 1
   fi
@@ -384,6 +394,55 @@ fi
 
 require_production_ack_if_needed "$SAFE_MODE" "$DRY_RUN"
 
+# --- Estado de la BD destino -------------------------------------------------
+# Se inspecciona ACA a proposito: despues de las guardas de seguridad (que ya
+# garantizaron que DEST_DB no es la base de origen, que no esta en
+# PROTECTED_DATABASES y que el host esta en la allowlist si hay una) y ANTES de
+# habilitar el modo mantenimiento y del dump. Si hay que abortar por una base
+# preexistente, que sea sin haber tocado el sitio de origen.
+#
+# `CREATE DATABASE IF NOT EXISTS` + import no falla si la base ya existe, pero
+# tampoco limpia: el dump trae DROP/CREATE por tabla, asi que sobreescribe las
+# tablas que trae y **deja intactas** las que no. Una base de una clonacion
+# anterior queda entonces mezclada con restos desactualizados.
+log "Preflight: inspeccionando la BD destino $DEST_DB en $TARGET_DB_HOST ..."
+DEST_DB_TABLES="$(
+  export MYSQL_PWD="$TARGET_DB_PASS"
+  mysql -N -B -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" \
+    -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${DEST_DB}';"
+)" || {
+  err "No se pudo consultar el estado de la BD destino en $TARGET_DB_HOST."
+  err "Nada fue modificado."
+  exit 1
+}
+DEST_DB_TABLES="${DEST_DB_TABLES//[^0-9]/}"
+DEST_DB_TABLES="${DEST_DB_TABLES:-0}"
+
+if (( DEST_DB_TABLES > 0 )); then
+  warn "La base destino $DEST_DB ya existe y contiene $DEST_DB_TABLES tablas."
+  if ! bool_true "$DROP_DEST_DB"; then
+    err "Se aborta para no importar encima de datos preexistentes."
+    err "Importar encima sobreescribe las tablas que trae el dump pero deja las"
+    err "que no, asi que la instancia quedaria con restos de la clonacion anterior."
+    err "Opciones: (a) reintentar confirmando la eliminacion en la UI, o"
+    err "(b) elegir otro nombre de base destino."
+    err "Nada fue modificado."
+    exit 1
+  fi
+  if bool_true "$DRY_RUN"; then
+    log "[dry-run] Se eliminaria y recrearia la base $DEST_DB ($DEST_DB_TABLES tablas)."
+  else
+    warn "DROP_DEST_DB=1 (confirmado en la UI): eliminando $DEST_DB con sus $DEST_DB_TABLES tablas..."
+    (
+      export MYSQL_PWD="$TARGET_DB_PASS"
+      mysql -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" -e "DROP DATABASE \`${DEST_DB}\`;"
+    ) || { err "No se pudo eliminar la base $DEST_DB."; exit 1; }
+    log "Base $DEST_DB eliminada. Se recreara vacia antes del import."
+  fi
+else
+  log "La BD destino $DEST_DB no existe o esta vacia. Se creara/usara limpia."
+fi
+
 if bool_true "$ENABLE_SRC_MAINT"; then
   log "Enabling maintenance mode on source..."
   if [[ "$SOURCE_MODE" == "local" ]]; then
@@ -426,6 +485,8 @@ Dry-run:          $DRY_RUN
 Safe mode:        $SAFE_MODE
 RDS allowlist:    ${RDS_HOST_ALLOWLIST:-<not set>}
 Protected DBs:    ${PROTECTED_DATABASES:-<not set>}
+Dest DB tables:   ${DEST_DB_TABLES:-0} (preexistentes)
+Drop dest DB:     $DROP_DEST_DB
 Maintenance on source now: $SRC_MAINT_ENABLED
 ----------------
 SUM
