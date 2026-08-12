@@ -5,6 +5,14 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.18.1 - 2026-08-12
+
+UI: las pestanas de navegacion pierden el prefijo "Clonador".
+
+- `Clonador Moodle` -> **Moodle**, `Clonador de cursos` -> **Cursos**, `Clonador de plugins` -> **Plugins**, `Clonador Alexia` -> **Alexia**. La palabra se repetia en las cuatro y no distinguia nada.
+- `SECTION_LABELS` se actualizo con los mismos textos: es lo que aparece en el aviso `No tienes permiso para acceder a "<seccion>"`, y tiene que coincidir con lo que se lee en la barra.
+- Los `<h1>` de cada seccion **no** cambiaron ("Clonador de Instancias Moodle", "Clonador de cursos", "Clonador de plugins", "Clonador Alexia"): ahi el nombre completo si describe el modulo, y un `<h1>` que dijera solo "Moodle" no diria nada.
+
 ## v0.18.0 - 2026-08-12
 
 UI: en Administrar plataformas el formulario pasa a modal y la lista ocupa todo el ancho con dos tarjetas por fila.
