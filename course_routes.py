@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
+import platform_check
 from course_copier import (
     INVENTORY_FILE,
     copy_course_between_servers,
@@ -332,6 +333,16 @@ def admin_update_server(server_index: int, payload: dict[str, Any]) -> dict[str,
         "message": "Plataforma actualizada correctamente.",
         "server": _admin_server(saved[server_index], server_index),
     }
+
+
+def admin_verify_server(server_index: int) -> dict[str, Any]:
+    """Verifica una sola plataforma. La UI llama a este endpoint una vez por
+    plataforma y resuelve varias en paralelo, en vez de un unico request que
+    verifique las 35: asi cada resultado aparece en cuanto esta listo y ningun
+    request queda colgado detras del servidor mas lento."""
+    servers = _load_servers()
+    server = _select_server(servers, server_index)
+    return platform_check.verify_server(server, server_index)
 
 
 def admin_delete_server(server_index: int) -> dict[str, Any]:

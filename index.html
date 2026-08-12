@@ -421,7 +421,27 @@
                 <h1 class="text-2xl font-semibold text-slate-50">Administrar plataformas</h1>
                 <p class="text-sm text-slate-400 mt-1">Las plataformas se guardan en <span class="font-mono">inventario.json</span>.</p>
               </div>
-              <button id="pf-reset-btn" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar formulario</button>
+              <div class="flex items-center gap-2">
+                <button id="pf-verify-all-btn" type="button" class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-primary-600 font-semibold text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  Verificar todas
+                </button>
+                <button id="pf-verify-failed-btn" type="button" class="hidden text-xs px-3 py-1.5 rounded-lg border border-amber-600/60 text-amber-300 hover:bg-amber-900/20">Reverificar las que requieren revision</button>
+                <button id="pf-reset-btn" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar formulario</button>
+              </div>
+            </div>
+
+            <!-- Resumen de la verificacion masiva -->
+            <div id="pf-verify-summary" class="hidden px-8 pt-4">
+              <div class="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                  <div id="pf-verify-summary-text" class="text-xs text-slate-300"></div>
+                  <div id="pf-verify-counts" class="flex items-center gap-3 text-xs"></div>
+                </div>
+                <div class="mt-2 w-full bg-slate-800 rounded-full h-1.5">
+                  <div id="pf-verify-bar" class="h-1.5 rounded-full bg-primary-600 transition-all duration-300" style="width:0%"></div>
+                </div>
+              </div>
             </div>
 
             <div class="px-8 py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -2459,7 +2479,12 @@
 
     // ====== Platforms admin =========================================
     (function () {
-      const state = { servers: [], editingIndex: null };
+      // verify: resultado por indice de plataforma. verifyOpen: que detalles
+      // estan desplegados. verifyScope: los indices de la ultima corrida masiva.
+      const state = {
+        servers: [], editingIndex: null,
+        verify: {}, verifyOpen: new Set(), verifyScope: [],
+      };
       const form = document.getElementById('pf-form');
       const formTitle = document.getElementById('pf-form-title');
       const submitBtn = document.getElementById('pf-submit');
@@ -2615,17 +2640,24 @@
               ${capRow('Acepta Clonacion de Plataforma', s.capabilities && s.capabilities.platform_clone)}
             </div>
             <div class="mt-3 flex flex-wrap gap-2">
+              <button class="text-[11px] px-2.5 py-1 rounded border border-primary-600/60 text-primary-300 hover:bg-primary-900/30" data-action="verify" data-index="${s.index}">Verificar</button>
               <button class="text-[11px] px-2.5 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800" data-action="edit" data-index="${s.index}">Editar</button>
               <button class="text-[11px] px-2.5 py-1 rounded border border-red-700/60 text-red-300 hover:bg-red-900/30" data-action="delete" data-index="${s.index}">Eliminar</button>
             </div>
+            <div data-verify-slot="${s.index}"></div>
           </article>
         `).join('');
+        // Repinta los resultados de verificaciones anteriores: render() se
+        // llama tambien despues de guardar o borrar, y perderlos obligaria a
+        // volver a verificar las 35 por un cambio en una.
+        state.servers.forEach(s => paintVerify(s.index));
       }
       listEl.addEventListener('click', async (e) => {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
         const idx = Number.parseInt(btn.dataset.index, 10);
         if (btn.dataset.action === 'edit') return startEdit(idx);
+        if (btn.dataset.action === 'verify') return verifyOne(idx);
         if (btn.dataset.action === 'delete') {
           const s = state.servers.find(x => x.index === idx);
           if (!s) return;
@@ -2673,6 +2705,198 @@
         }
       });
       resetBtn.addEventListener('click', resetForm);
+
+      // ====== Verificacion de plataformas ============================
+      // Un request por plataforma (POST /api/cc/admin/servers/<i>/verify) y la
+      // UI resuelve varias en paralelo. Un unico request que verificara las 35
+      // tardaria minutos, se arriesgaria al timeout de nginx y no mostraria
+      // nada hasta el final.
+      const verifyAllBtn = document.getElementById('pf-verify-all-btn');
+      const verifyFailedBtn = document.getElementById('pf-verify-failed-btn');
+      const summaryEl = document.getElementById('pf-verify-summary');
+      const summaryTextEl = document.getElementById('pf-verify-summary-text');
+      const summaryCountsEl = document.getElementById('pf-verify-counts');
+      const summaryBarEl = document.getElementById('pf-verify-bar');
+      const VERIFY_CONCURRENCY = 6;
+      let verifying = false;
+
+      const ICONS = {
+        ok: '<svg class="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>',
+        fail: '<svg class="w-3.5 h-3.5 text-amber-400 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>',
+        skip: '<svg class="w-3.5 h-3.5 text-slate-600 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>',
+      };
+
+      function slotFor(index) {
+        return listEl.querySelector(`[data-verify-slot="${index}"]`);
+      }
+
+      // Los resultados se guardan por FIRMA de la plataforma, no por indice: el
+      // indice no la identifica de forma estable (al borrar una, todas las de
+      // abajo corren un lugar y el resultado quedaria pegado a la vecina). Con
+      // la firma, borrar una plataforma no toca los resultados de las demas, y
+      // editar una descarta el suyo — que es lo correcto, porque el resultado
+      // anterior ya no describe los datos nuevos.
+      function sigOf(s) {
+        return [s.name, s.url, s.host, s.port, s.ssh_user, s.ssh_key_path,
+                s.moodle_path, s.moodledata_path, s.vhost_path].join('|');
+      }
+      function stateOf(index) {
+        const server = state.servers.find(x => x.index === index);
+        return server ? state.verify[sigOf(server)] : undefined;
+      }
+
+      function paintVerify(index) {
+        const slot = slotFor(index);
+        if (!slot) return;
+        const server = state.servers.find(x => x.index === index);
+        const sig = server ? sigOf(server) : '';
+        const st = state.verify[sig];
+        if (!st) { slot.innerHTML = ''; return; }
+
+        if (st.running) {
+          slot.innerHTML = `<div class="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
+            <div class="w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+            Verificando...</div>`;
+          return;
+        }
+        if (st.error) {
+          slot.innerHTML = `<div class="mt-2 rounded border border-red-600/40 bg-red-950/20 px-2.5 py-1.5 text-[11px] text-red-300">
+            No se pudo verificar: ${esc(st.error)}</div>`;
+          return;
+        }
+
+        const r = st.result;
+        const isOk = r.status === 'ok';
+        // Cuando requiere revision el detalle se abre solo: es justamente lo
+        // que hay que leer. Cuando pasa, queda plegado para que 35 plataformas
+        // correctas no llenen la pantalla.
+        const open = state.verifyOpen.has(sig) || !isOk;
+        const hora = (r.checked_at || '').slice(11, 16);
+        const badge = isOk
+          ? `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/50 text-emerald-300">${ICONS.ok}Paso el test</span>`
+          : `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600/50 text-amber-300">${ICONS.fail}Requiere revision (${r.failed_count})</span>`;
+        const lines = open ? r.checks.map(c => `
+          <div class="flex items-start gap-1.5 py-0.5">
+            ${ICONS[c.status] || ICONS.skip}
+            <span class="${c.status === 'fail' ? 'text-amber-200' : c.status === 'skip' ? 'text-slate-500' : 'text-slate-400'}">
+              <span class="${c.status === 'fail' ? 'font-medium' : ''}">${esc(c.label)}:</span> ${esc(c.detail)}
+            </span>
+          </div>`).join('') : '';
+
+        slot.innerHTML = `
+          <div class="mt-2 rounded border ${isOk ? 'border-emerald-800/50 bg-emerald-950/10' : 'border-amber-700/50 bg-amber-950/10'} px-2.5 py-2">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              ${badge}
+              <div class="flex items-center gap-2 text-[10px] text-slate-500">
+                ${hora ? `<span>${esc(hora)}</span>` : ''}
+                <button type="button" data-verify-toggle="${index}" class="underline hover:text-slate-300">${open ? 'ocultar detalle' : `ver detalle (${r.checks.length})`}</button>
+              </div>
+            </div>
+            ${open ? `<div class="mt-1.5 text-[11px] space-y-0">${lines}</div>` : ''}
+          </div>`;
+      }
+
+      listEl.addEventListener('click', (e) => {
+        const t = e.target.closest('[data-verify-toggle]');
+        if (!t) return;
+        const i = Number.parseInt(t.dataset.verifyToggle, 10);
+        const server = state.servers.find(x => x.index === i);
+        if (!server) return;
+        const sig = sigOf(server);
+        if (state.verifyOpen.has(sig)) state.verifyOpen.delete(sig);
+        else state.verifyOpen.add(sig);
+        paintVerify(i);
+      });
+
+      async function verifyOne(index) {
+        const server = state.servers.find(x => x.index === index);
+        if (!server) return undefined;
+        const sig = sigOf(server);
+        state.verify[sig] = { running: true };
+        paintVerify(index);
+        try {
+          const res = await fetch(`/api/cc/admin/servers/${index}/verify`, { method: 'POST' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+          state.verify[sig] = { result: data };
+        } catch (err) {
+          state.verify[sig] = { error: err.message || 'error desconocido' };
+        }
+        paintVerify(index);
+        refreshFailedBtn();
+        return state.verify[sig];
+      }
+
+      function refreshFailedBtn() {
+        const failed = failedIndexes();
+        verifyFailedBtn.classList.toggle('hidden', failed.length === 0 || verifying);
+        verifyFailedBtn.textContent = `Reverificar las ${failed.length} que requieren revision`;
+      }
+
+      function failedIndexes() {
+        return state.servers
+          .map(s => s.index)
+          .filter(i => {
+            const st = stateOf(i);
+            return st && !st.running && (st.error || (st.result && st.result.status !== 'ok'));
+          });
+      }
+
+      function paintSummary(done, total, finished) {
+        summaryEl.classList.remove('hidden');
+        const scope = state.verifyScope || [];
+        let ok = 0, review = 0, error = 0, pending = 0;
+        scope.forEach(i => {
+          const st = stateOf(i);
+          if (!st || st.running) pending++;
+          else if (st.error) error++;
+          else if (st.result.status === 'ok') ok++;
+          else review++;
+        });
+        summaryTextEl.textContent = finished
+          ? `Verificacion terminada: ${total} plataforma(s) comprobada(s).`
+          : `Verificando ${done} de ${total}...`;
+        summaryCountsEl.innerHTML = [
+          `<span class="text-emerald-300">${ok} paso el test</span>`,
+          `<span class="text-amber-300">${review} requiere${review === 1 ? '' : 'n'} revision</span>`,
+          error ? `<span class="text-red-300">${error} sin poder verificar</span>` : '',
+          pending ? `<span class="text-slate-400">${pending} pendiente${pending === 1 ? '' : 's'}</span>` : '',
+        ].filter(Boolean).join('<span class="text-slate-700">|</span>');
+        summaryBarEl.style.width = total ? `${Math.round((done / total) * 100)}%` : '0%';
+      }
+
+      async function verifyMany(indexes) {
+        if (verifying || !indexes.length) return;
+        verifying = true;
+        verifyAllBtn.disabled = true;
+        verifyFailedBtn.classList.add('hidden');
+        state.verifyScope = indexes.slice();
+        const queue = indexes.slice();
+        const total = indexes.length;
+        let done = 0;
+        paintSummary(0, total, false);
+        const worker = async () => {
+          while (queue.length) {
+            const i = queue.shift();
+            await verifyOne(i);
+            done += 1;
+            paintSummary(done, total, false);
+          }
+        };
+        try {
+          await Promise.all(
+            Array.from({ length: Math.min(VERIFY_CONCURRENCY, total) }, worker)
+          );
+        } finally {
+          verifying = false;
+          verifyAllBtn.disabled = false;
+          paintSummary(total, total, true);
+          refreshFailedBtn();
+        }
+      }
+
+      verifyAllBtn.addEventListener('click', () => verifyMany(state.servers.map(s => s.index)));
+      verifyFailedBtn.addEventListener('click', () => verifyMany(failedIndexes()));
 
       window.__pfLoad = load;
     })();

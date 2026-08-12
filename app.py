@@ -731,6 +731,9 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 return self._handle_clone()
             if parsed.path == "/api/cc/admin/servers":
                 return self._handle_cc_create_server()
+            m = re.fullmatch(r"/api/cc/admin/servers/(\d+)/verify", parsed.path)
+            if m:
+                return self._handle_cc_verify_server(int(m.group(1)))
             m = re.fullmatch(r"/api/cc/servers/(\d+)/categories", parsed.path)
             if m:
                 return self._handle_cc_create_category(int(m.group(1)))
@@ -1142,6 +1145,14 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
     def _handle_cc_delete_server(self, server_index: int) -> None:
         self._require_superadmin()
         result = course_routes.admin_delete_server(server_index)
+        self._send_json(200, result)
+
+    def _handle_cc_verify_server(self, server_index: int) -> None:
+        # Hace red (HTTP al sitio y SSH al servidor) pero no modifica nada. Es
+        # POST y no GET para que quede claro que dispara trabajo y para que
+        # ningun intermediario lo cachee.
+        self._require_superadmin()
+        result = course_routes.admin_verify_server(server_index)
         self._send_json(200, result)
 
     def _handle_cc_copy_course(self) -> None:
