@@ -5,6 +5,17 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.11.3 - 2026-08-11
+
+Fix: `/` ahora manda `ETag`, `Cache-Control` y `X-App-Version`, para poder distinguir un problema de render de un HTML cacheado.
+
+- **El problema**: `_send_file()` respondia con `Content-Type` y `Content-Length` y nada mas. Sin `ETag`, sin `Last-Modified` y sin `Cache-Control`, el navegador no tiene contra que revalidar el HTML y puede servir una copia cacheada heuristicamente por tiempo indefinido (Safari es especialmente agresivo). Consecuencia practica: ante cualquier sintoma visual era imposible responder "¿el navegador esta viendo el deploy nuevo o uno viejo?", que es justo la ambiguedad que costo horas el 2026-08-11.
+- **`ETag`**: `sha256` de los bytes ya renderizados (despues de sustituir `{{APP_VERSION}}` y `{{TARGET_DB_HOST}}`), primeros 32 hex. Cambia con cualquier cambio de contenido o de version.
+- **`Cache-Control: no-cache, must-revalidate`**: `no-cache` significa "revalida siempre", no "no guardes", asi que el `ETag` sigue dando 304 baratos en vez de retransmitir 222 KB en cada carga.
+- **`If-None-Match` → 304**: implementado en `_if_none_match_matches()`, tolerante a validadores debiles (`W/"..."`), a listas separadas por coma y a `*`.
+- **`X-App-Version`**: permite confirmar desde `curl -I` o desde la pestaña Network que build recibio el navegador, sin parsear el HTML.
+- Verificado con 5 casos: sin `If-None-Match` → 200 + `ETag`; con el `ETag` correcto → 304 sin cuerpo; con `W/` → 304; con un `ETag` viejo → 200 completo; con lista de `ETag`s → 304.
+
 ## v0.11.2 - 2026-08-11
 
 Limpieza de repo: quitados de git 6 archivos vacios que se colaron en el commit `4fad552`.

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import re
@@ -500,12 +501,49 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             data = render_index_html()
         else:
             data = filepath.read_bytes()
+
+        # Validators + revalidation. Without an ETag/Last-Modified and without
+        # Cache-Control, the HTML shell has nothing a browser can revalidate
+        # against, so a heuristically cached copy can be served indefinitely
+        # (Safari is notably aggressive here). That makes "did my deploy reach
+        # the browser?" unanswerable — exactly the ambiguity that cost hours on
+        # 2026-08-11. `no-cache` means "revalidate every time", not "never
+        # store", so the ETag still buys us cheap 304s.
+        etag = '"' + hashlib.sha256(data).hexdigest()[:32] + '"'
+        if self._if_none_match_matches(etag):
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
+            self.send_header("X-App-Version", APP_VERSION)
+            self.end_headers()
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        # Lets us confirm from curl or the Network tab which build the browser
+        # actually received, without parsing the HTML.
+        self.send_header("X-App-Version", APP_VERSION)
         self.end_headers()
         if send_body:
             self.wfile.write(data)
+
+    def _if_none_match_matches(self, etag: str) -> bool:
+        header = self.headers.get("If-None-Match")
+        if not header:
+            return False
+        for candidate in header.split(","):
+            candidate = candidate.strip()
+            if candidate == "*":
+                return True
+            # Tolerate weak validators ('W/"abc"') from proxies.
+            if candidate.startswith("W/"):
+                candidate = candidate[2:]
+            if candidate == etag:
+                return True
+        return False
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))
