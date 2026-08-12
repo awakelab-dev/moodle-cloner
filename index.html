@@ -86,7 +86,9 @@
            esta fuera de este contenedor centrado. -->
       <div class="max-w-6xl mx-auto pl-6 pr-16 py-3 flex items-center justify-between gap-4">
         <div class="flex items-center gap-2.5">
-          <img src="/assets/logo.png" alt="AulaCloner" class="h-9 w-auto" />
+          <!-- h-[72px]: el doble que antes (h-9 = 36px). A 36px la bajada
+               "Clonador de Instancia Moodle" del logo era ilegible. -->
+          <img src="/assets/logo.png" alt="AulaCloner" class="h-[72px] w-auto" />
           <span class="text-[11px] font-mono leading-none text-slate-400 border border-slate-700 rounded-full px-2 py-1 whitespace-nowrap">v{{APP_VERSION}}</span>
         </div>
 
@@ -108,8 +110,10 @@
       <!-- Boton hamburguesa, pegado al borde derecho del header. Va fuera del
            contenedor centrado a proposito: dentro quedaba con el margen del
            max-w-6xl y en pantallas anchas se veia despegado del borde.
-           `position: sticky` del header ya sirve de bloque contenedor. -->
-      <button id="hamburger-btn" class="absolute right-3 top-3 p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu">
+           `position: sticky` del header ya sirve de bloque contenedor.
+           Centrado con top-1/2 y no con un top fijo: la altura de la barra la
+           marca el logo, asi que un valor fijo lo dejaba pegado arriba. -->
+      <button id="hamburger-btn" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu">
         <svg id="hamburger-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
         <svg id="hamburger-close-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>

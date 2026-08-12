@@ -5,6 +5,14 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.18.2 - 2026-08-12
+
+UI: el logo va al doble de tamano. A 36px de alto la bajada "Clonador de Instancia Moodle" no se leia.
+
+- `h-9` (36px) -> `h-[72px]`. El logo pasa de 113x36 a 227x72 px. **Todo lo demas de la cabecera queda igual**: la tipografia de las pestanas sigue en 14px, la pastilla de version en 11px y el padding del contenedor sin tocar. Como consecuencia la barra crece de 60 a 97 px de alto, que es lo que implica duplicar el logo.
+- **El boton hamburguesa pasa de `top-3` a `top-1/2 -translate-y-1/2`.** La altura de la barra la marca el logo, asi que con un top fijo el boton quedaba pegado al borde superior en vez de centrado. Verificado: su centro cae en 48px y el de la barra en 49.
+- Verificado que el logo no desborda la cabecera, que la nav no se solapa con el boton (que sigue a 12px del borde derecho) y que el sidebar sigue abriendo pegado al borde.
+
 ## v0.18.1 - 2026-08-12
 
 UI: las pestanas de navegacion pierden el prefijo "Clonador".
