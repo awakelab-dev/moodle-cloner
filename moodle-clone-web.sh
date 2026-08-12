@@ -245,8 +245,24 @@ if [[ "$DEPLOY_TARGET" == "remote" ]]; then
   fi
 
   REMOTE_SSH_TARGET="${REMOTE_SSH_USER}@${REMOTE_HOST}"
-  SSH_OPTS=(-i "$REMOTE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
-  RSYNC_SSH="ssh -i $REMOTE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+  SSH_OPTS=(-i "$REMOTE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+  RSYNC_SSH="ssh -i $REMOTE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+
+  # Preflight: probar el SSH al destino ANTES de tocar nada. Antes esta prueba
+  # ocurria recien despues del dump y del import (74% del job), asi que un
+  # destino inalcanzable dejaba el sitio de origen en modo mantenimiento
+  # durante todo el dump y una BD destino a medio importar. Corre tambien en
+  # dry-run: un dry-run que pasa sin poder alcanzar el destino no sirve de nada.
+  log "Preflight: probando SSH al destino $REMOTE_SSH_TARGET ..."
+  if ! ssh "${SSH_OPTS[@]}" "$REMOTE_SSH_TARGET" true; then
+    err "No se pudo conectar por SSH al destino $REMOTE_SSH_TARGET (puerto 22)."
+    err "Un 'Connection timed out' es de red, no de credenciales: revisa que la"
+    err "instancia este encendida, que su IP sea la correcta (una EC2 sin IP"
+    err "elastica la cambia al reiniciarse) y que el security group permita el"
+    err "puerto 22 desde $(hostname) ($(hostname -I 2>/dev/null | awk '{print $1}'))."
+    err "Nada fue modificado en el origen ni en el destino."
+    exit 1
+  fi
 fi
 
 if [[ "$SOURCE_MODE" == "remote" ]]; then
@@ -257,8 +273,17 @@ if [[ "$SOURCE_MODE" == "remote" ]]; then
     exit 1
   fi
   SOURCE_SSH_TARGET="${SOURCE_SSH_USER}@${SOURCE_HOST}"
-  SOURCE_SSH_OPTS=(-i "$SOURCE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
-  SOURCE_RSYNC_SSH="ssh -i $SOURCE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+  SOURCE_SSH_OPTS=(-i "$SOURCE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+  SOURCE_RSYNC_SSH="ssh -i $SOURCE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+
+  log "Preflight: probando SSH al origen $SOURCE_SSH_TARGET ..."
+  if ! ssh "${SOURCE_SSH_OPTS[@]}" "$SOURCE_SSH_TARGET" true; then
+    err "No se pudo conectar por SSH al origen $SOURCE_SSH_TARGET (puerto 22)."
+    err "Si el origen salio del inventario, revisa sus campos 'host', 'ssh_user'"
+    err "y 'ssh_key_path' en Plataformas. La clave usada fue $SOURCE_SSH_KEY."
+    err "Nada fue modificado."
+    exit 1
+  fi
 fi
 
 if bool_true "$ENABLE_NGINX" && [[ "$DEPLOY_TARGET" == "local" ]]; then

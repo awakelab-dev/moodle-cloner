@@ -985,10 +985,12 @@
   <!-- Etiqueta de version fija al pie. Fuera de #login-view y #app-view a
        proposito, para que se vea en las dos. pointer-events-none para no tapar
        clicks, y z-20 para quedar debajo del header (z-30) y de los modales (z-40). -->
-  <footer class="fixed inset-x-0 bottom-0 z-20 pointer-events-none flex justify-center pb-2">
-    <div class="flex items-center gap-2 text-[10px] text-slate-500">
+  <footer class="fixed inset-x-0 bottom-0 z-20 pointer-events-none flex justify-center pb-3">
+    <!-- Pastilla con fondo OPACO: al ser fija se superpone al contenido que
+         scrollea por detras, y sin fondo las letras se mezclaban con el. -->
+    <div class="flex items-center gap-2 rounded-full bg-slate-900 border border-slate-800 px-3 py-1 shadow-lg shadow-slate-950/60 text-[10px] text-slate-400">
       <span>Plataforma de clonado</span>
-      <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-400">v{{APP_VERSION}}</span>
+      <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-300">v{{APP_VERSION}}</span>
     </div>
   </footer>
 

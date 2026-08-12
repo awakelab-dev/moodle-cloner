@@ -5,6 +5,17 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.14.0 - 2026-08-12
+
+Fix: la conectividad SSH a origen y destino se prueba en el preflight, antes de tocar nada. Antes se probaba el destino al 74% del job, despues del dump y del import.
+
+- **El problema, con un caso real**: un job fallo con `exit 255` tras 10 minutos. El log mostraba `Testing SSH connectivity to ubuntu@51.44.30.62 ... Connection timed out`, pero recien **despues** de haber puesto el sitio de origen en modo mantenimiento, dumpeado la base, saneado el dump, creado la base destino e importado el dump completo. Consecuencias: el sitio de origen estuvo en mantenimiento todo ese tiempo por nada, y quedo una base destino importada sin ningun archivo al lado.
+- **Preflight de SSH al destino** apenas se calculan `REMOTE_SSH_TARGET`/`SSH_OPTS`, antes de habilitar el modo mantenimiento (que ocurre ~100 lineas despues) y antes de cualquier operacion de base. El error explica que un `Connection timed out` es de red y no de credenciales, y que hay que revisar que la instancia este encendida, que la IP sea la correcta (una EC2 sin IP elastica la cambia al reiniciarse) y que el security group permita el 22 desde el host del clonador, cuyo hostname e IP se imprimen. Cierra con "Nada fue modificado en el origen ni en el destino".
+- **Preflight de SSH al origen** cuando `SOURCE_MODE=remote`, con un mensaje que apunta a los campos `host`, `ssh_user` y `ssh_key_path` de la entrada del inventario e imprime la clave usada.
+- **Corre tambien en dry-run**, a proposito: un dry-run que pasa sin poder alcanzar el destino da confianza falsa. En este caso el dry-run habia pasado limpio y el job real fallo por red.
+- **`-o ConnectTimeout=15`** agregado a `SSH_OPTS`, `SOURCE_SSH_OPTS` y a las cadenas de rsync. El default de ssh puede tardar ~2 minutos en rendirse ante un host que no responde.
+- **La etiqueta de version al pie ahora tiene fondo opaco**: es un `<footer>` fijo, asi que se superponia al contenido que scrollea por detras y las letras se mezclaban. Pasa a ser una pastilla `rounded-full` con `bg-slate-900` opaco, borde y sombra.
+
 ## v0.13.0 - 2026-08-12
 
 Fix: elegir una plataforma del inventario ahora clona **desde el host de esa plataforma**. Antes tomaba sus rutas pero ejecutaba los comandos en el host del clonador.
