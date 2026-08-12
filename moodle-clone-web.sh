@@ -272,8 +272,10 @@ CONFIG_FILE="$SRC_DIR/config.php"
 if [[ "$SOURCE_MODE" == "local" ]]; then
   [[ -f "$CONFIG_FILE" ]] || {
     err "config.php not found at $CONFIG_FILE en este servidor ($(hostname))."
-    err "El modo de origen es 'local', asi que se busco en el host del clonador."
-    err "Si la instancia de origen esta en otra maquina, elegi 'Servidor remoto por SSH' en Modo de origen."
+    err "SOURCE_MODE=local: se busco el Moodle en esta misma maquina, la del clonador."
+    err "Si la plataforma de origen vive en otro servidor, revisa que su entrada del"
+    err "inventario tenga el campo 'host' correcto (Plataformas), o usa 'Servidor"
+    err "manual por SSH' y cargalo a mano."
     exit 1
   }
 else

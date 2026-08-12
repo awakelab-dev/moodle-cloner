@@ -5,6 +5,22 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.13.0 - 2026-08-12
+
+Fix: elegir una plataforma del inventario ahora clona **desde el host de esa plataforma**. Antes tomaba sus rutas pero ejecutaba los comandos en el host del clonador.
+
+- **El bug de fondo**: `validate_payload` en modo "local" leia `moodle_path`, `moodledata_path` y `vhost_path` de la entrada del inventario, pero **ignoraba el campo `host`** de esa misma entrada, y despues corria todo en la maquina del clonador. Como las entradas del inventario describen servidores remotos (traen `host`, `ssh_user`, `ssh_key_path`), la combinacion era imposible: rutas de una maquina, comandos en otra. El resultado era `config.php not found` con una ruta que si existe — en el otro servidor.
+- **Ahora se deriva el host**: si el `host` de la entrada no es esta misma maquina, se pasa a ejecucion por SSH contra ese host, con `SOURCE_SSH_USER` y `SOURCE_SSH_KEY` tomados de `ssh_user` y `ssh_key_path` de la entrada. Si el host **es** esta maquina, se sigue ejecutando localmente. La comparacion usa `local_host_identifiers()`: `localhost`, `127.0.0.1`, `::1`, el hostname corto y largo, y las IPs propias resueltas por `getaddrinfo` (cacheado, se calcula una vez).
+- **Terminologia corregida.** Historicamente el script corria en la propia maquina de origen y "local" era exacto; con el clonador en su propio host dejo de serlo. Se separan los dos conceptos que estaban colapsados en uno:
+  - `source_origin` (`inventory` | `manual`) — de donde salen los datos del origen. Es lo que elige el usuario.
+  - `source_mode` (`local` | `remote`) — donde corren los comandos. Se **deriva**, ya no se pide. Dentro del script "local" vuelve a significar literalmente "en esta maquina", que es correcto y ahora es un caso borde.
+  Los valores viejos siguen aceptados como alias (`local`→`inventory`, `remote`→`manual`) para no romper una pagina cacheada durante el deploy.
+- **UI**: las opciones pasan de "Instancia local (preconfigurada)" / "Servidor remoto por SSH" a **"Plataforma del inventario"** / **"Servidor manual por SSH"**, y el campo del formulario es `source_origin`.
+- **Errores utiles cuando el inventario esta incompleto**: si la plataforma esta en otro host y no tiene `ssh_key_path`, el error lo dice y aclara que este modulo autentica por clave (`ssh -o BatchMode=yes -i`) y no soporta `ssh_password`. Si el `host` esta malformado, tambien. Los mensajes de rutas faltantes ahora nombran la plataforma.
+- Las rutas que vienen del inventario se validan con `is_safe_path()`, igual que las cargadas a mano.
+- El mensaje del script para el caso local se reescribio acorde: ahora explica que `SOURCE_MODE=local` significa que busco en la maquina del clonador, y sugiere revisar el campo `host` de la entrada del inventario.
+- Verificado: plataforma en otra maquina → `script_mode=remote` con host y usuario del inventario; plataforma en esta maquina → `script_mode=local`; los dos alias legacy resuelven igual que los nuevos; y `ssh_key_path` vacio u `host` malformado fallan con mensaje explicito.
+
 ## v0.12.1 - 2026-08-12
 
 Fix: restaurado el bit de ejecucion de `moodle-clone-web.sh`, que se perdio en v0.12.0, y el script ahora se invoca via `bash` para que ese permiso no pueda volver a romper el clonado.

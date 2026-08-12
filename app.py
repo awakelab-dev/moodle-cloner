@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import threading
 import time
 import uuid
@@ -113,6 +114,31 @@ def is_safe_path(value: str) -> bool:
     return bool(re.fullmatch(r"/[A-Za-z0-9_./-]+", value))
 
 
+_local_hosts_cache: Optional[set] = None
+
+
+def local_host_identifiers() -> set:
+    """Nombres e IPs que identifican a ESTA maquina (el host del clonador).
+
+    Se usa para decidir si una plataforma del inventario vive aca o hay que
+    alcanzarla por SSH. Se calcula una sola vez: getaddrinfo puede ser lento.
+    """
+    global _local_hosts_cache
+    if _local_hosts_cache is not None:
+        return _local_hosts_cache
+    names = {"localhost", "127.0.0.1", "::1"}
+    try:
+        hostname = socket.gethostname()
+        names.add(hostname)
+        names.add(hostname.split(".")[0])
+        for info in socket.getaddrinfo(hostname, None):
+            names.add(str(info[4][0]))
+    except OSError:
+        pass
+    _local_hosts_cache = {n.strip().lower() for n in names if n.strip()}
+    return _local_hosts_cache
+
+
 def sanitize_preview(payload: Dict[str, Any]) -> Dict[str, Any]:
     clean = dict(payload)
     for key in ("db_pass", "target_db_pass", "source_db_pass", "target_db_admin_pass"):
@@ -125,8 +151,31 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Payload inválido.")
 
-    source_mode = str(payload.get("source_mode", "local")).strip().lower()
+    # Dos conceptos que antes estaban confundidos en uno:
+    #   source_origin (inventory | manual) = DE DONDE salen los datos del origen.
+    #                                        Es lo que elige el usuario.
+    #   source_mode   (local | remote)     = DONDE corren los comandos: en esta
+    #                                        maquina o por SSH. Se DERIVA.
+    # Historicamente el script corria en la propia maquina de origen y "local"
+    # era correcto. Ya no: el clonador tiene su propio host, asi que llamar
+    # "local" a "plataforma del inventario" describia mal el 100% de los casos
+    # reales y producia el "config.php not found" en el host del clonador.
+    # Se aceptan los valores viejos como alias para no romper una pagina cacheada.
+    raw_origin = str(payload.get("source_origin") or payload.get("source_mode") or "inventory").strip().lower()
+    origin_aliases = {
+        "inventory": "inventory",
+        "local": "inventory",   # legacy
+        "manual": "manual",
+        "remote": "manual",     # legacy
+    }
+    source_origin = origin_aliases.get(raw_origin)
+    if source_origin is None:
+        raise ValueError("Origen inválido. Usa 'inventory' (plataforma del inventario) o 'manual' (SSH a mano).")
+    source_mode = "local" if source_origin == "inventory" else "remote"
+
     source_host = str(payload.get("source_host", "")).strip()
+    source_ssh_user = DEFAULT_SOURCE_SSH_USER
+    source_ssh_key = REMOTE_SSH_KEY
     source_dir = str(payload.get("source_dir", "")).strip()
     source_data = str(payload.get("source_data", "")).strip()
     source_vhost = str(payload.get("source_vhost", "")).strip()
@@ -145,14 +194,11 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     target_db_pass = str(payload.get("target_db_pass", payload.get("db_pass", "")))
     dest_db = str(payload.get("dest_db", "")).strip()
 
-    if source_mode not in ("local", "remote"):
-        raise ValueError("Modo de origen inválido. Usa 'local' o 'remote'.")
-
-    if source_mode == "local":
+    if source_origin == "inventory":
         try:
             source_index = int(payload.get("source_index", -1))
         except (TypeError, ValueError):
-            raise ValueError("source_index inválido para modo local.")
+            raise ValueError("source_index inválido: no se identificó la plataforma del inventario.")
         try:
             inv_servers = course_routes._load_servers()
         except Exception as exc:
@@ -160,15 +206,51 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         if source_index < 0 or source_index >= len(inv_servers):
             raise ValueError("Plataforma origen no encontrada en el inventario.")
         src_entry = inv_servers[source_index]
+        src_name = str(src_entry.get("name") or f"#{source_index}")
         source_dir = str(src_entry.get("moodle_path") or "").rstrip("/")
         source_data = str(src_entry.get("moodledata_path") or "")
         source_vhost = str(src_entry.get("vhost_path") or "")
         if not source_dir:
-            raise ValueError("La plataforma origen no tiene ruta Moodle configurada (moodle_path).")
+            raise ValueError(f"La plataforma origen '{src_name}' no tiene ruta Moodle configurada (moodle_path).")
         if not source_data:
-            raise ValueError("La plataforma origen no tiene ruta moodledata configurada (moodledata_path).")
+            raise ValueError(f"La plataforma origen '{src_name}' no tiene ruta moodledata configurada (moodledata_path).")
         if not source_vhost:
-            raise ValueError("La plataforma origen no tiene ruta vhost configurada (vhost_path).")
+            raise ValueError(f"La plataforma origen '{src_name}' no tiene ruta vhost configurada (vhost_path).")
+
+        # Las entradas del inventario describen servidores REMOTOS: cada una
+        # tiene su propio `host` y credenciales SSH. Antes se tomaban las rutas
+        # de la entrada pero se ignoraba el `host`, y los comandos corrian en el
+        # host del clonador — de ahi el "config.php not found" al clonar una
+        # plataforma que vive en otra maquina. Si el host de la entrada no es
+        # esta misma maquina, se pasa a modo remoto contra ese host.
+        entry_host = str(src_entry.get("host") or "").strip()
+        if entry_host and entry_host.lower() not in local_host_identifiers():
+            if not re.fullmatch(r"[A-Za-z0-9.-]+", entry_host):
+                raise ValueError(
+                    f"La plataforma origen '{src_name}' tiene un host inválido en el inventario: '{entry_host}'."
+                )
+            entry_ssh_key = str(src_entry.get("ssh_key_path") or "").strip()
+            if not entry_ssh_key:
+                raise ValueError(
+                    f"La plataforma origen '{src_name}' está en {entry_host}, así que hay que alcanzarla "
+                    "por SSH, pero no tiene 'ssh_key_path' en el inventario. El clonador de instancias "
+                    "autentica por clave (ssh -o BatchMode=yes -i <clave>); 'ssh_password' no está "
+                    "soportado en este módulo. Configura la clave en Plataformas."
+                )
+            source_mode = "remote"
+            source_host = entry_host
+            source_ssh_user = str(src_entry.get("ssh_user") or "").strip() or DEFAULT_SOURCE_SSH_USER
+            source_ssh_key = entry_ssh_key
+
+        for label, value in (
+            ("Moodle", source_dir),
+            ("moodledata", source_data),
+            ("vhost", source_vhost),
+        ):
+            if not is_safe_path(value):
+                raise ValueError(
+                    f"La ruta {label} de la plataforma origen '{src_name}' es inválida en el inventario: '{value}'."
+                )
     else:
         if not re.fullmatch(r"[A-Za-z0-9.-]+", source_host):
             raise ValueError("Host origen inválido.")
@@ -229,8 +311,11 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Nombre de BD destino inválido (solo letras, números y _).")
 
     validated = {
+        "source_origin": source_origin,
         "source_mode": source_mode,
         "source_host": source_host,
+        "source_ssh_user": source_ssh_user,
+        "source_ssh_key": source_ssh_key,
         "source_dir": source_dir,
         "source_data": source_data,
         "source_vhost": source_vhost,
@@ -298,8 +383,10 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "SRC_VHOST": src_vhost,
             "SOURCE_MODE": payload["source_mode"],
             "SOURCE_HOST": payload["source_host"],
-            "SOURCE_SSH_USER": DEFAULT_SOURCE_SSH_USER,
-            "SOURCE_SSH_KEY": REMOTE_SSH_KEY,
+            # Derivados de la entrada del inventario cuando el origen sale de
+            # ahi; si no, los defaults de siempre.
+            "SOURCE_SSH_USER": payload.get("source_ssh_user") or DEFAULT_SOURCE_SSH_USER,
+            "SOURCE_SSH_KEY": payload.get("source_ssh_key") or REMOTE_SSH_KEY,
             "NEW_KEY": payload["new_key"],
             "NEW_DOMAIN": payload["new_domain"],
             "NEW_URL": payload["new_url"],

@@ -142,9 +142,9 @@
                     <div class="space-y-4">
                       <div>
                         <label class="block text-xs font-medium text-slate-300 mb-1">Modo de origen</label>
-                        <select name="source_mode" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                          <option value="local" selected>Instancia local (preconfigurada)</option>
-                          <option value="remote">Servidor remoto por SSH</option>
+                        <select name="source_origin" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                          <option value="inventory" selected>Plataforma del inventario</option>
+                          <option value="manual">Servidor manual por SSH</option>
                         </select>
                       </div>
                       <div>
@@ -2755,14 +2755,14 @@
       function buildPayload(dryRun) {
         const fd = new FormData(form);
         const deployTarget = String(fd.get('deploy_target') || 'local').trim();
-        const sourceMode = String(fd.get('source_mode') || 'local').trim();
+        const sourceOrigin = String(fd.get('source_origin') || 'inventory').trim();
         return {
-          source_mode: sourceMode,
-          source_index: sourceMode === 'local' ? Number.parseInt(String(fd.get('source_index') || '-1'), 10) : undefined,
-          source_host: sourceMode === 'remote' ? String(fd.get('source_host') || '').trim() : '',
-          source_dir: sourceMode === 'remote' ? String(fd.get('source_dir') || '').trim() : '',
-          source_data: sourceMode === 'remote' ? String(fd.get('source_data') || '').trim() : '',
-          source_vhost: sourceMode === 'remote' ? String(fd.get('source_vhost') || '').trim() : '',
+          source_origin: sourceOrigin,
+          source_index: sourceOrigin === 'inventory' ? Number.parseInt(String(fd.get('source_index') || '-1'), 10) : undefined,
+          source_host: sourceOrigin === 'manual' ? String(fd.get('source_host') || '').trim() : '',
+          source_dir: sourceOrigin === 'manual' ? String(fd.get('source_dir') || '').trim() : '',
+          source_data: sourceOrigin === 'manual' ? String(fd.get('source_data') || '').trim() : '',
+          source_vhost: sourceOrigin === 'manual' ? String(fd.get('source_vhost') || '').trim() : '',
           maintenance_source: fd.get('maintenance_source') === 'on',
           new_key: String(fd.get('new_key') || '').trim(),
           new_domain: String(fd.get('new_domain') || '').trim(),
@@ -2876,7 +2876,7 @@
       const dbInput = form.querySelector('input[name="dest_db"]');
       const deployTargetInput = form.querySelector('select[name="deploy_target"]');
       const remoteHostInput = form.querySelector('input[name="remote_host"]');
-      const sourceModeInput = form.querySelector('select[name="source_mode"]');
+      const sourceModeInput = form.querySelector('select[name="source_origin"]');
       const sourceIndexInput = form.querySelector('select[name="source_index"]');
       const remoteSourceFields = document.getElementById('remote-source-fields');
 
@@ -2905,8 +2905,8 @@
       }
 
       function updateSourceModeUi() {
-        const sourceMode = (sourceModeInput.value || 'local').trim();
-        const isRemoteSource = sourceMode === 'remote';
+        const sourceOrigin = (sourceModeInput.value || 'inventory').trim();
+        const isRemoteSource = sourceOrigin === 'manual';
         remoteSourceFields.classList.toggle('hidden', !isRemoteSource);
         sourceIndexInput.disabled = isRemoteSource;
         sourceIndexInput.classList.toggle('opacity-60', isRemoteSource);
