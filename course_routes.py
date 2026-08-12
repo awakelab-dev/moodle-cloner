@@ -7,6 +7,7 @@ responsible for turning these into responses.
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
@@ -67,6 +68,44 @@ def _as_bool(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "si", "sí", "on"}
 
 
+def _server_capabilities(server: dict[str, Any]) -> dict[str, Any]:
+    """Qué módulos puede usar esta plataforma, y qué le falta si no puede.
+
+    Se deriva de los campos del inventario en vez de guardarse como flags
+    aparte: una entrada a la que le falta 'vhost_path' *no puede* servir de
+    origen al clonador de instancias, y guardar un booleano suelto que diga lo
+    contrario solo mueve el error a la mitad del job.
+
+    Instalación de plugins y clonación de cursos comparten requisitos porque
+    ambos hablan por paramiko contra 'moodle_path' con 'web_user' (paramiko
+    acepta llave *o* contraseña). El clonador de instancias es más exigente:
+    autentica con ``ssh -o BatchMode=yes -i <clave>``, así que 'ssh_password'
+    no le sirve, y además necesita 'moodledata_path' y 'vhost_path' para
+    copiar los archivos y el vhost de Nginx.
+    """
+    def missing_of(fields: tuple[str, ...]) -> list[str]:
+        return [f for f in fields if not str(server.get(f) or "").strip()]
+
+    ssh_any = missing_of(("host", "ssh_user"))
+    if not (server.get("ssh_key_path") or server.get("ssh_password")):
+        ssh_any.append("ssh_key_path o ssh_password")
+
+    moodle_ssh = ssh_any + missing_of(("moodle_path", "web_user"))
+    platform = (
+        missing_of(("host", "ssh_user", "ssh_key_path"))
+        + missing_of(("moodle_path", "moodledata_path", "vhost_path"))
+    )
+
+    def cap(missing: list[str]) -> dict[str, Any]:
+        return {"ok": not missing, "missing": missing}
+
+    return {
+        "plugin_install": cap(list(moodle_ssh)),
+        "course_clone": cap(list(moodle_ssh)),
+        "platform_clone": cap(platform),
+    }
+
+
 def _public_server(server: dict[str, Any], index: int) -> dict[str, Any]:
     if server.get("ssh_key_path"):
         auth_method = "Llave SSH"
@@ -77,6 +116,7 @@ def _public_server(server: dict[str, Any], index: int) -> dict[str, Any]:
     return {
         "index": index,
         "name": server["name"],
+        "url": str(server.get("url") or "").strip(),
         "host": server["host"],
         "port": int(server.get("port", 22)),
         "ssh_user": server["ssh_user"],
@@ -87,6 +127,8 @@ def _public_server(server: dict[str, Any], index: int) -> dict[str, Any]:
         "web_group": server.get("web_group") or server["web_user"],
         "sudo_requires_password": bool(server.get("sudo_requires_password", False)),
         "auth_method": auth_method,
+        "has_ssh_key": bool(server.get("ssh_key_path")),
+        "capabilities": _server_capabilities(server),
     }
 
 
@@ -133,6 +175,13 @@ def _server_from_payload(
         return value
 
     name = read_text("name", required=True)
+    url = read_text("url").rstrip("/")
+    if url and not re.fullmatch(r"https?://[^\s/]+(/[^\s]*)?", url):
+        raise CourseRouteError(
+            400,
+            "La URL de la plataforma debe empezar con http:// o https:// "
+            "(por ejemplo https://ejemplo.awakelab.world).",
+        )
     host = read_text("host", required=True)
     ssh_user = read_text("ssh_user", required=True)
     moodle_path = read_text("moodle_path", required=True).rstrip("/")
@@ -151,6 +200,7 @@ def _server_from_payload(
 
     server = {
         "name": name,
+        "url": url,
         "host": host,
         "port": port,
         "ssh_user": ssh_user,

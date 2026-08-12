@@ -86,6 +86,9 @@ def load_inventory(path: Path) -> list[dict[str, Any]]:
         server.setdefault("sudo_requires_password", False)
         server.setdefault("moodledata_path", "")
         server.setdefault("vhost_path", "")
+        # URL publica de la plataforma. Solo informativa (la UI la muestra como
+        # enlace); las entradas viejas del inventario no la traen.
+        server.setdefault("url", "")
 
     return servers
 

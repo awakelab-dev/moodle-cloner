@@ -81,9 +81,13 @@
 
     <!-- Top header / nav -->
     <header class="border-b border-slate-800 bg-slate-900 sticky top-0 z-30">
-      <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
-          <img src="/assets/logo.png" alt="AWAKELAB" class="h-9 w-auto" />
+      <!-- pr-16 reserva el espacio del boton hamburguesa, que va posicionado
+           contra el borde derecho del header (ver mas abajo) y por lo tanto
+           esta fuera de este contenedor centrado. -->
+      <div class="max-w-6xl mx-auto pl-6 pr-16 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-2.5">
+          <img src="/assets/logo.png" alt="AulaCloner" class="h-9 w-auto" />
+          <span class="text-[11px] font-mono leading-none text-slate-400 border border-slate-700 rounded-full px-2 py-1 whitespace-nowrap">v{{APP_VERSION}}</span>
         </div>
 
         <nav class="flex items-center gap-1">
@@ -93,14 +97,6 @@
           <button data-section="alexia" data-perm="can_access_alexia_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador Alexia</button>
         </nav>
 
-        <div class="flex items-center gap-2">
-          <!-- Hamburger button — wraps admin controls -->
-          <button id="hamburger-btn" class="p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu">
-            <svg id="hamburger-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-            <svg id="hamburger-close-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
-
         <!-- Hidden originals kept for JS compatibility -->
         <button id="platforms-btn" class="hidden"></button>
         <button id="users-btn" class="hidden"></button>
@@ -109,16 +105,14 @@
         <span id="current-user-label" class="hidden"></span>
       </div>
 
-      <!-- Dropdown menu panel (admin controls) -->
-      <div id="mobile-menu" class="hidden border-t border-slate-800 bg-slate-900">
-        <div class="max-w-6xl mx-auto px-6 py-3 flex flex-col gap-1">
-          <div id="menu-user-label" class="px-3 py-1.5 text-xs text-slate-400"></div>
-          <button id="mobile-platforms-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plataformas</button>
-          <button id="mobile-users-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Usuarios</button>
-          <button id="mobile-account-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Mi cuenta</button>
-          <button id="mobile-logout-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white text-red-400">Salir</button>
-        </div>
-      </div>
+      <!-- Boton hamburguesa, pegado al borde derecho del header. Va fuera del
+           contenedor centrado a proposito: dentro quedaba con el margen del
+           max-w-6xl y en pantallas anchas se veia despegado del borde.
+           `position: sticky` del header ya sirve de bloque contenedor. -->
+      <button id="hamburger-btn" class="absolute right-3 top-3 p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu">
+        <svg id="hamburger-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg id="hamburger-close-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
     </header>
 
     <main class="flex-1 px-4 py-8">
@@ -152,7 +146,7 @@
                         <select name="source_index" id="clone-source-index" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
                           <option value="">Cargando plataformas...</option>
                         </select>
-                        <p class="mt-1 text-xs text-slate-500">Selecciona la instancia que se usara como origen para la clonacion.</p>
+                        <p id="clone-source-hint" class="mt-1 text-xs text-slate-500">Selecciona la instancia que se usara como origen para la clonacion.</p>
                       </div>
                       <div id="remote-source-fields" class="hidden rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
                         <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Origen remoto (SSH)</h3>
@@ -441,8 +435,13 @@
                     <input id="pf-name" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
                   <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Host SSH</label>
-                    <input id="pf-host" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <label class="block text-xs font-medium text-slate-300 mb-1">URL de la plataforma</label>
+                    <input id="pf-url" type="url" inputmode="url" placeholder="https://ejemplo.awakelab.world" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p class="mt-1 text-xs text-slate-500">Direccion publica del Moodle. Se muestra como enlace en la lista.</p>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Direccion IP (host SSH)</label>
+                    <input id="pf-host" type="text" required placeholder="13.167.34.11" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-slate-300 mb-1">Puerto SSH</label>
@@ -655,20 +654,17 @@
               </div>
             </div>
 
-            <!-- Alexia Sub-tabs -->
-            <div class="border-b border-slate-800 px-8 flex gap-1">
-              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="batch">Importacion Masiva</button>
-              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="single">Exportacion Individual</button>
-            </div>
-
-            <!-- ====== TAB: BATCH ====== -->
-            <div id="ax-tab-batch" class="ax-tab-content hidden px-8 py-6">
+            <!-- Antes habia dos sub-tabs (Importacion Masiva / Exportacion
+                 Individual). Al quedar una sola vista el tab no aportaba nada,
+                 asi que la carga del Excel pasa a ser el contenido directo de
+                 la seccion. -->
+            <div id="ax-tab-batch" class="px-8 py-6">
               <!-- Upload Zone -->
               <div id="ax-upload-section">
                 <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-5">
                   <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
                     <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                    Subir archivo Excel
+                    Cargar datos Alexia
                   </h2>
                   <div id="ax-drop-zone" class="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition-colors">
                     <svg class="w-10 h-10 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -763,88 +759,6 @@
                       </thead>
                       <tbody id="ax-batch-table-body"></tbody>
                     </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- ====== TAB: SINGLE ====== -->
-            <div id="ax-tab-single" class="ax-tab-content hidden px-8 py-6">
-              <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div class="lg:col-span-3 space-y-5">
-                  <!-- Course Search -->
-                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-                    <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                      Buscar Curso en Catalejo
-                    </h2>
-                    <div class="flex gap-2">
-                      <input class="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-search-input" placeholder="Buscar por nombre, shortname o ID...">
-                      <button id="ax-search-btn" class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 whitespace-nowrap">Buscar</button>
-                    </div>
-                    <div id="ax-search-results" class="mt-2 hidden">
-                      <div class="rounded-lg border border-slate-800 bg-slate-900 max-h-48 overflow-y-auto" id="ax-search-list"></div>
-                    </div>
-                    <div id="ax-selected-course" class="mt-3 hidden">
-                      <div class="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-primary-600/40">
-                        <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                        <span class="text-sm text-white" id="ax-selected-course-name"></span>
-                        <span class="text-xs text-slate-400 ml-auto" id="ax-selected-course-id"></span>
-                        <button id="ax-clear-course" class="text-slate-400 hover:text-red-400 ml-2">&times;</button>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Course Data Form -->
-                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                      Datos del Curso
-                    </h2>
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Ejercicio *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-ejercicio" placeholder="2026"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">ID Centro *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-id-centro" placeholder="5545"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Nombre Centro</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-nombre-centro" placeholder="Nombre del centro"></div>
-                      <div class="md:col-span-2"><label class="block text-[11px] text-slate-400 mb-0.5">Especialidad *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-especialidad" placeholder="(SYMA33) Coordinacion en emergencias"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Pertenece Curso *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-pertenece-curso" placeholder="1"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Codigo Oficial *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-codigo-oficial" placeholder="1505"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Reducido Grupo *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-reducido-grupo" placeholder="1CEPC-P"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Modalidad</label><div class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm" id="ax-f-modalidad-display"><span class="text-slate-500">Auto-detectada</span></div></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Estudio</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-estudio" placeholder="Estudio"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 1</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat1" placeholder="Mat1"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 2</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat2" placeholder="Mat2"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Area</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-area" placeholder="Area"></div>
-                    </div>
-                    <div class="mt-5 flex justify-end">
-                      <button id="ax-btn-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-700">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                        Exportar Curso
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div class="lg:col-span-2 space-y-5">
-                  <!-- Category Tree Preview -->
-                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                      Arbol de Categorias
-                    </h2>
-                    <div id="ax-tree-preview" class="text-sm space-y-1">
-                      <p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>
-                    </div>
-                  </div>
-                  <!-- Export Status -->
-                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 hidden" id="ax-export-status-card">
-                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                      Estado de Exportacion
-                    </h2>
-                    <div class="w-full bg-slate-800 rounded-full h-2 mb-4">
-                      <div id="ax-progress-bar" class="h-2 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
-                    </div>
-                    <div id="ax-progress-percent" class="text-xs text-slate-400 text-right -mt-3 mb-3">0%</div>
-                    <div id="ax-export-steps" class="space-y-2 text-sm"></div>
-                    <div id="ax-export-result" class="mt-4 hidden"></div>
                   </div>
                 </div>
               </div>
@@ -1022,17 +936,29 @@
     </div>
   </div>
 
-  <!-- Etiqueta de version fija al pie. Fuera de #login-view y #app-view a
-       proposito, para que se vea en las dos. pointer-events-none para no tapar
-       clicks, y z-20 para quedar debajo del header (z-30) y de los modales (z-40). -->
-  <footer class="fixed inset-x-0 bottom-0 z-20 pointer-events-none flex justify-center pb-3">
-    <!-- Pastilla con fondo OPACO: al ser fija se superpone al contenido que
-         scrollea por detras, y sin fondo las letras se mezclaban con el. -->
-    <div class="flex items-center gap-2 rounded-full bg-slate-900 border border-slate-800 px-3 py-1 shadow-lg shadow-slate-950/60 text-[10px] text-slate-400">
-      <span>Plataforma de clonado</span>
-      <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-300">v{{APP_VERSION}}</span>
+  <!-- ====== Sidebar de menu (derecha) ==============================
+       Antes era un panel desplegable dentro del <header>. Ahora es un sidebar
+       fijo que entra desde la derecha y se superpone al fondo con un velo.
+       Vive al final del <body>, fuera del header sticky, para que el `fixed` y
+       el z-index no dependan del contexto de apilamiento de la cabecera.
+       El velo usa un color con alfa, NO backdrop-filter: WebKit dejaba la capa
+       de composicion sin pintar y daba "pantalla oscura sin nada". -->
+  <div id="menu-overlay" class="hidden fixed inset-0 z-40 bg-slate-950/70"></div>
+  <aside id="mobile-menu" aria-hidden="true" class="fixed top-0 right-0 z-50 h-full w-72 max-w-[85vw] translate-x-full transition-transform duration-300 ease-out bg-slate-900 border-l border-slate-800 shadow-2xl shadow-slate-950/80 flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+      <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Menu</span>
+      <button id="menu-close-btn" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Cerrar menu">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
     </div>
-  </footer>
+    <div class="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-1">
+      <div id="menu-user-label" class="px-3 py-1.5 text-xs text-slate-400"></div>
+      <button id="mobile-platforms-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plataformas</button>
+      <button id="mobile-users-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Usuarios</button>
+      <button id="mobile-account-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Mi cuenta</button>
+      <button id="mobile-logout-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-slate-800 hover:text-red-300">Salir</button>
+    </div>
+  </aside>
 
   <script>
     // ====== Password show/hide toggle ===============================
@@ -1297,28 +1223,44 @@
       });
     })();
 
-    // ====== Hamburger menu ============================================
+    // ====== Hamburger menu (sidebar derecho) ==========================
     (function() {
       const hamburgerBtn = document.getElementById('hamburger-btn');
       const mobileMenu = document.getElementById('mobile-menu');
+      const overlay = document.getElementById('menu-overlay');
       const iconOpen = document.getElementById('hamburger-icon');
       const iconClose = document.getElementById('hamburger-close-icon');
 
+      // El sidebar nunca se oculta con `hidden`: se desplaza fuera de pantalla
+      // con translate-x-full para que la transicion se vea al abrir y cerrar.
+      // Quien se oculta con `hidden` es el velo, asi no intercepta clicks
+      // cuando el menu esta cerrado.
       function closeMobileMenu() {
-        mobileMenu.classList.add('hidden');
+        mobileMenu.classList.add('translate-x-full');
+        mobileMenu.setAttribute('aria-hidden', 'true');
+        overlay.classList.add('hidden');
+        hamburgerBtn.setAttribute('aria-expanded', 'false');
         iconOpen.classList.remove('hidden');
         iconClose.classList.add('hidden');
       }
 
+      function openMobileMenu() {
+        overlay.classList.remove('hidden');
+        mobileMenu.classList.remove('translate-x-full');
+        mobileMenu.setAttribute('aria-hidden', 'false');
+        hamburgerBtn.setAttribute('aria-expanded', 'true');
+        iconOpen.classList.add('hidden');
+        iconClose.classList.remove('hidden');
+      }
+
       hamburgerBtn.addEventListener('click', () => {
-        const isOpen = !mobileMenu.classList.contains('hidden');
-        if (isOpen) {
-          closeMobileMenu();
-        } else {
-          mobileMenu.classList.remove('hidden');
-          iconOpen.classList.add('hidden');
-          iconClose.classList.remove('hidden');
-        }
+        if (mobileMenu.classList.contains('translate-x-full')) openMobileMenu();
+        else closeMobileMenu();
+      });
+      overlay.addEventListener('click', closeMobileMenu);
+      document.getElementById('menu-close-btn').addEventListener('click', closeMobileMenu);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !mobileMenu.classList.contains('translate-x-full')) closeMobileMenu();
       });
 
       document.getElementById('mobile-account-btn').addEventListener('click', () => {
@@ -2551,6 +2493,7 @@
       function collectPayload() {
         return {
           name: val('name'),
+          url: val('url'),
           host: val('host'),
           port: Number.parseInt(val('port') || '22', 10),
           ssh_user: val('ssh_user'),
@@ -2568,7 +2511,8 @@
       }
       function validate(p) {
         if (!p.name) return 'Ingresa el nombre visible.';
-        if (!p.host) return 'Ingresa el host SSH.';
+        if (p.url && !/^https?:\/\/[^\s/]+/.test(p.url)) return 'La URL debe empezar con http:// o https://';
+        if (!p.host) return 'Ingresa la direccion IP (host SSH).';
         if (!p.port || Number.isNaN(p.port) || p.port < 1 || p.port > 65535) return 'Puerto SSH invalido.';
         if (!p.ssh_user) return 'Ingresa el usuario SSH.';
         if (!p.moodle_path) return 'Ingresa la ruta Moodle.';
@@ -2599,6 +2543,7 @@
         formTitle.textContent = `Editar plataforma: ${s.name}`;
         submitBtn.textContent = 'Actualizar plataforma';
         setVal('name', s.name);
+        setVal('url', s.url || '');
         setVal('host', s.host);
         setVal('port', s.port);
         setVal('ssh_user', s.ssh_user);
@@ -2637,22 +2582,37 @@
           listEl.innerHTML = '<div class="text-xs text-slate-500 text-center py-6">No hay plataformas.</div>';
           return;
         }
+        // Cada capacidad se deriva en el backend de los campos del inventario
+        // (ver _server_capabilities). Cuando falta algo se lista, porque el
+        // motivo es justamente lo que hay que completar en este formulario.
+        function capRow(label, cap) {
+          const c = cap || { ok: false, missing: [] };
+          const icon = c.ok
+            ? '<svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>'
+            : '<svg class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>';
+          const missing = !c.ok && c.missing && c.missing.length
+            ? `<span class="text-slate-500"> — falta ${esc(c.missing.join(', '))}</span>`
+            : '';
+          return `<div class="flex items-start gap-1.5">${icon}<span class="${c.ok ? 'text-slate-300' : 'text-slate-500'}">${label}${missing}</span></div>`;
+        }
         listEl.innerHTML = state.servers.map(s => `
           <article class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
             <div class="flex items-start justify-between gap-3">
-              <div>
+              <div class="min-w-0">
                 <div class="text-sm font-medium text-slate-100">${esc(s.name)}</div>
-                <div class="text-[11px] text-slate-400 mt-0.5">${esc(s.host)}:${s.port} · ${esc(s.ssh_user)}</div>
+                ${s.url
+                  ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-primary-400 hover:text-primary-300 underline break-all mt-0.5 inline-block">${esc(s.url)}</a>`
+                  : '<div class="text-[11px] text-slate-600 italic mt-0.5">Sin URL configurada</div>'}
               </div>
-              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 whitespace-nowrap">${esc(s.auth_method)}</span>
+              ${s.has_ssh_key ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 whitespace-nowrap">Llave SSH</span>' : ''}
             </div>
-            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-400">
-              <span class="truncate">Moodle: <span class="text-slate-300">${esc(s.moodle_path)}</span></span>
-              <span>Web: <span class="text-slate-300">${esc(s.web_user)}:${esc(s.web_group)}</span></span>
-              ${s.moodledata_path ? `<span class="truncate sm:col-span-2">Moodledata: <span class="text-slate-300">${esc(s.moodledata_path)}</span></span>` : ''}
-              ${s.vhost_path ? `<span class="truncate sm:col-span-2">Vhost: <span class="text-slate-300">${esc(s.vhost_path)}</span></span>` : ''}
-              <span>Sudo con contrasena: <span class="text-slate-300">${s.sudo_requires_password ? 'Si' : 'No'}</span></span>
-              <span>Contrasena SSH: <span class="text-slate-300">${s.has_ssh_password ? 'Si' : 'No'}</span></span>
+            <div class="mt-2 text-[11px] text-slate-400">
+              Direccion IP: <span class="text-slate-300 font-mono">${esc(s.host)}</span>
+            </div>
+            <div class="mt-2 space-y-1 text-[11px]">
+              ${capRow('Acepta Instalacion Plugin', s.capabilities && s.capabilities.plugin_install)}
+              ${capRow('Acepta Clonacion de Cursos', s.capabilities && s.capabilities.course_clone)}
+              ${capRow('Acepta Clonacion de Plataforma', s.capabilities && s.capabilities.platform_clone)}
             </div>
             <div class="mt-3 flex flex-wrap gap-2">
               <button class="text-[11px] px-2.5 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800" data-action="edit" data-index="${s.index}">Editar</button>
@@ -2981,6 +2941,7 @@
       const remoteHostInput = form.querySelector('input[name="remote_host"]');
       const sourceModeInput = form.querySelector('select[name="source_origin"]');
       const sourceIndexInput = form.querySelector('select[name="source_index"]');
+      const sourceHintEl = document.getElementById('clone-source-hint');
       const remoteSourceFields = document.getElementById('remote-source-fields');
 
       function suggestFromKey() {
@@ -3020,12 +2981,19 @@
           const res = await fetch('/api/cc/servers');
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(payload.error || 'No se pudo cargar inventario.');
-          const servers = (payload.servers || []).slice().sort(
+          const all = (payload.servers || []).slice().sort(
             (a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' })
           );
+          // Solo las plataformas que aceptan clonacion de plataforma. Este
+          // modulo necesita moodle_path + moodledata_path + vhost_path y llave
+          // SSH (autentica con BatchMode, no acepta contrasena); ofrecer las
+          // demas solo mueve el error al medio del job, cuando el origen ya
+          // quedo en modo mantenimiento.
+          const servers = all.filter(s => s.capabilities && s.capabilities.platform_clone && s.capabilities.platform_clone.ok);
+          const excluded = all.length - servers.length;
           sourceIndexInput.innerHTML = servers.length
             ? '<option value="">Selecciona instancia origen...</option>'
-            : '<option value="">No hay plataformas en el inventario</option>';
+            : '<option value="">No hay plataformas aptas para clonar</option>';
           servers.forEach(s => {
             const o = document.createElement('option');
             o.value = s.index;
@@ -3033,6 +3001,20 @@
             sourceIndexInput.appendChild(o);
           });
           if (servers.length) sourceIndexInput.value = String(servers[0].index);
+          if (sourceHintEl) {
+            if (!all.length) {
+              sourceHintEl.textContent = 'No hay plataformas en el inventario.';
+              sourceHintEl.className = 'mt-1 text-xs text-amber-400';
+            } else if (!servers.length) {
+              sourceHintEl.textContent = `Ninguna de las ${all.length} plataformas del inventario acepta clonacion de plataforma. Completa ruta moodledata, ruta vhost Nginx y llave SSH en Administrar plataformas.`;
+              sourceHintEl.className = 'mt-1 text-xs text-amber-400';
+            } else {
+              sourceHintEl.textContent = excluded
+                ? `Solo se listan las ${servers.length} plataformas que aceptan clonacion de plataforma (${excluded} excluida${excluded === 1 ? '' : 's'} por datos incompletos en el inventario).`
+                : 'Selecciona la instancia que se usara como origen para la clonacion.';
+              sourceHintEl.className = 'mt-1 text-xs text-slate-500';
+            }
+          }
         } catch (err) {
           sourceIndexInput.innerHTML = `<option value="">Error: ${err.message}</option>`;
         }
@@ -3361,11 +3343,8 @@
     (function () {
       let loaded = false;
       let axBatchData = null;
-      let axCurrentJobId = null;
-      let axPollInterval = null;
       let axCurrentBatchId = null;
       let axBatchPollInterval = null;
-      let axSelectedCourseId = null;
 
       const $ = id => document.getElementById(id);
 
@@ -3427,27 +3406,6 @@
         $('ax-config-panel').classList.toggle('hidden');
       });
 
-      // --- Sub-tabs ---
-      function switchAxTab(tab) {
-        document.querySelectorAll('.ax-tab').forEach(b => {
-          b.classList.remove('text-white', 'border-primary-500');
-          b.classList.add('text-slate-400', 'border-transparent');
-        });
-        document.querySelectorAll('.ax-tab-content').forEach(c => c.classList.add('hidden'));
-        const btn = document.querySelector(`.ax-tab[data-ax-tab="${tab}"]`);
-        if (btn) {
-          btn.classList.remove('text-slate-400', 'border-transparent');
-          btn.classList.add('text-white', 'border-primary-500');
-        }
-        const content = $(`ax-tab-${tab}`);
-        if (content) content.classList.remove('hidden');
-      }
-
-      document.querySelectorAll('.ax-tab').forEach(btn => {
-        btn.addEventListener('click', () => switchAxTab(btn.dataset.axTab));
-      });
-
-      // --- Batch Upload ---
       const dropZone = $('ax-drop-zone');
       const fileInput = $('ax-file-input');
 
@@ -3644,197 +3602,11 @@
         }
       }
 
-      // --- Single Export ---
-      $('ax-search-btn').addEventListener('click', searchAxCourses);
-      $('ax-search-input').addEventListener('keydown', e => { if (e.key === 'Enter') searchAxCourses(); });
-
-      async function searchAxCourses() {
-        const query = $('ax-search-input').value.trim();
-        if (!query) return;
-        const list = $('ax-search-list');
-        const results = $('ax-search-results');
-        list.innerHTML = '<div class="p-3 text-sm text-slate-400">Buscando...</div>';
-        results.classList.remove('hidden');
-        try {
-          const data = await api('/api/alexia/search-courses', { method: 'POST', body: JSON.stringify({ query }) });
-          if (!data.success) { list.innerHTML = `<div class="p-3 text-sm text-red-400">${escapeHtml(data.error)}</div>`; return; }
-          if (!data.courses || !data.courses.length) { list.innerHTML = '<div class="p-3 text-sm text-slate-400">No se encontraron cursos</div>'; return; }
-          list.innerHTML = data.courses.map(c => `
-            <div class="cursor-pointer px-3 py-2 border-b border-slate-800 hover:bg-slate-800 last:border-0" data-ax-cid="${c.id}" data-ax-cfull="${escapeHtml(c.fullname)}" data-ax-cshort="${escapeHtml(c.shortname)}">
-              <div class="text-sm text-white">${escapeHtml(c.fullname)}</div>
-              <div class="text-xs text-slate-400">${escapeHtml(c.shortname)} | ID: ${c.id} | ${escapeHtml(c.category_name)}</div>
-            </div>`).join('');
-          list.querySelectorAll('[data-ax-cid]').forEach(el => {
-            el.addEventListener('click', () => {
-              axSelectedCourseId = Number(el.dataset.axCid);
-              $('ax-selected-course').classList.remove('hidden');
-              $('ax-selected-course-name').textContent = el.dataset.axCfull;
-              $('ax-selected-course-id').textContent = `ID: ${el.dataset.axCid} | ${el.dataset.axCshort}`;
-              results.classList.add('hidden');
-            });
-          });
-        } catch (e) { list.innerHTML = `<div class="p-3 text-sm text-red-400">Error: ${escapeHtml(e.message)}</div>`; }
-      }
-
-      $('ax-clear-course').addEventListener('click', () => {
-        axSelectedCourseId = null;
-        $('ax-selected-course').classList.add('hidden');
-      });
-
-      function axDeriveModalidad(reducido) {
-        if (!reducido || !reducido.trim()) return '';
-        const last = reducido.trim().slice(-1).toUpperCase();
-        if (last === 'V') return 'VIRTUAL';
-        if (last === 'P') return 'PRESENCIAL';
-        return 'PRESENCIAL';
-      }
-
-      function updateAxTree() {
-        const ejercicio = $('ax-f-ejercicio').value.trim();
-        const idCentro = $('ax-f-id-centro').value.trim();
-        const reducido = $('ax-f-reducido-grupo').value.trim();
-        const especialidad = $('ax-f-especialidad').value.trim();
-        const pertenece = $('ax-f-pertenece-curso').value.trim();
-        const codigo = $('ax-f-codigo-oficial').value.trim();
-        const modalidad = axDeriveModalidad(reducido);
-        const modDisplay = $('ax-f-modalidad-display');
-        if (modalidad) {
-          const cls = modalidad === 'PRESENCIAL' ? 'bg-emerald-600/30 text-emerald-300' : 'bg-purple-600/30 text-purple-300';
-          modDisplay.innerHTML = `<span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${cls}">${modalidad}</span>`;
-        } else {
-          modDisplay.innerHTML = '<span class="text-slate-500">Auto-detectada</span>';
-        }
-        const tree = $('ax-tree-preview');
-        const levels = [
-          { label: 'Ejercicio', value: ejercicio },
-          { label: 'ID Centro', value: idCentro },
-          { label: 'Modalidad', value: modalidad },
-          { label: 'Especialidad', value: especialidad },
-          { label: 'Pertenece Curso', value: pertenece },
-        ];
-        if (!levels.some(l => l.value)) { tree.innerHTML = '<p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>'; return; }
-        let html = '';
-        for (let i = 0; i < levels.length; i++) {
-          const l = levels[i];
-          const isLast = i === levels.length - 1;
-          const value = l.value || '...';
-          const valueClass = l.value ? (isLast ? 'text-primary-300 font-semibold' : 'text-white') : 'text-slate-600 italic';
-          const pad = i * 20;
-          const connector = i === 0 ? '' : `<span class="text-primary-500 mr-1">${isLast ? '└' : '├'}─</span>`;
-          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5">
-            ${connector}<span class="text-slate-400 text-xs">${l.label}:</span><span class="${valueClass} text-sm">${escapeHtml(value)}</span></div>`;
-        }
-        if (levels[levels.length - 1].value) {
-          const shortname = [reducido, codigo, idCentro, ejercicio].filter(Boolean).join('_');
-          const pad = levels.length * 20;
-          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5 mt-1">
-            <span class="text-primary-400 mr-1">└─</span>
-            <span class="text-primary-300 text-xs italic">Curso importado aqui</span></div>`;
-          if (shortname) {
-            html += `<div style="padding-left:${pad + 20}px" class="mt-2 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 inline-block">
-              <span class="text-slate-400 text-xs">Codigo Alexia:</span>
-              <span class="text-primary-300 text-sm font-semibold ml-1">${escapeHtml(shortname)}</span></div>`;
-          }
-        }
-        tree.innerHTML = html;
-      }
-
-      ['ax-f-ejercicio', 'ax-f-id-centro', 'ax-f-especialidad', 'ax-f-pertenece-curso', 'ax-f-codigo-oficial', 'ax-f-reducido-grupo'].forEach(id => {
-        $(id).addEventListener('input', updateAxTree);
-      });
-
-      $('ax-btn-export').addEventListener('click', async function () {
-        if (!axSelectedCourseId) { toaster.show('Seleccione un curso de Catalejo primero', 'warning'); return; }
-        const fields = {
-          ejercicio: $('ax-f-ejercicio').value.trim(),
-          id_centro: $('ax-f-id-centro').value.trim(),
-          nombre_centro: $('ax-f-nombre-centro').value.trim(),
-          especialidad: $('ax-f-especialidad').value.trim(),
-          pertenece_curso: $('ax-f-pertenece-curso').value.trim(),
-          codigo_oficial: $('ax-f-codigo-oficial').value.trim(),
-          reducido_grupo: $('ax-f-reducido-grupo').value.trim(),
-          estudio: $('ax-f-estudio').value.trim(),
-          mat1: $('ax-f-mat1').value.trim(),
-          mat2: $('ax-f-mat2').value.trim(),
-          area: $('ax-f-area').value.trim(),
-        };
-        const required = ['ejercicio','id_centro','especialidad','pertenece_curso','codigo_oficial','reducido_grupo'];
-        if (required.some(f => !fields[f])) { toaster.show('Complete los campos obligatorios (*)', 'warning'); return; }
-        this.disabled = true;
-        const statusCard = $('ax-export-status-card');
-        statusCard.classList.remove('hidden');
-        $('ax-export-steps').innerHTML = '';
-        $('ax-export-result').classList.add('hidden');
-        $('ax-progress-bar').style.width = '0%';
-        $('ax-progress-percent').textContent = '0%';
-        try {
-          const data = await api('/api/alexia/export', { method: 'POST', body: JSON.stringify({ course_id: axSelectedCourseId, form_data: fields }) });
-          if (data.error) { toaster.show(data.error, 'error'); this.disabled = false; return; }
-          axCurrentJobId = data.job_id;
-          pollAxJob();
-        } catch (e) { toaster.show('Error: ' + e.message, 'error'); this.disabled = false; }
-      });
-
-      function pollAxJob() {
-        if (!axCurrentJobId) return;
-        if (axPollInterval) clearInterval(axPollInterval);
-        axPollInterval = setInterval(async () => {
-          try {
-            const job = await api(`/api/alexia/jobs/${axCurrentJobId}`);
-            renderAxJobStatus(job);
-            if (job.status === 'completed' || job.status === 'failed') {
-              clearInterval(axPollInterval); axPollInterval = null;
-              $('ax-btn-export').disabled = false;
-            }
-          } catch (e) { console.error('Poll error:', e); }
-        }, 1500);
-      }
-
-      function renderAxJobStatus(job) {
-        $('ax-progress-bar').style.width = job.progress + '%';
-        $('ax-progress-percent').textContent = job.progress + '%';
-        const stepsEl = $('ax-export-steps');
-        stepsEl.innerHTML = (job.steps || []).map((s, i) => {
-          const isLast = i === job.steps.length - 1;
-          const icon = job.status === 'failed' && isLast
-            ? '<svg class="w-4 h-4 text-red-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>'
-            : job.status === 'completed' || !isLast
-              ? '<svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>'
-              : '<div class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin shrink-0"></div>';
-          const textClass = isLast && job.status === 'failed' ? 'text-red-400' : isLast && job.status !== 'completed' ? 'text-white' : 'text-slate-400';
-          return `<div class="flex items-start gap-2">${icon}<span class="${textClass} text-xs">${escapeHtml(s.message)}</span></div>`;
-        }).join('');
-        const resultEl = $('ax-export-result');
-        if (job.status === 'completed' && job.result) {
-          resultEl.classList.remove('hidden');
-          resultEl.innerHTML = `<div class="bg-slate-800 border border-emerald-600/40 rounded-lg p-4">
-            <div class="flex items-center gap-2 mb-2">
-              <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-              <span class="text-emerald-300 font-semibold text-sm">Curso exportado exitosamente</span>
-            </div>
-            <div class="text-xs text-slate-300 space-y-1">
-              <p><strong class="text-slate-100">Curso:</strong> ${escapeHtml(job.result.course_fullname)}</p>
-              <p><strong class="text-slate-100">ID:</strong> ${job.result.course_id}</p>
-              ${job.result.course_url ? `<a href="${job.result.course_url}" target="_blank" class="inline-block mt-2 text-primary-400 hover:text-primary-300 underline">Abrir curso en Alexia &rarr;</a>` : ''}
-            </div></div>`;
-        } else if (job.status === 'failed') {
-          resultEl.classList.remove('hidden');
-          resultEl.innerHTML = `<div class="bg-slate-800 border border-red-600/40 rounded-lg p-4">
-            <div class="flex items-center gap-2 mb-1">
-              <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
-              <span class="text-red-400 font-semibold text-sm">Error en la exportacion</span>
-            </div>
-            <p class="text-xs text-red-300 mt-1">${escapeHtml(job.error)}</p></div>`;
-        }
-      }
-
       // --- Init ---
       window.__alexiaLoad = async function () {
         if (loaded) return;
         loaded = true;
-        switchAxTab('batch');
         await loadAxConfig();
-        updateAxTree();
       };
     })();
 

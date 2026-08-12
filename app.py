@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
-LOGO_FILE = ROOT / "RESIZED_logo_fondooscuro_horizontal.png"
+LOGO_FILE = ROOT / "aulacloner_logo_blank.png"
 SCRIPT_FILE = ROOT / "moodle-clone-web.sh"
 ENV_FILE = ROOT / ".env"
 VERSION_FILE = ROOT / "VERSION"
