@@ -266,10 +266,21 @@ if bool_true "$ENABLE_NGINX" && [[ "$DEPLOY_TARGET" == "local" ]]; then
 fi
 
 CONFIG_FILE="$SRC_DIR/config.php"
+# Los mensajes nombran EN QUE MAQUINA se busco. Sin eso, un "config.php not
+# found" con SOURCE_MODE=local se lee como si el archivo no existiera en el
+# servidor de origen, cuando en realidad se busco en el host del clonador.
 if [[ "$SOURCE_MODE" == "local" ]]; then
-  [[ -f "$CONFIG_FILE" ]] || { err "config.php not found at $CONFIG_FILE"; exit 1; }
+  [[ -f "$CONFIG_FILE" ]] || {
+    err "config.php not found at $CONFIG_FILE en este servidor ($(hostname))."
+    err "El modo de origen es 'local', asi que se busco en el host del clonador."
+    err "Si la instancia de origen esta en otra maquina, elegi 'Servidor remoto por SSH' en Modo de origen."
+    exit 1
+  }
 else
-  source_exec "test -f $(quote_shell "$CONFIG_FILE")" || { err "Remote config.php not found at $CONFIG_FILE"; exit 1; }
+  source_exec "test -f $(quote_shell "$CONFIG_FILE")" || {
+    err "config.php not found at $CONFIG_FILE en el origen remoto ${SOURCE_SSH_TARGET}."
+    exit 1
+  }
 fi
 
 SRC_WEB_USER=""
@@ -282,14 +293,22 @@ if [[ -z "${SRC_WEB_USER:-}" || "$SRC_WEB_USER" == "UNKNOWN" ]]; then
   SRC_WEB_USER="www-data"
 fi
 
+CFG_AWK_PROG='$0 ~ "\\$CFG->" k "[[:space:]]*=" { print $2; exit }'
+
 parse_cfg() {
   local key="$1"
   if [[ "$SOURCE_MODE" == "local" ]]; then
-    sudo awk -v k="$key" -F"'" '
-    $0 ~ "\\$CFG->" k "[[:space:]]*=" { print $2; exit }
-  ' "$CONFIG_FILE"
+    sudo awk -v k="$key" -F"'" "$CFG_AWK_PROG" "$CONFIG_FILE"
   else
-    source_exec "awk -v k=$(quote_shell "$key") -F\' '\$0 ~ \"\\\\\$CFG->\" k \"[[:space:]]*=\" { print \$2; exit }' $(quote_shell "$CONFIG_FILE")"
+    # El usuario SSH puede no tener permiso de lectura sobre config.php: un
+    # modo tipico es -r--rw---- www-data:support, que no da nada a "others".
+    # `test -f` pasa igual (solo necesita traspasar el directorio), asi que el
+    # fallo aparecia recien aca, y como esto corre en $(...) el codigo de salida
+    # se descartaba y la variable quedaba vacia. Se intenta directo y, si falla,
+    # con sudo -n (no interactivo, para no colgarse pidiendo password).
+    local awk_cmd
+    awk_cmd="awk -v k=$(quote_shell "$key") -F\"'\" $(quote_shell "$CFG_AWK_PROG") $(quote_shell "$CONFIG_FILE")"
+    source_exec "$awk_cmd 2>/dev/null || sudo -n $awk_cmd"
   fi
 }
 
@@ -301,6 +320,10 @@ SRC_WWWROOT="$(parse_cfg wwwroot)"
 
 if [[ -z "${SRC_DBNAME:-}" ]]; then
   err "Could not read source dbname from $CONFIG_FILE."
+  if [[ "$SOURCE_MODE" == "remote" ]]; then
+    err "El archivo existe pero no se pudo leer como ${SOURCE_SSH_TARGET}, ni con sudo -n."
+    err "Revisa permisos (ls -l $CONFIG_FILE) y que ${SOURCE_SSH_USER} tenga sudo sin password en el origen."
+  fi
   exit 1
 fi
 

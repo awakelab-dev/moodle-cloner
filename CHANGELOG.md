@@ -5,6 +5,16 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.12.0 - 2026-08-12
+
+Fix: `moodle-clone-web.sh` ahora dice en que maquina busco `config.php`, y puede leerlo cuando el usuario SSH no tiene permiso directo.
+
+- **Mensajes de error que nombran el host.** `config.php not found at <ruta>` no decia donde habia buscado. Con `SOURCE_MODE=local` la busqueda ocurre en el **host del clonador**, no en el servidor de origen, asi que el mensaje se leia como "el archivo no existe" cuando el usuario lo estaba viendo con `ls` en la otra maquina. Ahora el error incluye `en este servidor ($(hostname))`, aclara que el modo de origen es local, y sugiere elegir 'Servidor remoto por SSH'. La rama remota nombra `${SOURCE_SSH_TARGET}`.
+- **`parse_cfg` en modo remoto reintenta con `sudo -n`.** La rama local ya usaba `sudo awk`; la remota corria `awk` pelado, asi que con permisos tipo `-r--rw---- www-data:support` (que no dan nada a "others") el usuario SSH no podia leer el archivo. Y como `parse_cfg` se invoca dentro de `$(...)`, el codigo de salida se descartaba: las variables quedaban vacias en silencio y el fallo aparecia despues, como un error confuso de dbname. Ahora es `awk ... 2>/dev/null || sudo -n awk ...` (`-n` para no colgarse esperando password).
+- **El chequeo de existencia no detectaba esto**: `test -f` solo necesita traspasar el directorio, no leer el archivo, asi que pasaba igual. Verificado con el modo exacto `-r--rw----`: `test -f` pasa, `awk` directo falla con exit 2 y stdout vacio, y el fallback con `sudo -n` recupera el valor.
+- **Mensaje de dbname vacio mas util**: en modo remoto ahora aclara que el archivo existe pero no se pudo leer como `${SOURCE_SSH_TARGET}` ni con `sudo -n`, y que hay que revisar permisos y el sudo sin password en el origen.
+- El programa awk se extrajo a `CFG_AWK_PROG` para que las dos ramas usen exactamente el mismo, en vez de mantener dos copias con escapes distintos. Verificado que ambas ramas extraen identico `dbhost`/`dbname`/`dbuser`/`dbpass`/`wwwroot`, incluyendo un password con espacios, `&` y `$`.
+
 ## v0.11.3 - 2026-08-11
 
 Fix: `/` ahora manda `ETag`, `Cache-Control` y `X-App-Version`, para poder distinguir un problema de render de un HTML cacheado.
