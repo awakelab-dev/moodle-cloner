@@ -5,6 +5,16 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.19.1 - 2026-08-12
+
+Fix: la altura de los `<select>` ahora si vale en Safari. Y dos ajustes en el Replicador de plugins.
+
+- **`min-height` no alcanzaba: el arreglo de v0.19.0 funcionaba en Chrome y no en Safari** (36px alli, 22px aca, contra 38px de un input con las mismas clases). Mientras el control conserva su apariencia nativa (`appearance: menulist`) el motor decide la altura por sus propias metricas e **ignora el padding, la line-height y hasta el min-height**; cada motor la ignora a su manera, de ahi los dos numeros distintos. La unica forma de que el modelo de caja valga es apagar la apariencia nativa: `appearance: none` (con los prefijos `-webkit-` y `-moz-`) mas `height: 2.375rem`, y **todos los select quedan en 38px en todas las paginas**, sin excepciones por tamano de fuente.
+- Apagar la apariencia nativa **borra la flecha**, asi que se repone con un chevron SVG inline como `background-image`, a 12px del borde derecho. El padding derecho pasa a 2.25rem para que el texto no la pise; la regla va en `select[class]` porque con `select` a secas el `px-3` de Tailwind (0,1,0) le ganaba en especificidad al selector de elemento (0,0,1).
+- **Replicador de plugins, paso 1**: la separacion entre la zona de arrastre y el selector de tipo pasa de `gap-4` a `md:gap-12` — el triple, 48px medidos. Son dos cosas distintas, no dos campos del mismo grupo.
+- **Replicador de plugins, paso 2**: se quitan `max-h-72 overflow-y-auto pr-1` de la grilla de plataformas. Ya no hay scroll interno: la grilla crece con el inventario y se ven las 35 de una, igual que en el Replicador de cursos.
+- Medido en Chromium: los seis select de las tres secciones a 38px con `appearance: none`, `padding-right: 36px` y la flecha presente; el par del reporte ("Destino de instalacion" / "Host remoto (IP)") con la misma altura y el mismo top; la grilla de plugins con `max-height: none`, `overflow-y: visible`, 35 etiquetas y `scrollHeight === clientHeight`. **Falta confirmar en Safari**, que es donde fallaba el intento anterior: no hay build de WebKit disponible en el sandbox.
+
 ## v0.19.0 - 2026-08-12
 
 UI: los select dejan de ser mas bajos que los input, el Replicador de plugins toma el layout por pasos del de Cursos, y se renombran los titulos de las secciones.

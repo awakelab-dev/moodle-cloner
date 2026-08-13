@@ -29,15 +29,27 @@
   </script>
 
   <style>
-    /* Los <select> quedaban 2px mas bajos que un <input> con exactamente las
-       mismas clases (36px contra 38px). La causa no es el padding: Chrome fuerza
-       `line-height: normal` en los select desde su stylesheet de UA y no se
-       puede sobreescribir, asi que la caja de contenido mide 18px en vez de los
-       20px que da `text-sm`. Como la line-height es inalcanzable, se igualan por
-       altura minima. Asume el `py-2` que usan todos los select de esta pagina:
-       contenido + 16px de padding vertical + 2px de borde. */
-    select.text-sm { min-height: 2.375rem; } /* 20 + 16 + 2 = 38px */
-    select.text-xs { min-height: 2.125rem; } /* 16 + 16 + 2 = 34px */
+    /* Los <select> salian mucho mas bajos que un <input> con exactamente las
+       mismas clases: 36px en Chrome y 22px en Safari, contra 38px del input.
+       Mientras el control conserva su apariencia nativa (`appearance: menulist`)
+       el motor decide la altura por sus propias metricas e ignora el padding, la
+       line-height y hasta el min-height — por eso el intento anterior, que solo
+       fijaba min-height, funcionaba en Chrome y no en Safari.
+       La unica forma de que el modelo de caja valga es apagar la apariencia
+       nativa. Al hacerlo hay que reponer la flecha a mano, porque desaparece. */
+    select {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      height: 2.375rem; /* 38px: la misma altura que un input px-3 py-2 text-sm */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='2' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 1rem 1rem;
+    }
+    /* El padding tiene que dejarle sitio a la flecha. `select[class]` suma
+       especificidad (0,1,1) para ganarle al `px-3` de Tailwind (0,1,0). */
+    select[class] { padding-right: 2.25rem; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-950 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-100">
@@ -504,7 +516,10 @@
                     <p class="text-xs text-slate-400 mt-1">Sube el .zip del plugin y confirma su tipo. El tipo se detecta del contenido del archivo.</p>
                   </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                <!-- gap-12: el triple de la separacion normal (gap-4). Son dos
+                     cosas distintas (el archivo y su tipo), no un par de campos
+                     del mismo grupo. -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-12 items-start">
                   <div>
                     <div id="pi-dropzone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 transition-colors">
                       <input type="file" id="pi-file-input" accept=".zip" class="hidden" />
@@ -550,7 +565,10 @@
                     <button id="pi-clear-all" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar</button>
                   </div>
                 </div>
-                <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-72 overflow-y-auto pr-1">
+                <!-- Sin max-height ni overflow: la grilla crece con el inventario
+                     y se ven las 35 plataformas de una, igual que en el
+                     Replicador de cursos. -->
+                <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                   <div class="text-xs text-slate-500 text-center py-4 col-span-full">Cargando plataformas...</div>
                 </div>
               </section>
