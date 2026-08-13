@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
-LOGO_FILE = ROOT / "aulacloner_logo_blank.png"
+LOGO_FILE = ROOT / "RESIZED_logo_fondooscuro_horizontal.png"
 SCRIPT_FILE = ROOT / "moodle-clone-web.sh"
 ENV_FILE = ROOT / ".env"
 VERSION_FILE = ROOT / "VERSION"
@@ -731,9 +731,6 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 return self._handle_clone()
             if parsed.path == "/api/cc/admin/servers":
                 return self._handle_cc_create_server()
-            m = re.fullmatch(r"/api/cc/admin/servers/(\d+)/verify", parsed.path)
-            if m:
-                return self._handle_cc_verify_server(int(m.group(1)))
             m = re.fullmatch(r"/api/cc/servers/(\d+)/categories", parsed.path)
             if m:
                 return self._handle_cc_create_category(int(m.group(1)))
@@ -741,6 +738,9 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 return self._handle_cc_copy_course()
             if parsed.path == "/api/plugin/install":
                 return self._handle_plugin_install()
+
+            if parsed.path == "/api/plugin/detect":
+                return self._handle_plugin_detect()
             if parsed.path == "/api/alexia/config":
                 return self._handle_alexia_save_config()
             if parsed.path == "/api/alexia/test-connection":
@@ -1147,14 +1147,6 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         result = course_routes.admin_delete_server(server_index)
         self._send_json(200, result)
 
-    def _handle_cc_verify_server(self, server_index: int) -> None:
-        # Hace red (HTTP al sitio y SSH al servidor) pero no modifica nada. Es
-        # POST y no GET para que quede claro que dispara trabajo y para que
-        # ningun intermediario lo cachee.
-        self._require_superadmin()
-        result = course_routes.admin_verify_server(server_index)
-        self._send_json(200, result)
-
     def _handle_cc_copy_course(self) -> None:
         self._require_permission("can_access_course_cloner")
         payload = self._read_json_body()
@@ -1165,6 +1157,53 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         self._send_json(200, result)
 
     # --- Plugin-install endpoint -----------------------------------------
+
+    def _handle_plugin_detect(self) -> None:
+        """Inspecciona un ZIP y devuelve el tipo de plugin, sin instalar nada.
+
+        Existe para que la UI pueda preseleccionar el tipo al elegir el archivo.
+        El tipo real esta en `$plugin->component` del version.php, dentro del
+        ZIP, asi que hay que subirlo: el nombre del archivo no alcanza.
+        """
+        import shutil as _shutil
+        import tempfile as _tempfile
+
+        self._require_permission("can_access_plugin_cloner")
+
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            self._send_json(400, {"error": "Se espera multipart/form-data."})
+            return
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0:
+            self._send_json(400, {"error": "Body vacio."})
+            return
+        if content_length > MAX_PLUGIN_ZIP_SIZE:
+            self._send_json(413, {"error": "El archivo excede el limite de 100 MB."})
+            return
+
+        raw_body = self.rfile.read(content_length)
+        _, files = plugin_routes.parse_multipart_form_data(content_type, raw_body)
+        if "plugin_zip" not in files:
+            self._send_json(400, {"error": "Falta el archivo plugin_zip."})
+            return
+        filename, zip_data = files["plugin_zip"]
+        if not filename.lower().endswith(".zip"):
+            self._send_json(400, {"error": "El archivo debe ser un .zip."})
+            return
+
+        temp_dir = _tempfile.mkdtemp(prefix="moodle_plugin_detect_")
+        try:
+            zip_path = Path(temp_dir) / filename
+            zip_path.write_bytes(zip_data)
+            try:
+                info = plugin_routes.detect_plugin_info(zip_path)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(200, info)
+        finally:
+            _shutil.rmtree(temp_dir, ignore_errors=True)
 
     def _handle_plugin_install(self) -> None:
         import tempfile as _tempfile

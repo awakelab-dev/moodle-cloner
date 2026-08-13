@@ -134,13 +134,101 @@ def detect_plugin_folder_name(zip_path: Path) -> str:
     return zip_path.stem
 
 
+_COMPONENT_RE = re.compile(
+    r"""\$plugin\s*->\s*component\s*=\s*['"]([a-z0-9]+_[a-z0-9_]+)['"]""",
+    re.IGNORECASE,
+)
+
+
+def read_plugin_component(zip_path: Path) -> Optional[str]:
+    """Devuelve el `$plugin->component` declarado en el version.php del ZIP.
+
+    Es la fuente autoritativa del tipo; el nombre del ZIP y el de la carpeta no
+    lo son. El plugin `mod_hvp` se distribuye como carpeta `hvp` y como
+    `moodle-mod_hvp.zip`, y `block_xp` como carpeta `xp`: en el primer caso
+    cualquier heuristica sobre el nombre falla, y en el segundo el prefijo no
+    esta al principio de la cadena.
+
+    Se toma el version.php menos profundo, para no confundirse con el de un
+    subplugin incluido en el mismo paquete.
+    """
+    try:
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            candidates = []
+            for member in archive.namelist():
+                clean = _normalize_zip_member_name(member)
+                if not clean or clean.startswith("__MACOSX/"):
+                    continue
+                if clean.rsplit("/", 1)[-1].lower() == "version.php":
+                    candidates.append((clean.count("/"), clean, member))
+            if not candidates:
+                return None
+            candidates.sort()
+            member = candidates[0][2]
+            raw = archive.read(member)
+    except (zipfile.BadZipFile, KeyError, OSError, RuntimeError):
+        return None
+    text = raw.decode("utf-8", errors="replace")
+    match = _COMPONENT_RE.search(text)
+    return match.group(1).lower() if match else None
+
+
+def type_key_from_component(component: str) -> Optional[str]:
+    """`mod_hvp` -> `mod`. Ningun tipo oficial lleva `_`, asi que corta en el primero."""
+    key = component.split("_", 1)[0]
+    return key if key in PLUGIN_TYPE_TO_PATH else None
+
+
 def infer_plugin_type(plugin_folder: str, zip_stem: str) -> Optional[str]:
-    prefix_to_type = {f"{pt}_": pt for pt in PLUGIN_TYPE_TO_PATH}
+    """Heuristica de respaldo sobre los nombres, para cuando no hay version.php.
+
+    Acepta el prefijo en cualquier posicion delimitada y no solo al principio,
+    para cubrir los nombres de release tipo `moodle-mod_hvp`. Los tipos se
+    prueban de mas largo a mas corto para que `qbank_` no gane sobre... nada en
+    realidad, pero si `gradereport_` sobre `report_`, que es un prefijo de otro.
+    """
+    ordered = sorted(PLUGIN_TYPE_TO_PATH, key=len, reverse=True)
     for token in (plugin_folder.lower(), zip_stem.lower()):
-        for prefix, pt in prefix_to_type.items():
-            if token.startswith(prefix):
+        for pt in ordered:
+            if re.search(rf"(?:^|[-.]){re.escape(pt)}_", token):
                 return PLUGIN_TYPE_TO_PATH[pt]
     return None
+
+
+def detect_plugin_info(zip_path: Path) -> Dict[str, Any]:
+    """Todo lo que se puede saber del ZIP sin instalarlo.
+
+    `source` indica de donde salio el tipo, para poder mostrarlo en la UI:
+    `version.php` es confiable, `nombre` es una conjetura.
+    """
+    folder = detect_plugin_folder_name(zip_path)
+    component = read_plugin_component(zip_path)
+    type_key = type_key_from_component(component) if component else None
+    if type_key:
+        return {
+            "folder": folder,
+            "component": component,
+            "type_key": type_key,
+            "type_path": PLUGIN_TYPE_TO_PATH[type_key],
+            "source": "version.php",
+        }
+    type_path = infer_plugin_type(folder, zip_path.stem)
+    if type_path:
+        key = next((k for k, v in PLUGIN_TYPE_TO_PATH.items() if v == type_path), None)
+        return {
+            "folder": folder,
+            "component": component,
+            "type_key": key,
+            "type_path": type_path,
+            "source": "nombre",
+        }
+    return {
+        "folder": folder,
+        "component": component,
+        "type_key": None,
+        "type_path": None,
+        "source": None,
+    }
 
 
 def zip_has_backslash_paths(zip_path: Path) -> bool:

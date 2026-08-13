@@ -27,30 +27,6 @@
       }
     }
   </script>
-
-  <style>
-    /* Los <select> salian mucho mas bajos que un <input> con exactamente las
-       mismas clases: 36px en Chrome y 22px en Safari, contra 38px del input.
-       Mientras el control conserva su apariencia nativa (`appearance: menulist`)
-       el motor decide la altura por sus propias metricas e ignora el padding, la
-       line-height y hasta el min-height — por eso el intento anterior, que solo
-       fijaba min-height, funcionaba en Chrome y no en Safari.
-       La unica forma de que el modelo de caja valga es apagar la apariencia
-       nativa. Al hacerlo hay que reponer la flecha a mano, porque desaparece. */
-    select {
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      appearance: none;
-      height: 2.375rem; /* 38px: la misma altura que un input px-3 py-2 text-sm */
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='2' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 0.75rem center;
-      background-size: 1rem 1rem;
-    }
-    /* El padding tiene que dejarle sitio a la flecha. `select[class]` suma
-       especificidad (0,1,1) para ganarle al `px-3` de Tailwind (0,1,0). */
-    select[class] { padding-right: 2.25rem; }
-  </style>
 </head>
 <body class="min-h-screen bg-slate-950 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-100">
 
@@ -105,23 +81,25 @@
 
     <!-- Top header / nav -->
     <header class="border-b border-slate-800 bg-slate-900 sticky top-0 z-30">
-      <!-- pr-16 reserva el espacio del boton hamburguesa, que va posicionado
-           contra el borde derecho del header (ver mas abajo) y por lo tanto
-           esta fuera de este contenedor centrado. -->
-      <div class="max-w-6xl mx-auto pl-6 pr-16 py-3 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-2.5">
-          <!-- h-[72px]: el doble que antes (h-9 = 36px). A 36px la bajada
-               "Clonador de Instancia Moodle" del logo era ilegible. -->
-          <img src="/assets/logo.png" alt="AulaCloner" class="h-[72px] w-auto" />
-          <span class="text-[11px] font-mono leading-none text-slate-400 border border-slate-700 rounded-full px-2 py-1 whitespace-nowrap">v{{APP_VERSION}}</span>
+      <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <img src="/assets/logo.png" alt="AWAKELAB" class="h-9 w-auto" />
         </div>
 
         <nav class="flex items-center gap-1">
-          <button data-section="moodle" data-perm="can_access_moodle_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Moodle</button>
-          <button data-section="course" data-perm="can_access_course_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Cursos</button>
-          <button data-section="plugin" data-perm="can_access_plugin_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plugins</button>
-          <button data-section="alexia" data-perm="can_access_alexia_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Alexia</button>
+          <button data-section="moodle" data-perm="can_access_moodle_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador Moodle</button>
+          <button data-section="course" data-perm="can_access_course_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador de cursos</button>
+          <button data-section="plugin" data-perm="can_access_plugin_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador de plugins</button>
+          <button data-section="alexia" data-perm="can_access_alexia_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador Alexia</button>
         </nav>
+
+        <div class="flex items-center gap-2">
+          <!-- Hamburger button — wraps admin controls -->
+          <button id="hamburger-btn" class="p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu">
+            <svg id="hamburger-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <svg id="hamburger-close-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
 
         <!-- Hidden originals kept for JS compatibility -->
         <button id="platforms-btn" class="hidden"></button>
@@ -131,16 +109,16 @@
         <span id="current-user-label" class="hidden"></span>
       </div>
 
-      <!-- Boton hamburguesa, pegado al borde derecho del header. Va fuera del
-           contenedor centrado a proposito: dentro quedaba con el margen del
-           max-w-6xl y en pantallas anchas se veia despegado del borde.
-           `position: sticky` del header ya sirve de bloque contenedor.
-           Centrado con top-1/2 y no con un top fijo: la altura de la barra la
-           marca el logo, asi que un valor fijo lo dejaba pegado arriba. -->
-      <button id="hamburger-btn" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu">
-        <svg id="hamburger-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-        <svg id="hamburger-close-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
+      <!-- Dropdown menu panel (admin controls) -->
+      <div id="mobile-menu" class="hidden border-t border-slate-800 bg-slate-900">
+        <div class="max-w-6xl mx-auto px-6 py-3 flex flex-col gap-1">
+          <div id="menu-user-label" class="px-3 py-1.5 text-xs text-slate-400"></div>
+          <button id="mobile-platforms-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plataformas</button>
+          <button id="mobile-users-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Usuarios</button>
+          <button id="mobile-account-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Mi cuenta</button>
+          <button id="mobile-logout-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white text-red-400">Salir</button>
+        </div>
+      </div>
     </header>
 
     <main class="flex-1 px-4 py-8">
@@ -174,7 +152,7 @@
                         <select name="source_index" id="clone-source-index" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
                           <option value="">Cargando plataformas...</option>
                         </select>
-                        <p id="clone-source-hint" class="mt-1 text-xs text-slate-500">Selecciona la instancia que se usara como origen para la clonacion.</p>
+                        <p class="mt-1 text-xs text-slate-500">Selecciona la instancia que se usara como origen para la clonacion.</p>
                       </div>
                       <div id="remote-source-fields" class="hidden rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
                         <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Origen remoto (SSH)</h3>
@@ -343,7 +321,7 @@
           <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between gap-4">
               <div>
-                <h1 class="text-2xl font-semibold text-slate-50">Replicador de Cursos</h1>
+                <h1 class="text-2xl font-semibold text-slate-50">Clonador de cursos</h1>
                 <p class="text-sm text-slate-400 mt-1">Copia cursos Moodle entre plataformas via SSH (backup, transferencia SFTP y restore).</p>
               </div>
               <div id="cc-inventory-status" class="text-xs text-slate-400">Cargando inventario...</div>
@@ -449,33 +427,81 @@
                 <h1 class="text-2xl font-semibold text-slate-50">Administrar plataformas</h1>
                 <p class="text-sm text-slate-400 mt-1">Las plataformas se guardan en <span class="font-mono">inventario.json</span>.</p>
               </div>
-              <div class="flex items-center gap-2">
-                <button id="pf-verify-all-btn" type="button" class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-primary-600 font-semibold text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  Verificar todas
-                </button>
-                <button id="pf-verify-failed-btn" type="button" class="hidden text-xs px-3 py-1.5 rounded-lg border border-amber-600/60 text-amber-300 hover:bg-amber-900/20">Reverificar las que requieren revision</button>
-                <button id="pf-add-btn" type="button" class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                  Agregar plataforma
-                </button>
-              </div>
+              <button id="pf-reset-btn" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar formulario</button>
             </div>
 
-            <!-- Resumen de la verificacion masiva -->
-            <div id="pf-verify-summary" class="hidden px-8 pt-4">
-              <div class="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3">
-                <div class="flex items-center justify-between gap-3 flex-wrap">
-                  <div id="pf-verify-summary-text" class="text-xs text-slate-300"></div>
-                  <div id="pf-verify-counts" class="flex items-center gap-3 text-xs"></div>
+            <div class="px-8 py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <!-- Form -->
+              <form id="pf-form" novalidate class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <h2 id="pf-form-title" class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Agregar plataforma</h2>
+                <input type="hidden" id="pf-editing-index" value="" />
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Nombre visible</label>
+                    <input id="pf-name" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Host SSH</label>
+                    <input id="pf-host" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Puerto SSH</label>
+                    <input id="pf-port" type="number" min="1" max="65535" value="22" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Usuario SSH</label>
+                    <input id="pf-ssh_user" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena SSH</label>
+                    <input id="pf-ssh_password" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p id="pf-ssh_password_hint" class="mt-1 text-xs text-slate-500">Necesaria si no usas llave SSH.</p>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta llave SSH</label>
+                    <input id="pf-ssh_key_path" type="text" placeholder="/home/user/.ssh/id_rsa" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Passphrase llave SSH</label>
+                    <input id="pf-ssh_key_passphrase" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p id="pf-ssh_key_passphrase_hint" class="mt-1 text-xs text-slate-500">Opcional.</p>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta Moodle</label>
+                    <input id="pf-moodle_path" type="text" placeholder="/var/www/html/moodle" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta Moodledata</label>
+                    <input id="pf-moodledata_path" type="text" placeholder="/var/www/data/moodle/ejemplo" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p class="mt-1 text-xs text-slate-500">Necesaria para el Clonador Moodle.</p>
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta vhost Nginx</label>
+                    <input id="pf-vhost_path" type="text" placeholder="/etc/nginx/sites-available/ejemplo.awakelab.world" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p class="mt-1 text-xs text-slate-500">Necesaria para el Clonador Moodle.</p>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Usuario web</label>
+                    <input id="pf-web_user" type="text" placeholder="www-data" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Grupo web</label>
+                    <input id="pf-web_group" type="text" placeholder="www-data" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <label class="flex items-center gap-2 text-xs text-slate-300 md:col-span-2">
+                    <input id="pf-sudo_requires_password" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
+                    Sudo requiere contrasena
+                  </label>
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena sudo</label>
+                    <input id="pf-sudo_password" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p id="pf-sudo_password_hint" class="mt-1 text-xs text-slate-500">Solo si sudo requiere contrasena.</p>
+                  </div>
                 </div>
-                <div class="mt-2 w-full bg-slate-800 rounded-full h-1.5">
-                  <div id="pf-verify-bar" class="h-1.5 rounded-full bg-primary-600 transition-all duration-300" style="width:0%"></div>
-                </div>
-              </div>
-            </div>
+                <div id="pf-form-error" class="hidden text-xs text-red-300 border border-red-600/40 rounded-lg px-3 py-2"></div>
+                <button id="pf-submit" type="submit" class="w-full inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700">Agregar plataforma</button>
+              </form>
 
-            <div class="px-8 py-6">
               <!-- List -->
               <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
                 <div class="flex items-center justify-between mb-4">
@@ -483,11 +509,8 @@
                   <span id="pf-status" class="text-xs text-slate-400"></span>
                 </div>
                 <div id="pf-message" class="hidden mb-3 rounded-lg border px-3 py-2 text-xs"></div>
-                <!-- Dos tarjetas por fila, de izquierda a derecha y de arriba
-                     abajo. items-start para que una tarjeta con el detalle de la
-                     verificacion desplegado no estire a su vecina de fila. -->
-                <div id="pf-list" class="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
-                  <div class="col-span-full text-xs text-slate-500 text-center py-6">Cargando plataformas...</div>
+                <div id="pf-list" class="space-y-3">
+                  <div class="text-xs text-slate-500 text-center py-6">Cargando plataformas...</div>
                 </div>
               </div>
             </div>
@@ -498,111 +521,73 @@
         <section id="section-plugin" class="app-section hidden">
           <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6">
-              <h1 class="text-2xl font-semibold text-slate-50">Replicador de plugins</h1>
+              <h1 class="text-2xl font-semibold text-slate-50">Clonador de plugins</h1>
               <p class="text-sm text-slate-400 mt-1">Instala plugins Moodle (.zip) en multiples plataformas simultaneamente por SSH.</p>
             </div>
-            <!-- Mismo esqueleto que el Replicador de cursos: un paso por fila a
-                 todo el ancho, con la insignia numerada + titulo + descripcion, y
-                 la accion al final. Antes eran dos columnas, asi que el paso 3
-                 quedaba a la altura del paso 1 y se leia como si fuera paralelo
-                 a los otros dos en vez de posterior. -->
-            <div class="px-8 py-6 space-y-6">
-              <!-- Step 1: Plugin -->
-              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                <div class="flex items-start gap-3 mb-4">
-                  <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">1</span>
-                  <div>
-                    <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plugin</h2>
-                    <p class="text-xs text-slate-400 mt-1">Sube el .zip del plugin y confirma su tipo. El tipo se detecta del contenido del archivo.</p>
+            <div class="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <!-- Left: Plugin + Servers -->
+              <div class="space-y-6">
+                <!-- Step 1: Plugin -->
+                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <h2 class="text-sm font-semibold text-slate-200 mb-3">1. Plugin</h2>
+                  <div id="pi-dropzone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 transition-colors">
+                    <input type="file" id="pi-file-input" accept=".zip" class="hidden" />
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mx-auto mb-2 h-10 w-10 text-slate-500">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                    <p class="text-sm text-slate-400">Arrastra un archivo <b class="text-slate-300">.zip</b> aqui o haz clic para seleccionar</p>
+                  </div>
+                  <div id="pi-file-info" class="hidden flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-3 mt-3">
+                    <div class="min-w-0">
+                      <span id="pi-file-name" class="text-sm text-slate-200 font-medium truncate block"></span>
+                      <span id="pi-file-size" class="text-xs text-slate-500"></span>
+                    </div>
+                    <button id="pi-file-clear" type="button" class="text-xs text-red-400 hover:text-red-300 ml-3 shrink-0">Quitar</button>
+                  </div>
+                  <label class="block mt-4">
+                    <span class="text-xs text-slate-400 mb-1 block">Tipo de plugin (frankenstyle)</span>
+                    <select id="pi-type" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                      <option value="">Cargando tipos...</option>
+                    </select>
+                  </label>
+                  <div id="pi-type-hint" class="text-xs text-emerald-400 mt-1 hidden"></div>
+                </div>
+                <!-- Step 2: Servers -->
+                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <h2 class="text-sm font-semibold text-slate-200 mb-3">2. Plataformas destino</h2>
+                  <div class="flex items-center gap-3 mb-3">
+                    <button id="pi-select-all" type="button" class="text-xs text-primary-500 hover:text-primary-700">Seleccionar todo</button>
+                    <button id="pi-clear-all" type="button" class="text-xs text-slate-500 hover:text-slate-400">Limpiar</button>
+                    <span id="pi-server-count" class="ml-auto text-xs text-slate-500">0 seleccionadas</span>
+                  </div>
+                  <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+                    <div class="text-xs text-slate-500 text-center py-4 col-span-full">Cargando plataformas...</div>
                   </div>
                 </div>
-                <!-- gap-12: el triple de la separacion normal (gap-4). Son dos
-                     cosas distintas (el archivo y su tipo), no un par de campos
-                     del mismo grupo. -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-12 items-start">
-                  <div>
-                    <div id="pi-dropzone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 transition-colors">
-                      <input type="file" id="pi-file-input" accept=".zip" class="hidden" />
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mx-auto mb-2 h-10 w-10 text-slate-500">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                      </svg>
-                      <p class="text-sm text-slate-400">Arrastra un archivo <b class="text-slate-300">.zip</b> aqui o haz clic para seleccionar</p>
-                    </div>
-                    <div id="pi-file-info" class="hidden flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-3 mt-3">
-                      <div class="min-w-0">
-                        <span id="pi-file-name" class="text-sm text-slate-200 font-medium truncate block"></span>
-                        <span id="pi-file-size" class="text-xs text-slate-500"></span>
-                      </div>
-                      <button id="pi-file-clear" type="button" class="text-xs text-red-400 hover:text-red-300 ml-3 shrink-0">Quitar</button>
-                    </div>
-                  </div>
-                  <div>
-                    <label class="block">
-                      <span class="block text-xs font-medium text-slate-300 mb-1">Tipo de plugin (frankenstyle)</span>
-                      <select id="pi-type" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                        <option value="">Cargando tipos...</option>
-                      </select>
-                    </label>
-                    <div id="pi-type-hint" class="text-xs text-emerald-400 mt-1 hidden"></div>
-                    <p class="mt-1 text-xs text-slate-500">Define en que subcarpeta de Moodle se instala el plugin.</p>
-                  </div>
-                </div>
-              </section>
-
-              <!-- Step 2: Servers -->
-              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                <div class="flex items-start justify-between gap-3 mb-4">
-                  <div class="flex items-start gap-3">
-                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">2</span>
-                    <div>
-                      <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plataformas destino</h2>
-                      <p class="text-xs text-slate-400 mt-1">Selecciona una o varias plataformas. El plugin se instala en todas por SSH.</p>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-2 shrink-0">
-                    <span id="pi-server-count" class="text-xs text-slate-500 mr-1">0 seleccionadas</span>
-                    <button id="pi-select-all" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Seleccionar todo</button>
-                    <button id="pi-clear-all" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar</button>
-                  </div>
-                </div>
-                <!-- Sin max-height ni overflow: la grilla crece con el inventario
-                     y se ven las 35 plataformas de una, igual que en el
-                     Replicador de cursos. -->
-                <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                  <div class="text-xs text-slate-500 text-center py-4 col-span-full">Cargando plataformas...</div>
-                </div>
-              </section>
-
-              <!-- Step 3: Install -->
-              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                <div class="flex flex-wrap items-center justify-between gap-4">
-                  <div class="flex items-start gap-3">
-                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">3</span>
-                    <div>
-                      <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Instalar</h2>
-                      <p class="text-xs text-slate-400 mt-1">Se conecta por SSH a cada plataforma, sube el .zip y lo descomprime en su carpeta. Puede tardar varios minutos.</p>
-                    </div>
-                  </div>
-                  <button id="pi-install-btn" type="button" disabled class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              </div>
+              <!-- Right: Actions + Output -->
+              <div class="space-y-6">
+                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <h2 class="text-sm font-semibold text-slate-200 mb-3">3. Instalar</h2>
+                  <button id="pi-install-btn" type="button" disabled class="w-full px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     Instalar plugin
                   </button>
-                </div>
-                <div id="pi-status-bar" class="hidden mt-4">
-                  <div class="flex justify-between items-center mb-1">
-                    <span id="pi-phase" class="text-xs text-slate-400">Esperando...</span>
-                    <span id="pi-percent" class="text-xs text-slate-400 font-mono">0%</span>
+                  <div id="pi-status-bar" class="hidden mt-4">
+                    <div class="flex justify-between items-center mb-1">
+                      <span id="pi-phase" class="text-xs text-slate-400">Esperando...</span>
+                      <span id="pi-percent" class="text-xs text-slate-400 font-mono">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div id="pi-progress-bar" class="h-1.5 rounded-full bg-primary-500 transition-all duration-300" style="width:0%"></div>
+                    </div>
                   </div>
-                  <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div id="pi-progress-bar" class="h-1.5 rounded-full bg-primary-500 transition-all duration-300" style="width:0%"></div>
-                  </div>
+                  <pre id="pi-output" class="hidden mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 max-h-80 overflow-auto font-mono whitespace-pre-wrap"></pre>
                 </div>
-                <pre id="pi-output" class="hidden mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 max-h-80 overflow-auto font-mono whitespace-pre-wrap"></pre>
-              </section>
-
-              <!-- Results -->
-              <div id="pi-results" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                <h2 class="text-sm font-semibold text-slate-200 mb-3">Resultados</h2>
-                <div id="pi-results-list" class="space-y-2"></div>
+                <!-- Results -->
+                <div id="pi-results" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                  <h2 class="text-sm font-semibold text-slate-200 mb-3">Resultados</h2>
+                  <div id="pi-results-list" class="space-y-2"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -613,7 +598,7 @@
           <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
               <div>
-                <h1 class="text-2xl font-semibold text-slate-50">Replicador de Cursos desde Alexia</h1>
+                <h1 class="text-2xl font-semibold text-slate-50">Clonador Alexia</h1>
                 <p class="text-sm text-slate-400 mt-1">Exporta cursos de Catalejo a Alexia via SSH.</p>
               </div>
               <div class="flex items-center gap-3">
@@ -670,17 +655,20 @@
               </div>
             </div>
 
-            <!-- Antes habia dos sub-tabs (Importacion Masiva / Exportacion
-                 Individual). Al quedar una sola vista el tab no aportaba nada,
-                 asi que la carga del Excel pasa a ser el contenido directo de
-                 la seccion. -->
-            <div id="ax-tab-batch" class="px-8 py-6">
+            <!-- Alexia Sub-tabs -->
+            <div class="border-b border-slate-800 px-8 flex gap-1">
+              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="batch">Importacion Masiva</button>
+              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="single">Exportacion Individual</button>
+            </div>
+
+            <!-- ====== TAB: BATCH ====== -->
+            <div id="ax-tab-batch" class="ax-tab-content hidden px-8 py-6">
               <!-- Upload Zone -->
               <div id="ax-upload-section">
                 <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-5">
                   <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
                     <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                    Cargar datos Alexia
+                    Subir archivo Excel
                   </h2>
                   <div id="ax-drop-zone" class="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition-colors">
                     <svg class="w-10 h-10 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -780,6 +768,88 @@
               </div>
             </div>
 
+            <!-- ====== TAB: SINGLE ====== -->
+            <div id="ax-tab-single" class="ax-tab-content hidden px-8 py-6">
+              <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div class="lg:col-span-3 space-y-5">
+                  <!-- Course Search -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                      Buscar Curso en Catalejo
+                    </h2>
+                    <div class="flex gap-2">
+                      <input class="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-search-input" placeholder="Buscar por nombre, shortname o ID...">
+                      <button id="ax-search-btn" class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 whitespace-nowrap">Buscar</button>
+                    </div>
+                    <div id="ax-search-results" class="mt-2 hidden">
+                      <div class="rounded-lg border border-slate-800 bg-slate-900 max-h-48 overflow-y-auto" id="ax-search-list"></div>
+                    </div>
+                    <div id="ax-selected-course" class="mt-3 hidden">
+                      <div class="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-primary-600/40">
+                        <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        <span class="text-sm text-white" id="ax-selected-course-name"></span>
+                        <span class="text-xs text-slate-400 ml-auto" id="ax-selected-course-id"></span>
+                        <button id="ax-clear-course" class="text-slate-400 hover:text-red-400 ml-2">&times;</button>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Course Data Form -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                      Datos del Curso
+                    </h2>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Ejercicio *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-ejercicio" placeholder="2026"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">ID Centro *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-id-centro" placeholder="5545"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Nombre Centro</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-nombre-centro" placeholder="Nombre del centro"></div>
+                      <div class="md:col-span-2"><label class="block text-[11px] text-slate-400 mb-0.5">Especialidad *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-especialidad" placeholder="(SYMA33) Coordinacion en emergencias"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Pertenece Curso *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-pertenece-curso" placeholder="1"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Codigo Oficial *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-codigo-oficial" placeholder="1505"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Reducido Grupo *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-reducido-grupo" placeholder="1CEPC-P"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Modalidad</label><div class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm" id="ax-f-modalidad-display"><span class="text-slate-500">Auto-detectada</span></div></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Estudio</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-estudio" placeholder="Estudio"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 1</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat1" placeholder="Mat1"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 2</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat2" placeholder="Mat2"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Area</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-area" placeholder="Area"></div>
+                    </div>
+                    <div class="mt-5 flex justify-end">
+                      <button id="ax-btn-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-700">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        Exportar Curso
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="lg:col-span-2 space-y-5">
+                  <!-- Category Tree Preview -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                      Arbol de Categorias
+                    </h2>
+                    <div id="ax-tree-preview" class="text-sm space-y-1">
+                      <p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>
+                    </div>
+                  </div>
+                  <!-- Export Status -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 hidden" id="ax-export-status-card">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                      Estado de Exportacion
+                    </h2>
+                    <div class="w-full bg-slate-800 rounded-full h-2 mb-4">
+                      <div id="ax-progress-bar" class="h-2 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
+                    </div>
+                    <div id="ax-progress-percent" class="text-xs text-slate-400 text-right -mt-3 mb-3">0%</div>
+                    <div id="ax-export-steps" class="space-y-2 text-sm"></div>
+                    <div id="ax-export-result" class="mt-4 hidden"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Tree Preview Modal -->
             <div id="ax-tree-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
               <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
@@ -829,99 +899,6 @@
 
       </div>
     </main>
-  </div>
-
-  <!-- Modal de plataforma (crear / editar). El formulario vivia al lado de
-       la lista y se comia la mitad del ancho; ahora la lista usa todo el
-       espacio y el formulario aparece solo cuando se lo pide. -->
-  <div id="pf-modal" class="hidden fixed inset-0 z-40 overflow-y-auto bg-black/60 px-4 py-8">
-    <div class="mx-auto w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-950/60">
-      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-        <h2 id="pf-form-title" class="text-base font-semibold text-slate-50">Agregar plataforma</h2>
-        <button id="pf-modal-close" type="button" class="text-slate-400 hover:text-slate-200" aria-label="Cerrar">
-          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div id="pf-modal-body" class="px-6 py-5">
-              <form id="pf-form" novalidate class="space-y-4">
-                <input type="hidden" id="pf-editing-index" value="" />
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Nombre visible</label>
-                    <input id="pf-name" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">URL de la plataforma</label>
-                    <input id="pf-url" type="url" inputmode="url" placeholder="https://ejemplo.awakelab.world" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                    <p class="mt-1 text-xs text-slate-500">Direccion publica del Moodle. Se muestra como enlace en la lista.</p>
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Direccion IP (host SSH)</label>
-                    <input id="pf-host" type="text" required placeholder="13.167.34.11" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Puerto SSH</label>
-                    <input id="pf-port" type="number" min="1" max="65535" value="22" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Usuario SSH</label>
-                    <input id="pf-ssh_user" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena SSH</label>
-                    <input id="pf-ssh_password" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                    <p id="pf-ssh_password_hint" class="mt-1 text-xs text-slate-500">Necesaria si no usas llave SSH.</p>
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta llave SSH</label>
-                    <input id="pf-ssh_key_path" type="text" placeholder="/home/user/.ssh/id_rsa" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Passphrase llave SSH</label>
-                    <input id="pf-ssh_key_passphrase" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                    <p id="pf-ssh_key_passphrase_hint" class="mt-1 text-xs text-slate-500">Opcional.</p>
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta Moodle</label>
-                    <input id="pf-moodle_path" type="text" placeholder="/var/www/html/moodle" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta Moodledata</label>
-                    <input id="pf-moodledata_path" type="text" placeholder="/var/www/data/moodle/ejemplo" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                    <p class="mt-1 text-xs text-slate-500">Necesaria para el Clonador Moodle.</p>
-                  </div>
-                  <div class="md:col-span-2">
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Ruta vhost Nginx</label>
-                    <input id="pf-vhost_path" type="text" placeholder="/etc/nginx/sites-available/ejemplo.awakelab.world" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                    <p class="mt-1 text-xs text-slate-500">Necesaria para el Clonador Moodle.</p>
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Usuario web</label>
-                    <input id="pf-web_user" type="text" placeholder="www-data" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Grupo web</label>
-                    <input id="pf-web_group" type="text" placeholder="www-data" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <label class="flex items-center gap-2 text-xs text-slate-300 md:col-span-2">
-                    <input id="pf-sudo_requires_password" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-primary-500" />
-                    Sudo requiere contrasena
-                  </label>
-                  <div class="md:col-span-2">
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Contrasena sudo</label>
-                    <input id="pf-sudo_password" type="password" autocomplete="new-password" placeholder="Dejala vacia al editar" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                    <p id="pf-sudo_password_hint" class="mt-1 text-xs text-slate-500">Solo si sudo requiere contrasena.</p>
-                  </div>
-                </div>
-                <div id="pf-form-error" class="hidden text-xs text-red-300 border border-red-600/40 rounded-lg px-3 py-2"></div>
-                <div class="flex items-center justify-end gap-2 pt-1">
-                  <button id="pf-reset-btn" type="button" class="text-xs px-3 py-2 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar</button>
-                  <button id="pf-modal-cancel" type="button" class="text-xs px-3 py-2 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Cancelar</button>
-                  <button id="pf-submit" type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700">Agregar plataforma</button>
-                </div>
-              </form>
-      </div>
-    </div>
   </div>
 
   <!-- User editor modal -->
@@ -1045,29 +1022,17 @@
     </div>
   </div>
 
-  <!-- ====== Sidebar de menu (derecha) ==============================
-       Antes era un panel desplegable dentro del <header>. Ahora es un sidebar
-       fijo que entra desde la derecha y se superpone al fondo con un velo.
-       Vive al final del <body>, fuera del header sticky, para que el `fixed` y
-       el z-index no dependan del contexto de apilamiento de la cabecera.
-       El velo usa un color con alfa, NO backdrop-filter: WebKit dejaba la capa
-       de composicion sin pintar y daba "pantalla oscura sin nada". -->
-  <div id="menu-overlay" class="hidden fixed inset-0 z-40 bg-slate-950/70"></div>
-  <aside id="mobile-menu" aria-hidden="true" class="fixed top-0 right-0 z-50 h-full w-72 max-w-[85vw] translate-x-full transition-transform duration-300 ease-out bg-slate-900 border-l border-slate-800 shadow-2xl shadow-slate-950/80 flex flex-col">
-    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-      <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Menu</span>
-      <button id="menu-close-btn" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Cerrar menu">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
+  <!-- Etiqueta de version fija al pie. Fuera de #login-view y #app-view a
+       proposito, para que se vea en las dos. pointer-events-none para no tapar
+       clicks, y z-20 para quedar debajo del header (z-30) y de los modales (z-40). -->
+  <footer class="fixed inset-x-0 bottom-0 z-20 pointer-events-none flex justify-center pb-3">
+    <!-- Pastilla con fondo OPACO: al ser fija se superpone al contenido que
+         scrollea por detras, y sin fondo las letras se mezclaban con el. -->
+    <div class="flex items-center gap-2 rounded-full bg-slate-900 border border-slate-800 px-3 py-1 shadow-lg shadow-slate-950/60 text-[10px] text-slate-400">
+      <span>Plataforma de clonado</span>
+      <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-300">v{{APP_VERSION}}</span>
     </div>
-    <div class="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-1">
-      <div id="menu-user-label" class="px-3 py-1.5 text-xs text-slate-400"></div>
-      <button id="mobile-platforms-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plataformas</button>
-      <button id="mobile-users-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Usuarios</button>
-      <button id="mobile-account-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Mi cuenta</button>
-      <button id="mobile-logout-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-slate-800 hover:text-red-300">Salir</button>
-    </div>
-  </aside>
+  </footer>
 
   <script>
     // ====== Password show/hide toggle ===============================
@@ -1152,10 +1117,10 @@
 
     // ====== View switching ==========================================
     const SECTION_LABELS = {
-      moodle: 'Moodle',
-      course: 'Cursos',
-      plugin: 'Plugins',
-      alexia: 'Alexia',
+      moodle: 'Clonador Moodle',
+      course: 'Clonador de cursos',
+      plugin: 'Clonador de plugins',
+      alexia: 'Clonador Alexia',
       users: 'Gestion de usuarios',
       platforms: 'Administrar plataformas',
     };
@@ -1332,44 +1297,28 @@
       });
     })();
 
-    // ====== Hamburger menu (sidebar derecho) ==========================
+    // ====== Hamburger menu ============================================
     (function() {
       const hamburgerBtn = document.getElementById('hamburger-btn');
       const mobileMenu = document.getElementById('mobile-menu');
-      const overlay = document.getElementById('menu-overlay');
       const iconOpen = document.getElementById('hamburger-icon');
       const iconClose = document.getElementById('hamburger-close-icon');
 
-      // El sidebar nunca se oculta con `hidden`: se desplaza fuera de pantalla
-      // con translate-x-full para que la transicion se vea al abrir y cerrar.
-      // Quien se oculta con `hidden` es el velo, asi no intercepta clicks
-      // cuando el menu esta cerrado.
       function closeMobileMenu() {
-        mobileMenu.classList.add('translate-x-full');
-        mobileMenu.setAttribute('aria-hidden', 'true');
-        overlay.classList.add('hidden');
-        hamburgerBtn.setAttribute('aria-expanded', 'false');
+        mobileMenu.classList.add('hidden');
         iconOpen.classList.remove('hidden');
         iconClose.classList.add('hidden');
       }
 
-      function openMobileMenu() {
-        overlay.classList.remove('hidden');
-        mobileMenu.classList.remove('translate-x-full');
-        mobileMenu.setAttribute('aria-hidden', 'false');
-        hamburgerBtn.setAttribute('aria-expanded', 'true');
-        iconOpen.classList.add('hidden');
-        iconClose.classList.remove('hidden');
-      }
-
       hamburgerBtn.addEventListener('click', () => {
-        if (mobileMenu.classList.contains('translate-x-full')) openMobileMenu();
-        else closeMobileMenu();
-      });
-      overlay.addEventListener('click', closeMobileMenu);
-      document.getElementById('menu-close-btn').addEventListener('click', closeMobileMenu);
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !mobileMenu.classList.contains('translate-x-full')) closeMobileMenu();
+        const isOpen = !mobileMenu.classList.contains('hidden');
+        if (isOpen) {
+          closeMobileMenu();
+        } else {
+          mobileMenu.classList.remove('hidden');
+          iconOpen.classList.add('hidden');
+          iconClose.classList.remove('hidden');
+        }
       });
 
       document.getElementById('mobile-account-btn').addEventListener('click', () => {
@@ -2568,18 +2517,11 @@
 
     // ====== Platforms admin =========================================
     (function () {
-      // verify: resultado por indice de plataforma. verifyOpen: que detalles
-      // estan desplegados. verifyScope: los indices de la ultima corrida masiva.
-      const state = {
-        servers: [], editingIndex: null,
-        verify: {}, verifyOpen: new Set(), verifyScope: [],
-      };
+      const state = { servers: [], editingIndex: null };
       const form = document.getElementById('pf-form');
       const formTitle = document.getElementById('pf-form-title');
       const submitBtn = document.getElementById('pf-submit');
       const resetBtn = document.getElementById('pf-reset-btn');
-      const modalEl = document.getElementById('pf-modal');
-      const addBtn = document.getElementById('pf-add-btn');
       const listEl = document.getElementById('pf-list');
       const statusEl = document.getElementById('pf-status');
       const messageEl = document.getElementById('pf-message');
@@ -2609,7 +2551,6 @@
       function collectPayload() {
         return {
           name: val('name'),
-          url: val('url'),
           host: val('host'),
           port: Number.parseInt(val('port') || '22', 10),
           ssh_user: val('ssh_user'),
@@ -2627,8 +2568,7 @@
       }
       function validate(p) {
         if (!p.name) return 'Ingresa el nombre visible.';
-        if (p.url && !/^https?:\/\/[^\s/]+/.test(p.url)) return 'La URL debe empezar con http:// o https://';
-        if (!p.host) return 'Ingresa la direccion IP (host SSH).';
+        if (!p.host) return 'Ingresa el host SSH.';
         if (!p.port || Number.isNaN(p.port) || p.port < 1 || p.port > 65535) return 'Puerto SSH invalido.';
         if (!p.ssh_user) return 'Ingresa el usuario SSH.';
         if (!p.moodle_path) return 'Ingresa la ruta Moodle.';
@@ -2649,34 +2589,8 @@
         sshKeyHint.textContent = 'Opcional.';
         sudoPwdHint.textContent = 'Solo si sudo requiere contrasena.';
         setError('');
-      }
-
-      // ---- Modal del formulario -------------------------------------
-      function openModal() {
-        modalEl.classList.remove('hidden');
-        modalEl.scrollTop = 0;
         document.getElementById('pf-name').focus();
       }
-      function closeModal() {
-        modalEl.classList.add('hidden');
-        // Se limpia siempre al cerrar, incluso con "Cancelar": si no,
-        // state.editingIndex sigue apuntando a la plataforma que se estaba
-        // editando y el formulario conserva sus datos hasta el proximo abrir.
-        resetForm();
-      }
-      function openCreate() { resetForm(); openModal(); }
-
-      addBtn.addEventListener('click', openCreate);
-      document.getElementById('pf-modal-close').addEventListener('click', closeModal);
-      document.getElementById('pf-modal-cancel').addEventListener('click', closeModal);
-      // Cierra al hacer click en el velo, pero no al hacer click dentro del
-      // panel: el velo es este mismo elemento, asi que solo cuenta cuando el
-      // target es el, no un descendiente.
-      modalEl.addEventListener('click', (e) => { if (e.target === modalEl) closeModal(); });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !modalEl.classList.contains('hidden')) closeModal();
-      });
-
       function startEdit(index) {
         const s = state.servers.find(x => x.index === index);
         if (!s) return;
@@ -2685,7 +2599,6 @@
         formTitle.textContent = `Editar plataforma: ${s.name}`;
         submitBtn.textContent = 'Actualizar plataforma';
         setVal('name', s.name);
-        setVal('url', s.url || '');
         setVal('host', s.host);
         setVal('port', s.port);
         setVal('ssh_user', s.ssh_user);
@@ -2703,7 +2616,7 @@
         sshKeyHint.textContent = s.has_ssh_key_passphrase ? 'Passphrase guardada. Dejala vacia para conservarla.' : 'Opcional.';
         sudoPwdHint.textContent = s.has_sudo_password ? 'Contrasena sudo guardada. Dejala vacia para conservarla.' : 'Solo si sudo requiere contrasena.';
         setError('');
-        openModal();
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
       async function load() {
@@ -2716,65 +2629,43 @@
           render();
         } catch (err) {
           statusEl.textContent = 'Inventario no disponible';
-          listEl.innerHTML = `<div class="col-span-full text-xs text-red-300 text-center py-6">${esc(err.message)}</div>`;
+          listEl.innerHTML = `<div class="text-xs text-red-300 text-center py-6">${esc(err.message)}</div>`;
         }
       }
       function render() {
         if (!state.servers.length) {
-          listEl.innerHTML = '<div class="col-span-full text-xs text-slate-500 text-center py-6">No hay plataformas.</div>';
+          listEl.innerHTML = '<div class="text-xs text-slate-500 text-center py-6">No hay plataformas.</div>';
           return;
-        }
-        // Cada capacidad se deriva en el backend de los campos del inventario
-        // (ver _server_capabilities). Cuando falta algo se lista, porque el
-        // motivo es justamente lo que hay que completar al editarla.
-        function capRow(label, cap) {
-          const c = cap || { ok: false, missing: [] };
-          const icon = c.ok
-            ? '<svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>'
-            : '<svg class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>';
-          const missing = !c.ok && c.missing && c.missing.length
-            ? `<span class="text-slate-500"> — falta ${esc(c.missing.join(', '))}</span>`
-            : '';
-          return `<div class="flex items-start gap-1.5">${icon}<span class="${c.ok ? 'text-slate-300' : 'text-slate-500'}">${label}${missing}</span></div>`;
         }
         listEl.innerHTML = state.servers.map(s => `
           <article class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
+              <div>
                 <div class="text-sm font-medium text-slate-100">${esc(s.name)}</div>
-                ${s.url
-                  ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-primary-400 hover:text-primary-300 underline break-all mt-0.5 inline-block">${esc(s.url)}</a>`
-                  : '<div class="text-[11px] text-slate-600 italic mt-0.5">Sin URL configurada</div>'}
+                <div class="text-[11px] text-slate-400 mt-0.5">${esc(s.host)}:${s.port} · ${esc(s.ssh_user)}</div>
               </div>
-              ${s.has_ssh_key ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 whitespace-nowrap">Llave SSH</span>' : ''}
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 whitespace-nowrap">${esc(s.auth_method)}</span>
             </div>
-            <div class="mt-2 text-[11px] text-slate-400">
-              Direccion IP: <span class="text-slate-300 font-mono">${esc(s.host)}</span>
-            </div>
-            <div class="mt-2 space-y-1 text-[11px]">
-              ${capRow('Acepta Instalacion Plugin', s.capabilities && s.capabilities.plugin_install)}
-              ${capRow('Acepta Clonacion de Cursos', s.capabilities && s.capabilities.course_clone)}
-              ${capRow('Acepta Clonacion de Plataforma', s.capabilities && s.capabilities.platform_clone)}
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-400">
+              <span class="truncate">Moodle: <span class="text-slate-300">${esc(s.moodle_path)}</span></span>
+              <span>Web: <span class="text-slate-300">${esc(s.web_user)}:${esc(s.web_group)}</span></span>
+              ${s.moodledata_path ? `<span class="truncate sm:col-span-2">Moodledata: <span class="text-slate-300">${esc(s.moodledata_path)}</span></span>` : ''}
+              ${s.vhost_path ? `<span class="truncate sm:col-span-2">Vhost: <span class="text-slate-300">${esc(s.vhost_path)}</span></span>` : ''}
+              <span>Sudo con contrasena: <span class="text-slate-300">${s.sudo_requires_password ? 'Si' : 'No'}</span></span>
+              <span>Contrasena SSH: <span class="text-slate-300">${s.has_ssh_password ? 'Si' : 'No'}</span></span>
             </div>
             <div class="mt-3 flex flex-wrap gap-2">
-              <button class="text-[11px] px-2.5 py-1 rounded border border-primary-600/60 text-primary-300 hover:bg-primary-900/30" data-action="verify" data-index="${s.index}">Verificar</button>
               <button class="text-[11px] px-2.5 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800" data-action="edit" data-index="${s.index}">Editar</button>
               <button class="text-[11px] px-2.5 py-1 rounded border border-red-700/60 text-red-300 hover:bg-red-900/30" data-action="delete" data-index="${s.index}">Eliminar</button>
             </div>
-            <div data-verify-slot="${s.index}"></div>
           </article>
         `).join('');
-        // Repinta los resultados de verificaciones anteriores: render() se
-        // llama tambien despues de guardar o borrar, y perderlos obligaria a
-        // volver a verificar las 35 por un cambio en una.
-        state.servers.forEach(s => paintVerify(s.index));
       }
       listEl.addEventListener('click', async (e) => {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
         const idx = Number.parseInt(btn.dataset.index, 10);
         if (btn.dataset.action === 'edit') return startEdit(idx);
-        if (btn.dataset.action === 'verify') return verifyOne(idx);
         if (btn.dataset.action === 'delete') {
           const s = state.servers.find(x => x.index === idx);
           if (!s) return;
@@ -2812,7 +2703,6 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || 'No fue posible guardar.');
           setMessage(data.message, 'success');
-          closeModal();
           resetForm();
           await load();
         } catch (err) {
@@ -2823,198 +2713,6 @@
         }
       });
       resetBtn.addEventListener('click', resetForm);
-
-      // ====== Verificacion de plataformas ============================
-      // Un request por plataforma (POST /api/cc/admin/servers/<i>/verify) y la
-      // UI resuelve varias en paralelo. Un unico request que verificara las 35
-      // tardaria minutos, se arriesgaria al timeout de nginx y no mostraria
-      // nada hasta el final.
-      const verifyAllBtn = document.getElementById('pf-verify-all-btn');
-      const verifyFailedBtn = document.getElementById('pf-verify-failed-btn');
-      const summaryEl = document.getElementById('pf-verify-summary');
-      const summaryTextEl = document.getElementById('pf-verify-summary-text');
-      const summaryCountsEl = document.getElementById('pf-verify-counts');
-      const summaryBarEl = document.getElementById('pf-verify-bar');
-      const VERIFY_CONCURRENCY = 6;
-      let verifying = false;
-
-      const ICONS = {
-        ok: '<svg class="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>',
-        fail: '<svg class="w-3.5 h-3.5 text-amber-400 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>',
-        skip: '<svg class="w-3.5 h-3.5 text-slate-600 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>',
-      };
-
-      function slotFor(index) {
-        return listEl.querySelector(`[data-verify-slot="${index}"]`);
-      }
-
-      // Los resultados se guardan por FIRMA de la plataforma, no por indice: el
-      // indice no la identifica de forma estable (al borrar una, todas las de
-      // abajo corren un lugar y el resultado quedaria pegado a la vecina). Con
-      // la firma, borrar una plataforma no toca los resultados de las demas, y
-      // editar una descarta el suyo — que es lo correcto, porque el resultado
-      // anterior ya no describe los datos nuevos.
-      function sigOf(s) {
-        return [s.name, s.url, s.host, s.port, s.ssh_user, s.ssh_key_path,
-                s.moodle_path, s.moodledata_path, s.vhost_path].join('|');
-      }
-      function stateOf(index) {
-        const server = state.servers.find(x => x.index === index);
-        return server ? state.verify[sigOf(server)] : undefined;
-      }
-
-      function paintVerify(index) {
-        const slot = slotFor(index);
-        if (!slot) return;
-        const server = state.servers.find(x => x.index === index);
-        const sig = server ? sigOf(server) : '';
-        const st = state.verify[sig];
-        if (!st) { slot.innerHTML = ''; return; }
-
-        if (st.running) {
-          slot.innerHTML = `<div class="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
-            <div class="w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-            Verificando...</div>`;
-          return;
-        }
-        if (st.error) {
-          slot.innerHTML = `<div class="mt-2 rounded border border-red-600/40 bg-red-950/20 px-2.5 py-1.5 text-[11px] text-red-300">
-            No se pudo verificar: ${esc(st.error)}</div>`;
-          return;
-        }
-
-        const r = st.result;
-        const isOk = r.status === 'ok';
-        // Cuando requiere revision el detalle se abre solo: es justamente lo
-        // que hay que leer. Cuando pasa, queda plegado para que 35 plataformas
-        // correctas no llenen la pantalla.
-        const open = state.verifyOpen.has(sig) || !isOk;
-        const hora = (r.checked_at || '').slice(11, 16);
-        const badge = isOk
-          ? `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/50 text-emerald-300">${ICONS.ok}Paso el test</span>`
-          : `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600/50 text-amber-300">${ICONS.fail}Requiere revision (${r.failed_count})</span>`;
-        const lines = open ? r.checks.map(c => `
-          <div class="flex items-start gap-1.5 py-0.5">
-            ${ICONS[c.status] || ICONS.skip}
-            <span class="${c.status === 'fail' ? 'text-amber-200' : c.status === 'skip' ? 'text-slate-500' : 'text-slate-400'}">
-              <span class="${c.status === 'fail' ? 'font-medium' : ''}">${esc(c.label)}:</span> ${esc(c.detail)}
-            </span>
-          </div>`).join('') : '';
-
-        slot.innerHTML = `
-          <div class="mt-2 rounded border ${isOk ? 'border-emerald-800/50 bg-emerald-950/10' : 'border-amber-700/50 bg-amber-950/10'} px-2.5 py-2">
-            <div class="flex items-center justify-between gap-2 flex-wrap">
-              ${badge}
-              <div class="flex items-center gap-2 text-[10px] text-slate-500">
-                ${hora ? `<span>${esc(hora)}</span>` : ''}
-                <button type="button" data-verify-toggle="${index}" class="underline hover:text-slate-300">${open ? 'ocultar detalle' : `ver detalle (${r.checks.length})`}</button>
-              </div>
-            </div>
-            ${open ? `<div class="mt-1.5 text-[11px] space-y-0">${lines}</div>` : ''}
-          </div>`;
-      }
-
-      listEl.addEventListener('click', (e) => {
-        const t = e.target.closest('[data-verify-toggle]');
-        if (!t) return;
-        const i = Number.parseInt(t.dataset.verifyToggle, 10);
-        const server = state.servers.find(x => x.index === i);
-        if (!server) return;
-        const sig = sigOf(server);
-        if (state.verifyOpen.has(sig)) state.verifyOpen.delete(sig);
-        else state.verifyOpen.add(sig);
-        paintVerify(i);
-      });
-
-      async function verifyOne(index) {
-        const server = state.servers.find(x => x.index === index);
-        if (!server) return undefined;
-        const sig = sigOf(server);
-        state.verify[sig] = { running: true };
-        paintVerify(index);
-        try {
-          const res = await fetch(`/api/cc/admin/servers/${index}/verify`, { method: 'POST' });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-          state.verify[sig] = { result: data };
-        } catch (err) {
-          state.verify[sig] = { error: err.message || 'error desconocido' };
-        }
-        paintVerify(index);
-        refreshFailedBtn();
-        return state.verify[sig];
-      }
-
-      function refreshFailedBtn() {
-        const failed = failedIndexes();
-        verifyFailedBtn.classList.toggle('hidden', failed.length === 0 || verifying);
-        verifyFailedBtn.textContent = `Reverificar las ${failed.length} que requieren revision`;
-      }
-
-      function failedIndexes() {
-        return state.servers
-          .map(s => s.index)
-          .filter(i => {
-            const st = stateOf(i);
-            return st && !st.running && (st.error || (st.result && st.result.status !== 'ok'));
-          });
-      }
-
-      function paintSummary(done, total, finished) {
-        summaryEl.classList.remove('hidden');
-        const scope = state.verifyScope || [];
-        let ok = 0, review = 0, error = 0, pending = 0;
-        scope.forEach(i => {
-          const st = stateOf(i);
-          if (!st || st.running) pending++;
-          else if (st.error) error++;
-          else if (st.result.status === 'ok') ok++;
-          else review++;
-        });
-        summaryTextEl.textContent = finished
-          ? `Verificacion terminada: ${total} plataforma(s) comprobada(s).`
-          : `Verificando ${done} de ${total}...`;
-        summaryCountsEl.innerHTML = [
-          `<span class="text-emerald-300">${ok} paso el test</span>`,
-          `<span class="text-amber-300">${review} requiere${review === 1 ? '' : 'n'} revision</span>`,
-          error ? `<span class="text-red-300">${error} sin poder verificar</span>` : '',
-          pending ? `<span class="text-slate-400">${pending} pendiente${pending === 1 ? '' : 's'}</span>` : '',
-        ].filter(Boolean).join('<span class="text-slate-700">|</span>');
-        summaryBarEl.style.width = total ? `${Math.round((done / total) * 100)}%` : '0%';
-      }
-
-      async function verifyMany(indexes) {
-        if (verifying || !indexes.length) return;
-        verifying = true;
-        verifyAllBtn.disabled = true;
-        verifyFailedBtn.classList.add('hidden');
-        state.verifyScope = indexes.slice();
-        const queue = indexes.slice();
-        const total = indexes.length;
-        let done = 0;
-        paintSummary(0, total, false);
-        const worker = async () => {
-          while (queue.length) {
-            const i = queue.shift();
-            await verifyOne(i);
-            done += 1;
-            paintSummary(done, total, false);
-          }
-        };
-        try {
-          await Promise.all(
-            Array.from({ length: Math.min(VERIFY_CONCURRENCY, total) }, worker)
-          );
-        } finally {
-          verifying = false;
-          verifyAllBtn.disabled = false;
-          paintSummary(total, total, true);
-          refreshFailedBtn();
-        }
-      }
-
-      verifyAllBtn.addEventListener('click', () => verifyMany(state.servers.map(s => s.index)));
-      verifyFailedBtn.addEventListener('click', () => verifyMany(failedIndexes()));
 
       window.__pfLoad = load;
     })();
@@ -3283,7 +2981,6 @@
       const remoteHostInput = form.querySelector('input[name="remote_host"]');
       const sourceModeInput = form.querySelector('select[name="source_origin"]');
       const sourceIndexInput = form.querySelector('select[name="source_index"]');
-      const sourceHintEl = document.getElementById('clone-source-hint');
       const remoteSourceFields = document.getElementById('remote-source-fields');
 
       function suggestFromKey() {
@@ -3323,19 +3020,12 @@
           const res = await fetch('/api/cc/servers');
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(payload.error || 'No se pudo cargar inventario.');
-          const all = (payload.servers || []).slice().sort(
+          const servers = (payload.servers || []).slice().sort(
             (a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' })
           );
-          // Solo las plataformas que aceptan clonacion de plataforma. Este
-          // modulo necesita moodle_path + moodledata_path + vhost_path y llave
-          // SSH (autentica con BatchMode, no acepta contrasena); ofrecer las
-          // demas solo mueve el error al medio del job, cuando el origen ya
-          // quedo en modo mantenimiento.
-          const servers = all.filter(s => s.capabilities && s.capabilities.platform_clone && s.capabilities.platform_clone.ok);
-          const excluded = all.length - servers.length;
           sourceIndexInput.innerHTML = servers.length
             ? '<option value="">Selecciona instancia origen...</option>'
-            : '<option value="">No hay plataformas aptas para clonar</option>';
+            : '<option value="">No hay plataformas en el inventario</option>';
           servers.forEach(s => {
             const o = document.createElement('option');
             o.value = s.index;
@@ -3343,20 +3033,6 @@
             sourceIndexInput.appendChild(o);
           });
           if (servers.length) sourceIndexInput.value = String(servers[0].index);
-          if (sourceHintEl) {
-            if (!all.length) {
-              sourceHintEl.textContent = 'No hay plataformas en el inventario.';
-              sourceHintEl.className = 'mt-1 text-xs text-amber-400';
-            } else if (!servers.length) {
-              sourceHintEl.textContent = `Ninguna de las ${all.length} plataformas del inventario acepta clonacion de plataforma. Completa ruta moodledata, ruta vhost Nginx y llave SSH en Administrar plataformas.`;
-              sourceHintEl.className = 'mt-1 text-xs text-amber-400';
-            } else {
-              sourceHintEl.textContent = excluded
-                ? `Solo se listan las ${servers.length} plataformas que aceptan clonacion de plataforma (${excluded} excluida${excluded === 1 ? '' : 's'} por datos incompletos en el inventario).`
-                : 'Selecciona la instancia que se usara como origen para la clonacion.';
-              sourceHintEl.className = 'mt-1 text-xs text-slate-500';
-            }
-          }
         } catch (err) {
           sourceIndexInput.innerHTML = `<option value="">Error: ${err.message}</option>`;
         }
@@ -3438,8 +3114,8 @@
         fileSizeEl.textContent = formatSize(file.size);
         fileInfo.classList.remove('hidden');
         dropzone.classList.add('hidden');
-        inferType(file.name);
         updateInstallBtn();
+        detectType(file);
       }
 
       function clearFile() {
@@ -3451,17 +3127,64 @@
         updateInstallBtn();
       }
 
-      function inferType(filename) {
+      // Conjetura instantanea por nombre, solo para no dejar el selector vacio
+      // mientras viaja la deteccion real. Se acepta el prefijo en cualquier
+      // posicion delimitada para cubrir nombres tipo `moodle-mod_hvp.zip`.
+      function guessTypeFromName(filename) {
         const stem = filename.replace(/\.zip$/i, '').toLowerCase();
-        for (const t of pluginTypes) {
-          if (stem.startsWith(t.key + '_')) {
-            typeSelect.value = t.path;
-            typeHint.textContent = 'Auto-detectado: ' + t.key + ' (' + t.path + ')';
-            typeHint.classList.remove('hidden');
-            return;
-          }
+        const ordered = pluginTypes.slice().sort((a, b) => b.key.length - a.key.length);
+        for (const t of ordered) {
+          if (new RegExp('(?:^|[-.])' + t.key + '_').test(stem)) return t;
         }
-        typeHint.classList.add('hidden');
+        return null;
+      }
+
+      function showTypeHint(text, tone) {
+        typeHint.textContent = text;
+        typeHint.classList.remove('hidden', 'text-slate-500', 'text-emerald-400', 'text-amber-400');
+        typeHint.classList.add(
+          tone === 'ok' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-slate-500'
+        );
+      }
+
+      // El tipo real esta en `$plugin->component` del version.php, dentro del
+      // ZIP: el nombre del archivo y el de la carpeta no son fuentes fiables
+      // (`mod_hvp` viene como carpeta `hvp`). Por eso se manda el archivo al
+      // backend, que lo lee y responde el tipo.
+      async function detectType(file) {
+        const guess = guessTypeFromName(file.name);
+        if (guess) {
+          typeSelect.value = guess.path;
+          updateInstallBtn();
+        }
+        showTypeHint('Detectando tipo de plugin...', 'muted');
+        try {
+          const fd = new FormData();
+          fd.append('plugin_zip', file);
+          const res = await fetch('/api/plugin/detect', { method: 'POST', body: fd });
+          const info = await res.json();
+          if (!res.ok) throw new Error(info.error || `HTTP ${res.status}`);
+          if (file !== selectedFile) return;   // el usuario ya cambio de archivo
+
+          if (info.type_path) {
+            typeSelect.value = info.type_path;
+            const label = info.type_key + ' (/' + info.type_path + ')';
+            if (info.source === 'version.php') {
+              showTypeHint(`Detectado ${label} desde version.php: ${info.component}`, 'ok');
+            } else {
+              showTypeHint(`Tipo probable ${label}, deducido del nombre. Sin version.php legible: verificalo.`, 'warn');
+            }
+          } else {
+            showTypeHint(
+              `No se pudo determinar el tipo${info.folder ? ` (carpeta: ${info.folder})` : ''}. Selecciona el tipo a mano.`,
+              'warn'
+            );
+          }
+        } catch (err) {
+          showTypeHint(`No se pudo detectar el tipo: ${err.message}. Selecciona el tipo a mano.`, 'warn');
+        } finally {
+          updateInstallBtn();
+        }
       }
 
       dropzone.addEventListener('click', () => fileInput.click());
@@ -3685,8 +3408,11 @@
     (function () {
       let loaded = false;
       let axBatchData = null;
+      let axCurrentJobId = null;
+      let axPollInterval = null;
       let axCurrentBatchId = null;
       let axBatchPollInterval = null;
+      let axSelectedCourseId = null;
 
       const $ = id => document.getElementById(id);
 
@@ -3748,6 +3474,27 @@
         $('ax-config-panel').classList.toggle('hidden');
       });
 
+      // --- Sub-tabs ---
+      function switchAxTab(tab) {
+        document.querySelectorAll('.ax-tab').forEach(b => {
+          b.classList.remove('text-white', 'border-primary-500');
+          b.classList.add('text-slate-400', 'border-transparent');
+        });
+        document.querySelectorAll('.ax-tab-content').forEach(c => c.classList.add('hidden'));
+        const btn = document.querySelector(`.ax-tab[data-ax-tab="${tab}"]`);
+        if (btn) {
+          btn.classList.remove('text-slate-400', 'border-transparent');
+          btn.classList.add('text-white', 'border-primary-500');
+        }
+        const content = $(`ax-tab-${tab}`);
+        if (content) content.classList.remove('hidden');
+      }
+
+      document.querySelectorAll('.ax-tab').forEach(btn => {
+        btn.addEventListener('click', () => switchAxTab(btn.dataset.axTab));
+      });
+
+      // --- Batch Upload ---
       const dropZone = $('ax-drop-zone');
       const fileInput = $('ax-file-input');
 
@@ -3944,11 +3691,197 @@
         }
       }
 
+      // --- Single Export ---
+      $('ax-search-btn').addEventListener('click', searchAxCourses);
+      $('ax-search-input').addEventListener('keydown', e => { if (e.key === 'Enter') searchAxCourses(); });
+
+      async function searchAxCourses() {
+        const query = $('ax-search-input').value.trim();
+        if (!query) return;
+        const list = $('ax-search-list');
+        const results = $('ax-search-results');
+        list.innerHTML = '<div class="p-3 text-sm text-slate-400">Buscando...</div>';
+        results.classList.remove('hidden');
+        try {
+          const data = await api('/api/alexia/search-courses', { method: 'POST', body: JSON.stringify({ query }) });
+          if (!data.success) { list.innerHTML = `<div class="p-3 text-sm text-red-400">${escapeHtml(data.error)}</div>`; return; }
+          if (!data.courses || !data.courses.length) { list.innerHTML = '<div class="p-3 text-sm text-slate-400">No se encontraron cursos</div>'; return; }
+          list.innerHTML = data.courses.map(c => `
+            <div class="cursor-pointer px-3 py-2 border-b border-slate-800 hover:bg-slate-800 last:border-0" data-ax-cid="${c.id}" data-ax-cfull="${escapeHtml(c.fullname)}" data-ax-cshort="${escapeHtml(c.shortname)}">
+              <div class="text-sm text-white">${escapeHtml(c.fullname)}</div>
+              <div class="text-xs text-slate-400">${escapeHtml(c.shortname)} | ID: ${c.id} | ${escapeHtml(c.category_name)}</div>
+            </div>`).join('');
+          list.querySelectorAll('[data-ax-cid]').forEach(el => {
+            el.addEventListener('click', () => {
+              axSelectedCourseId = Number(el.dataset.axCid);
+              $('ax-selected-course').classList.remove('hidden');
+              $('ax-selected-course-name').textContent = el.dataset.axCfull;
+              $('ax-selected-course-id').textContent = `ID: ${el.dataset.axCid} | ${el.dataset.axCshort}`;
+              results.classList.add('hidden');
+            });
+          });
+        } catch (e) { list.innerHTML = `<div class="p-3 text-sm text-red-400">Error: ${escapeHtml(e.message)}</div>`; }
+      }
+
+      $('ax-clear-course').addEventListener('click', () => {
+        axSelectedCourseId = null;
+        $('ax-selected-course').classList.add('hidden');
+      });
+
+      function axDeriveModalidad(reducido) {
+        if (!reducido || !reducido.trim()) return '';
+        const last = reducido.trim().slice(-1).toUpperCase();
+        if (last === 'V') return 'VIRTUAL';
+        if (last === 'P') return 'PRESENCIAL';
+        return 'PRESENCIAL';
+      }
+
+      function updateAxTree() {
+        const ejercicio = $('ax-f-ejercicio').value.trim();
+        const idCentro = $('ax-f-id-centro').value.trim();
+        const reducido = $('ax-f-reducido-grupo').value.trim();
+        const especialidad = $('ax-f-especialidad').value.trim();
+        const pertenece = $('ax-f-pertenece-curso').value.trim();
+        const codigo = $('ax-f-codigo-oficial').value.trim();
+        const modalidad = axDeriveModalidad(reducido);
+        const modDisplay = $('ax-f-modalidad-display');
+        if (modalidad) {
+          const cls = modalidad === 'PRESENCIAL' ? 'bg-emerald-600/30 text-emerald-300' : 'bg-purple-600/30 text-purple-300';
+          modDisplay.innerHTML = `<span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${cls}">${modalidad}</span>`;
+        } else {
+          modDisplay.innerHTML = '<span class="text-slate-500">Auto-detectada</span>';
+        }
+        const tree = $('ax-tree-preview');
+        const levels = [
+          { label: 'Ejercicio', value: ejercicio },
+          { label: 'ID Centro', value: idCentro },
+          { label: 'Modalidad', value: modalidad },
+          { label: 'Especialidad', value: especialidad },
+          { label: 'Pertenece Curso', value: pertenece },
+        ];
+        if (!levels.some(l => l.value)) { tree.innerHTML = '<p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>'; return; }
+        let html = '';
+        for (let i = 0; i < levels.length; i++) {
+          const l = levels[i];
+          const isLast = i === levels.length - 1;
+          const value = l.value || '...';
+          const valueClass = l.value ? (isLast ? 'text-primary-300 font-semibold' : 'text-white') : 'text-slate-600 italic';
+          const pad = i * 20;
+          const connector = i === 0 ? '' : `<span class="text-primary-500 mr-1">${isLast ? '└' : '├'}─</span>`;
+          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5">
+            ${connector}<span class="text-slate-400 text-xs">${l.label}:</span><span class="${valueClass} text-sm">${escapeHtml(value)}</span></div>`;
+        }
+        if (levels[levels.length - 1].value) {
+          const shortname = [reducido, codigo, idCentro, ejercicio].filter(Boolean).join('_');
+          const pad = levels.length * 20;
+          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5 mt-1">
+            <span class="text-primary-400 mr-1">└─</span>
+            <span class="text-primary-300 text-xs italic">Curso importado aqui</span></div>`;
+          if (shortname) {
+            html += `<div style="padding-left:${pad + 20}px" class="mt-2 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 inline-block">
+              <span class="text-slate-400 text-xs">Codigo Alexia:</span>
+              <span class="text-primary-300 text-sm font-semibold ml-1">${escapeHtml(shortname)}</span></div>`;
+          }
+        }
+        tree.innerHTML = html;
+      }
+
+      ['ax-f-ejercicio', 'ax-f-id-centro', 'ax-f-especialidad', 'ax-f-pertenece-curso', 'ax-f-codigo-oficial', 'ax-f-reducido-grupo'].forEach(id => {
+        $(id).addEventListener('input', updateAxTree);
+      });
+
+      $('ax-btn-export').addEventListener('click', async function () {
+        if (!axSelectedCourseId) { toaster.show('Seleccione un curso de Catalejo primero', 'warning'); return; }
+        const fields = {
+          ejercicio: $('ax-f-ejercicio').value.trim(),
+          id_centro: $('ax-f-id-centro').value.trim(),
+          nombre_centro: $('ax-f-nombre-centro').value.trim(),
+          especialidad: $('ax-f-especialidad').value.trim(),
+          pertenece_curso: $('ax-f-pertenece-curso').value.trim(),
+          codigo_oficial: $('ax-f-codigo-oficial').value.trim(),
+          reducido_grupo: $('ax-f-reducido-grupo').value.trim(),
+          estudio: $('ax-f-estudio').value.trim(),
+          mat1: $('ax-f-mat1').value.trim(),
+          mat2: $('ax-f-mat2').value.trim(),
+          area: $('ax-f-area').value.trim(),
+        };
+        const required = ['ejercicio','id_centro','especialidad','pertenece_curso','codigo_oficial','reducido_grupo'];
+        if (required.some(f => !fields[f])) { toaster.show('Complete los campos obligatorios (*)', 'warning'); return; }
+        this.disabled = true;
+        const statusCard = $('ax-export-status-card');
+        statusCard.classList.remove('hidden');
+        $('ax-export-steps').innerHTML = '';
+        $('ax-export-result').classList.add('hidden');
+        $('ax-progress-bar').style.width = '0%';
+        $('ax-progress-percent').textContent = '0%';
+        try {
+          const data = await api('/api/alexia/export', { method: 'POST', body: JSON.stringify({ course_id: axSelectedCourseId, form_data: fields }) });
+          if (data.error) { toaster.show(data.error, 'error'); this.disabled = false; return; }
+          axCurrentJobId = data.job_id;
+          pollAxJob();
+        } catch (e) { toaster.show('Error: ' + e.message, 'error'); this.disabled = false; }
+      });
+
+      function pollAxJob() {
+        if (!axCurrentJobId) return;
+        if (axPollInterval) clearInterval(axPollInterval);
+        axPollInterval = setInterval(async () => {
+          try {
+            const job = await api(`/api/alexia/jobs/${axCurrentJobId}`);
+            renderAxJobStatus(job);
+            if (job.status === 'completed' || job.status === 'failed') {
+              clearInterval(axPollInterval); axPollInterval = null;
+              $('ax-btn-export').disabled = false;
+            }
+          } catch (e) { console.error('Poll error:', e); }
+        }, 1500);
+      }
+
+      function renderAxJobStatus(job) {
+        $('ax-progress-bar').style.width = job.progress + '%';
+        $('ax-progress-percent').textContent = job.progress + '%';
+        const stepsEl = $('ax-export-steps');
+        stepsEl.innerHTML = (job.steps || []).map((s, i) => {
+          const isLast = i === job.steps.length - 1;
+          const icon = job.status === 'failed' && isLast
+            ? '<svg class="w-4 h-4 text-red-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>'
+            : job.status === 'completed' || !isLast
+              ? '<svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>'
+              : '<div class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin shrink-0"></div>';
+          const textClass = isLast && job.status === 'failed' ? 'text-red-400' : isLast && job.status !== 'completed' ? 'text-white' : 'text-slate-400';
+          return `<div class="flex items-start gap-2">${icon}<span class="${textClass} text-xs">${escapeHtml(s.message)}</span></div>`;
+        }).join('');
+        const resultEl = $('ax-export-result');
+        if (job.status === 'completed' && job.result) {
+          resultEl.classList.remove('hidden');
+          resultEl.innerHTML = `<div class="bg-slate-800 border border-emerald-600/40 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-2">
+              <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+              <span class="text-emerald-300 font-semibold text-sm">Curso exportado exitosamente</span>
+            </div>
+            <div class="text-xs text-slate-300 space-y-1">
+              <p><strong class="text-slate-100">Curso:</strong> ${escapeHtml(job.result.course_fullname)}</p>
+              <p><strong class="text-slate-100">ID:</strong> ${job.result.course_id}</p>
+              ${job.result.course_url ? `<a href="${job.result.course_url}" target="_blank" class="inline-block mt-2 text-primary-400 hover:text-primary-300 underline">Abrir curso en Alexia &rarr;</a>` : ''}
+            </div></div>`;
+        } else if (job.status === 'failed') {
+          resultEl.classList.remove('hidden');
+          resultEl.innerHTML = `<div class="bg-slate-800 border border-red-600/40 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-1">
+              <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+              <span class="text-red-400 font-semibold text-sm">Error en la exportacion</span>
+            </div>
+            <p class="text-xs text-red-300 mt-1">${escapeHtml(job.error)}</p></div>`;
+        }
+      }
+
       // --- Init ---
       window.__alexiaLoad = async function () {
         if (loaded) return;
         loaded = true;
+        switchAxTab('batch');
         await loadAxConfig();
+        updateAxTree();
       };
     })();
 
