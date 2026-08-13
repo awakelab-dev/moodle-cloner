@@ -1001,7 +1001,14 @@ REQUIRED_FIELDS = [
 
 def _parse_excel(file_path: str) -> Tuple[list, list]:
     if openpyxl is None:
-        raise RuntimeError("openpyxl no esta instalado")
+        # Mensaje accionable: el original decia solo "no esta instalado", que no
+        # dice donde ni como resolverlo. Es una dependencia de sistema, no un bug.
+        raise RuntimeError(
+            "openpyxl no esta instalado en el servidor, asi que no se puede leer el Excel. "
+            "Instalalo con: sudo apt-get install -y python3-openpyxl "
+            "(en Ubuntu 24.04 el pip del sistema esta externally-managed, por eso la via apt). "
+            "Despues reinicia con: pm2 restart moodle-cloner-api"
+        )
 
     wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
     ws = wb.active

@@ -1460,6 +1460,21 @@ def log_boot(message: str) -> None:
     print(message, flush=True)
 
 
+def check_optional_dependencies() -> None:
+    """Avisa al arrancar de las dependencias de sistema que faltan.
+
+    Sin esto, que falte openpyxl solo se descubre cuando un usuario sube un
+    Excel al modulo Alexia y recibe un error. Aparece en `pm2 logs` justo
+    despues del deploy, que es cuando se puede resolver.
+    """
+    if getattr(alexia_routes, "openpyxl", None) is None:
+        log_boot(
+            "WARNING: openpyxl no esta instalado. La importacion masiva por Excel "
+            "del modulo Alexia va a fallar. Instalalo con: "
+            "sudo apt-get install -y python3-openpyxl"
+        )
+
+
 def init_app_db() -> None:
     log_boot("Initializing application database...")
     try:
@@ -1486,6 +1501,7 @@ def main() -> None:
     server = ThreadingHTTPServer((HOST, PORT), MoodleCloneHandler)
     log_boot(f"Moodle Cloner UI available at http://{HOST}:{PORT} (v{APP_VERSION})")
 
+    check_optional_dependencies()
     threading.Thread(target=init_app_db, name="db-init", daemon=True).start()
 
     server.serve_forever()

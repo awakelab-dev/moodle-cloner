@@ -5,6 +5,16 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.16.1 - 2026-08-12
+
+Fix: `openpyxl` faltante se avisa al arrancar y el error dice como resolverlo. No era un bug: es el paso de deploy de v0.10.0 que quedo pendiente.
+
+- **`requirements.txt` no listaba `openpyxl`**, aunque el modulo Alexia lo necesita desde v0.10.0. La dependencia solo estaba mencionada en una linea del CHANGELOG de ese release, asi que era invisible desde el lugar canonico. Agregado `openpyxl>=3.1.0`.
+- **Aviso al arrancar** (`check_optional_dependencies()`): si `openpyxl` no esta importable, se registra un WARNING en el arranque, justo despues de la linea del puerto. Antes la falta se descubria recien cuando alguien subia un Excel; ahora aparece en `pm2 logs` inmediatamente despues del deploy, que es el momento en que se puede resolver.
+- **Mensaje accionable**: `_parse_excel()` decia solo "openpyxl no esta instalado". Ahora aclara que es una dependencia del servidor, da el comando (`sudo apt-get install -y python3-openpyxl`), explica por que la via apt y no pip (en Ubuntu 24.04 el pip del sistema esta externally-managed) y recuerda el `pm2 restart`.
+- Verificado en los dos escenarios: con `openpyxl` disponible el arranque no imprime nada extra; ocultandolo del import path, el WARNING aparece en la segunda linea del log.
+- Deploy: **`sudo apt-get install -y python3-openpyxl`** y luego `pm2 restart moodle-cloner-api`.
+
 ## v0.16.0 - 2026-08-12
 
 Fix: el clonador de plugins detecta el tipo leyendo `version.php` del ZIP y preselecciona el selector. Antes casi nunca lo lograba.
