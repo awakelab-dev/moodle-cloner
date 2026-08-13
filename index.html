@@ -27,6 +27,18 @@
       }
     }
   </script>
+
+  <style>
+    /* Los <select> quedaban 2px mas bajos que un <input> con exactamente las
+       mismas clases (36px contra 38px). La causa no es el padding: Chrome fuerza
+       `line-height: normal` en los select desde su stylesheet de UA y no se
+       puede sobreescribir, asi que la caja de contenido mide 18px en vez de los
+       20px que da `text-sm`. Como la line-height es inalcanzable, se igualan por
+       altura minima. Asume el `py-2` que usan todos los select de esta pagina:
+       contenido + 16px de padding vertical + 2px de borde. */
+    select.text-sm { min-height: 2.375rem; } /* 20 + 16 + 2 = 38px */
+    select.text-xs { min-height: 2.125rem; } /* 16 + 16 + 2 = 34px */
+  </style>
 </head>
 <body class="min-h-screen bg-slate-950 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-100">
 
@@ -319,7 +331,7 @@
           <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between gap-4">
               <div>
-                <h1 class="text-2xl font-semibold text-slate-50">Clonador de cursos</h1>
+                <h1 class="text-2xl font-semibold text-slate-50">Replicador de Cursos</h1>
                 <p class="text-sm text-slate-400 mt-1">Copia cursos Moodle entre plataformas via SSH (backup, transferencia SFTP y restore).</p>
               </div>
               <div id="cc-inventory-status" class="text-xs text-slate-400">Cargando inventario...</div>
@@ -474,73 +486,105 @@
         <section id="section-plugin" class="app-section hidden">
           <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6">
-              <h1 class="text-2xl font-semibold text-slate-50">Clonador de plugins</h1>
+              <h1 class="text-2xl font-semibold text-slate-50">Replicador de plugins</h1>
               <p class="text-sm text-slate-400 mt-1">Instala plugins Moodle (.zip) en multiples plataformas simultaneamente por SSH.</p>
             </div>
-            <div class="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <!-- Left: Plugin + Servers -->
-              <div class="space-y-6">
-                <!-- Step 1: Plugin -->
-                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                  <h2 class="text-sm font-semibold text-slate-200 mb-3">1. Plugin</h2>
-                  <div id="pi-dropzone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 transition-colors">
-                    <input type="file" id="pi-file-input" accept=".zip" class="hidden" />
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mx-auto mb-2 h-10 w-10 text-slate-500">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                    </svg>
-                    <p class="text-sm text-slate-400">Arrastra un archivo <b class="text-slate-300">.zip</b> aqui o haz clic para seleccionar</p>
+            <!-- Mismo esqueleto que el Replicador de cursos: un paso por fila a
+                 todo el ancho, con la insignia numerada + titulo + descripcion, y
+                 la accion al final. Antes eran dos columnas, asi que el paso 3
+                 quedaba a la altura del paso 1 y se leia como si fuera paralelo
+                 a los otros dos en vez de posterior. -->
+            <div class="px-8 py-6 space-y-6">
+              <!-- Step 1: Plugin -->
+              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <div class="flex items-start gap-3 mb-4">
+                  <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">1</span>
+                  <div>
+                    <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plugin</h2>
+                    <p class="text-xs text-slate-400 mt-1">Sube el .zip del plugin y confirma su tipo. El tipo se detecta del contenido del archivo.</p>
                   </div>
-                  <div id="pi-file-info" class="hidden flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-3 mt-3">
-                    <div class="min-w-0">
-                      <span id="pi-file-name" class="text-sm text-slate-200 font-medium truncate block"></span>
-                      <span id="pi-file-size" class="text-xs text-slate-500"></span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div>
+                    <div id="pi-dropzone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 transition-colors">
+                      <input type="file" id="pi-file-input" accept=".zip" class="hidden" />
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mx-auto mb-2 h-10 w-10 text-slate-500">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                      </svg>
+                      <p class="text-sm text-slate-400">Arrastra un archivo <b class="text-slate-300">.zip</b> aqui o haz clic para seleccionar</p>
                     </div>
-                    <button id="pi-file-clear" type="button" class="text-xs text-red-400 hover:text-red-300 ml-3 shrink-0">Quitar</button>
+                    <div id="pi-file-info" class="hidden flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-3 mt-3">
+                      <div class="min-w-0">
+                        <span id="pi-file-name" class="text-sm text-slate-200 font-medium truncate block"></span>
+                        <span id="pi-file-size" class="text-xs text-slate-500"></span>
+                      </div>
+                      <button id="pi-file-clear" type="button" class="text-xs text-red-400 hover:text-red-300 ml-3 shrink-0">Quitar</button>
+                    </div>
                   </div>
-                  <label class="block mt-4">
-                    <span class="text-xs text-slate-400 mb-1 block">Tipo de plugin (frankenstyle)</span>
-                    <select id="pi-type" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                      <option value="">Cargando tipos...</option>
-                    </select>
-                  </label>
-                  <div id="pi-type-hint" class="text-xs text-emerald-400 mt-1 hidden"></div>
-                </div>
-                <!-- Step 2: Servers -->
-                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                  <h2 class="text-sm font-semibold text-slate-200 mb-3">2. Plataformas destino</h2>
-                  <div class="flex items-center gap-3 mb-3">
-                    <button id="pi-select-all" type="button" class="text-xs text-primary-500 hover:text-primary-700">Seleccionar todo</button>
-                    <button id="pi-clear-all" type="button" class="text-xs text-slate-500 hover:text-slate-400">Limpiar</button>
-                    <span id="pi-server-count" class="ml-auto text-xs text-slate-500">0 seleccionadas</span>
-                  </div>
-                  <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
-                    <div class="text-xs text-slate-500 text-center py-4 col-span-full">Cargando plataformas...</div>
+                  <div>
+                    <label class="block">
+                      <span class="block text-xs font-medium text-slate-300 mb-1">Tipo de plugin (frankenstyle)</span>
+                      <select id="pi-type" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                        <option value="">Cargando tipos...</option>
+                      </select>
+                    </label>
+                    <div id="pi-type-hint" class="text-xs text-emerald-400 mt-1 hidden"></div>
+                    <p class="mt-1 text-xs text-slate-500">Define en que subcarpeta de Moodle se instala el plugin.</p>
                   </div>
                 </div>
-              </div>
-              <!-- Right: Actions + Output -->
-              <div class="space-y-6">
-                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                  <h2 class="text-sm font-semibold text-slate-200 mb-3">3. Instalar</h2>
-                  <button id="pi-install-btn" type="button" disabled class="w-full px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              </section>
+
+              <!-- Step 2: Servers -->
+              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <div class="flex items-start justify-between gap-3 mb-4">
+                  <div class="flex items-start gap-3">
+                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">2</span>
+                    <div>
+                      <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plataformas destino</h2>
+                      <p class="text-xs text-slate-400 mt-1">Selecciona una o varias plataformas. El plugin se instala en todas por SSH.</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <span id="pi-server-count" class="text-xs text-slate-500 mr-1">0 seleccionadas</span>
+                    <button id="pi-select-all" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Seleccionar todo</button>
+                    <button id="pi-clear-all" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar</button>
+                  </div>
+                </div>
+                <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-72 overflow-y-auto pr-1">
+                  <div class="text-xs text-slate-500 text-center py-4 col-span-full">Cargando plataformas...</div>
+                </div>
+              </section>
+
+              <!-- Step 3: Install -->
+              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                  <div class="flex items-start gap-3">
+                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">3</span>
+                    <div>
+                      <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Instalar</h2>
+                      <p class="text-xs text-slate-400 mt-1">Se conecta por SSH a cada plataforma, sube el .zip y lo descomprime en su carpeta. Puede tardar varios minutos.</p>
+                    </div>
+                  </div>
+                  <button id="pi-install-btn" type="button" disabled class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     Instalar plugin
                   </button>
-                  <div id="pi-status-bar" class="hidden mt-4">
-                    <div class="flex justify-between items-center mb-1">
-                      <span id="pi-phase" class="text-xs text-slate-400">Esperando...</span>
-                      <span id="pi-percent" class="text-xs text-slate-400 font-mono">0%</span>
-                    </div>
-                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                      <div id="pi-progress-bar" class="h-1.5 rounded-full bg-primary-500 transition-all duration-300" style="width:0%"></div>
-                    </div>
+                </div>
+                <div id="pi-status-bar" class="hidden mt-4">
+                  <div class="flex justify-between items-center mb-1">
+                    <span id="pi-phase" class="text-xs text-slate-400">Esperando...</span>
+                    <span id="pi-percent" class="text-xs text-slate-400 font-mono">0%</span>
                   </div>
-                  <pre id="pi-output" class="hidden mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 max-h-80 overflow-auto font-mono whitespace-pre-wrap"></pre>
+                  <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div id="pi-progress-bar" class="h-1.5 rounded-full bg-primary-500 transition-all duration-300" style="width:0%"></div>
+                  </div>
                 </div>
-                <!-- Results -->
-                <div id="pi-results" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                  <h2 class="text-sm font-semibold text-slate-200 mb-3">Resultados</h2>
-                  <div id="pi-results-list" class="space-y-2"></div>
-                </div>
+                <pre id="pi-output" class="hidden mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 max-h-80 overflow-auto font-mono whitespace-pre-wrap"></pre>
+              </section>
+
+              <!-- Results -->
+              <div id="pi-results" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <h2 class="text-sm font-semibold text-slate-200 mb-3">Resultados</h2>
+                <div id="pi-results-list" class="space-y-2"></div>
               </div>
             </div>
           </div>
@@ -551,7 +595,7 @@
           <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
               <div>
-                <h1 class="text-2xl font-semibold text-slate-50">Clonador Alexia</h1>
+                <h1 class="text-2xl font-semibold text-slate-50">Replicador de Cursos desde Alexia</h1>
                 <p class="text-sm text-slate-400 mt-1">Exporta cursos de Catalejo a Alexia via SSH.</p>
               </div>
               <div class="flex items-center gap-3">

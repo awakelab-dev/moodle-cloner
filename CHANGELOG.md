@@ -5,6 +5,18 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.19.0 - 2026-08-12
+
+UI: los select dejan de ser mas bajos que los input, el Replicador de plugins toma el layout por pasos del de Cursos, y se renombran los titulos de las secciones.
+
+- **Altura de los `<select>`.** Con exactamente las mismas clases que un `<input>` median 36px contra 38px. La causa no era el padding: **Chrome fuerza `line-height: normal` en los select desde su stylesheet de UA y no se puede sobreescribir**, asi que la caja de contenido queda en 18px en vez de los 20px que da `text-sm`. Como la line-height es inalcanzable, se igualan por `min-height` en un `<style>` nuevo: `select.text-sm { min-height: 2.375rem }` (20+16+2) y `select.text-xs { min-height: 2.125rem }` (16+16+2). Asume el `py-2` que usan todos los select de la pagina. Verificado: select e input miden ahora 38px en las tres secciones, y en el paso 1 del Replicador de Cursos quedan a la misma altura lado a lado.
+- **Replicador de plugins con el layout del de Cursos.** Era una grilla de dos columnas, asi que el paso 3 arrancaba a la altura del paso 1 y se leia como paralelo a los otros dos en vez de posterior. Ahora es un paso por fila a todo el ancho (1086px, igual que en Cursos), cada uno con la insignia numerada + titulo en mayusculas + descripcion:
+  - **Paso 1** en dos columnas dentro de la fila: la zona de arrastre a la izquierda, el selector de tipo a la derecha.
+  - **Paso 2** a todo el ancho, con el contador de seleccionadas y los botones "Seleccionar todo" / "Limpiar" en la cabecera del paso (como el "Seleccionar todos" de Cursos) y la grilla de plataformas de 2 a 4 columnas segun el ancho.
+  - **Paso 3** abajo, con titulo y descripcion a la izquierda y el boton a la derecha, replicando la seccion "Ejecutar copia". El boton dejo de ser `w-full`. La barra de progreso y la salida quedan dentro de ese mismo paso; los resultados siguen en su tarjeta aparte.
+- **Titulos de seccion**: "Clonador de cursos" -> **Replicador de Cursos**, "Clonador de plugins" -> **Replicador de plugins**, "Clonador Alexia" -> **Replicador de Cursos desde Alexia**. "Clonador de Instancias Moodle" queda igual.
+- Verificado que el flujo de plugins sigue operativo tras mover el marcado (subida del .zip, tarjeta del archivo, "Seleccionar todo" con las 35, "Limpiar", habilitado del boton) y que a 900px de ancho el paso 1 se apila y la grilla baja a 3 columnas. Los 20 ids `pi-*` siguen presentes. Cero errores de consola.
+
 ## v0.18.2 - 2026-08-12
 
 UI: el logo va al doble de tamano. A 36px de alto la bajada "Clonador de Instancia Moodle" no se leia.
