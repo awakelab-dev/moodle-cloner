@@ -5,6 +5,16 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.21.0 - 2026-08-31
+
+Vuelve la importacion individual del modulo Alexia, extraida del commit donde estaba, y con el nombre corregido.
+
+- **Se restaura la sub-pestana que se habia quitado en v0.16.0.** Entonces quedaba una sola opcion y el tab no aportaba nada; ahora hacen falta las dos, asi que el marcado y el JS se sacaron **tal cual de `0594109` (v0.15.0)**, el commit anterior a la eliminacion: 81 lineas de HTML y 183 de JS (busqueda de cursos en Catalejo, formulario de 11 campos, vista previa del arbol de categorias, `pollAxJob` / `renderAxJobStatus`). Nada se reescribio de cero, asi que no hay riesgo de desalinearse con el contrato del backend.
+- **El backend nunca se toco**: al eliminar la UI en v0.16.0 se dejaron a proposito `POST /api/alexia/search-courses`, `POST /api/alexia/export` y `GET /api/alexia/jobs/<id>`, con sus handlers `search_courses`, `start_export` y `get_job` en `alexia_routes.py`. Por eso este cambio es **solo de front**.
+- **Nombre corregido.** La pestana decia "Exportacion Individual", pero el flujo toma un curso de Catalejo y lo mete en Alexia: es una importacion. Ahora se llama **"Importacion individual"**, el boton dice "Importar curso a Alexia", la tarjeta de estado "Estado de la importacion", y el mensaje de exito "Curso importado correctamente". El subtitulo de la seccion pasa a "Trae cursos de Catalejo a Alexia via SSH: uno por uno, o por lote desde un Excel".
+- La pestana de la carga masiva conserva el nombre **"Cargar datos Alexia"**, y su tarjeta interna vuelve a decir "Subir archivo Excel": con el nombre en la pestana, repetirlo adentro sobraba.
+- Verificado en el navegador de punta a punta: las dos pestanas con su resaltado, arranque en la masiva, busqueda en Catalejo (2 resultados, seleccion del curso), el arbol de categorias en vivo con la modalidad autodetectada (PRESENCIAL desde el sufijo del grupo reducido) y el codigo Alexia armado (`1CEPC-P_1505_5545_2026`), el lanzamiento de la importacion con progreso al 100% y el enlace al curso creado. Y que la carga masiva sigue intacta: 2 filas, contadores, y el modal del arbol. Cero errores de consola.
+
 ## v0.20.0 - 2026-08-31
 
 Reconciliacion: el repo se habia bifurcado en dos lineas que usaron los mismos numeros de version, y una piso a la otra. Esta version junta las dos.

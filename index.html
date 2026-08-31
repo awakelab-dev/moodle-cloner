@@ -614,7 +614,7 @@
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
               <div>
                 <h1 class="text-2xl font-semibold text-slate-50">Replicador de Cursos desde Alexia</h1>
-                <p class="text-sm text-slate-400 mt-1">Exporta cursos de Catalejo a Alexia via SSH.</p>
+                <p class="text-sm text-slate-400 mt-1">Trae cursos de Catalejo a Alexia via SSH: uno por uno, o por lote desde un Excel.</p>
               </div>
               <div class="flex items-center gap-3">
                 <div id="ax-status-catalejo" class="flex items-center gap-1.5 text-xs">
@@ -670,17 +670,24 @@
               </div>
             </div>
 
-            <!-- Antes habia dos sub-tabs (Importacion Masiva / Exportacion
-                 Individual). Al quedar una sola vista el tab no aportaba nada,
-                 asi que la carga del Excel pasa a ser el contenido directo de
-                 la seccion. -->
-            <div id="ax-tab-batch" class="px-8 py-6">
+            <!-- Sub-pestanas. La individual se habia quitado en v0.16.0 por
+                 quedar una sola opcion; volvio a hacer falta, asi que se
+                 restauro tal cual desde 0594109 (v0.15.0). El nombre viejo
+                 ("Exportacion Individual") describia mal el flujo: toma un
+                 curso de Catalejo y lo mete en Alexia, o sea importa. -->
+            <div class="border-b border-slate-800 px-8 flex gap-1">
+              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="batch">Cargar datos Alexia</button>
+              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="single">Importacion individual</button>
+            </div>
+
+            <!-- ====== TAB: CARGA MASIVA ====== -->
+            <div id="ax-tab-batch" class="ax-tab-content hidden px-8 py-6">
               <!-- Upload Zone -->
               <div id="ax-upload-section">
                 <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-5">
                   <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
                     <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                    Cargar datos Alexia
+                    Subir archivo Excel
                   </h2>
                   <div id="ax-drop-zone" class="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition-colors">
                     <svg class="w-10 h-10 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -775,6 +782,88 @@
                       </thead>
                       <tbody id="ax-batch-table-body"></tbody>
                     </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ====== TAB: IMPORTACION INDIVIDUAL ====== -->
+            <div id="ax-tab-single" class="ax-tab-content hidden px-8 py-6">
+              <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div class="lg:col-span-3 space-y-5">
+                  <!-- Course Search -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                      Buscar curso en Catalejo
+                    </h2>
+                    <div class="flex gap-2">
+                      <input class="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-search-input" placeholder="Buscar por nombre, shortname o ID...">
+                      <button id="ax-search-btn" class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 whitespace-nowrap">Buscar</button>
+                    </div>
+                    <div id="ax-search-results" class="mt-2 hidden">
+                      <div class="rounded-lg border border-slate-800 bg-slate-900 max-h-48 overflow-y-auto" id="ax-search-list"></div>
+                    </div>
+                    <div id="ax-selected-course" class="mt-3 hidden">
+                      <div class="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-primary-600/40">
+                        <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        <span class="text-sm text-white" id="ax-selected-course-name"></span>
+                        <span class="text-xs text-slate-400 ml-auto" id="ax-selected-course-id"></span>
+                        <button id="ax-clear-course" class="text-slate-400 hover:text-red-400 ml-2">&times;</button>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Course Data Form -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                      Datos del curso
+                    </h2>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Ejercicio *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-ejercicio" placeholder="2026"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">ID Centro *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-id-centro" placeholder="5545"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Nombre Centro</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-nombre-centro" placeholder="Nombre del centro"></div>
+                      <div class="md:col-span-2"><label class="block text-[11px] text-slate-400 mb-0.5">Especialidad *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-especialidad" placeholder="(SYMA33) Coordinacion en emergencias"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Pertenece Curso *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-pertenece-curso" placeholder="1"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Codigo Oficial *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-codigo-oficial" placeholder="1505"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Reducido Grupo *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-reducido-grupo" placeholder="1CEPC-P"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Modalidad</label><div class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm" id="ax-f-modalidad-display"><span class="text-slate-500">Auto-detectada</span></div></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Estudio</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-estudio" placeholder="Estudio"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 1</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat1" placeholder="Mat1"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 2</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat2" placeholder="Mat2"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Area</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-area" placeholder="Area"></div>
+                    </div>
+                    <div class="mt-5 flex justify-end">
+                      <button id="ax-btn-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-700">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        Importar curso a Alexia
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="lg:col-span-2 space-y-5">
+                  <!-- Category Tree Preview -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                      Arbol de categorias
+                    </h2>
+                    <div id="ax-tree-preview" class="text-sm space-y-1">
+                      <p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>
+                    </div>
+                  </div>
+                  <!-- Export Status -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 hidden" id="ax-export-status-card">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                      Estado de la importacion
+                    </h2>
+                    <div class="w-full bg-slate-800 rounded-full h-2 mb-4">
+                      <div id="ax-progress-bar" class="h-2 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
+                    </div>
+                    <div id="ax-progress-percent" class="text-xs text-slate-400 text-right -mt-3 mb-3">0%</div>
+                    <div id="ax-export-steps" class="space-y-2 text-sm"></div>
+                    <div id="ax-export-result" class="mt-4 hidden"></div>
                   </div>
                 </div>
               </div>
@@ -3732,6 +3821,9 @@
     (function () {
       let loaded = false;
       let axBatchData = null;
+      let axCurrentJobId = null;
+      let axPollInterval = null;
+      let axSelectedCourseId = null;
       let axCurrentBatchId = null;
       let axBatchPollInterval = null;
 
@@ -3795,6 +3887,27 @@
         $('ax-config-panel').classList.toggle('hidden');
       });
 
+      // --- Sub-tabs ---
+      function switchAxTab(tab) {
+        document.querySelectorAll('.ax-tab').forEach(b => {
+          b.classList.remove('text-white', 'border-primary-500');
+          b.classList.add('text-slate-400', 'border-transparent');
+        });
+        document.querySelectorAll('.ax-tab-content').forEach(c => c.classList.add('hidden'));
+        const btn = document.querySelector(`.ax-tab[data-ax-tab="${tab}"]`);
+        if (btn) {
+          btn.classList.remove('text-slate-400', 'border-transparent');
+          btn.classList.add('text-white', 'border-primary-500');
+        }
+        const content = $(`ax-tab-${tab}`);
+        if (content) content.classList.remove('hidden');
+      }
+
+      document.querySelectorAll('.ax-tab').forEach(btn => {
+        btn.addEventListener('click', () => switchAxTab(btn.dataset.axTab));
+      });
+
+      // --- Carga masiva ---
       const dropZone = $('ax-drop-zone');
       const fileInput = $('ax-file-input');
 
@@ -3991,11 +4104,197 @@
         }
       }
 
+      // --- Importacion individual ---------------------------------
+      $('ax-search-btn').addEventListener('click', searchAxCourses);
+      $('ax-search-input').addEventListener('keydown', e => { if (e.key === 'Enter') searchAxCourses(); });
+
+      async function searchAxCourses() {
+        const query = $('ax-search-input').value.trim();
+        if (!query) return;
+        const list = $('ax-search-list');
+        const results = $('ax-search-results');
+        list.innerHTML = '<div class="p-3 text-sm text-slate-400">Buscando...</div>';
+        results.classList.remove('hidden');
+        try {
+          const data = await api('/api/alexia/search-courses', { method: 'POST', body: JSON.stringify({ query }) });
+          if (!data.success) { list.innerHTML = `<div class="p-3 text-sm text-red-400">${escapeHtml(data.error)}</div>`; return; }
+          if (!data.courses || !data.courses.length) { list.innerHTML = '<div class="p-3 text-sm text-slate-400">No se encontraron cursos</div>'; return; }
+          list.innerHTML = data.courses.map(c => `
+            <div class="cursor-pointer px-3 py-2 border-b border-slate-800 hover:bg-slate-800 last:border-0" data-ax-cid="${c.id}" data-ax-cfull="${escapeHtml(c.fullname)}" data-ax-cshort="${escapeHtml(c.shortname)}">
+              <div class="text-sm text-white">${escapeHtml(c.fullname)}</div>
+              <div class="text-xs text-slate-400">${escapeHtml(c.shortname)} | ID: ${c.id} | ${escapeHtml(c.category_name)}</div>
+            </div>`).join('');
+          list.querySelectorAll('[data-ax-cid]').forEach(el => {
+            el.addEventListener('click', () => {
+              axSelectedCourseId = Number(el.dataset.axCid);
+              $('ax-selected-course').classList.remove('hidden');
+              $('ax-selected-course-name').textContent = el.dataset.axCfull;
+              $('ax-selected-course-id').textContent = `ID: ${el.dataset.axCid} | ${el.dataset.axCshort}`;
+              results.classList.add('hidden');
+            });
+          });
+        } catch (e) { list.innerHTML = `<div class="p-3 text-sm text-red-400">Error: ${escapeHtml(e.message)}</div>`; }
+      }
+
+      $('ax-clear-course').addEventListener('click', () => {
+        axSelectedCourseId = null;
+        $('ax-selected-course').classList.add('hidden');
+      });
+
+      function axDeriveModalidad(reducido) {
+        if (!reducido || !reducido.trim()) return '';
+        const last = reducido.trim().slice(-1).toUpperCase();
+        if (last === 'V') return 'VIRTUAL';
+        if (last === 'P') return 'PRESENCIAL';
+        return 'PRESENCIAL';
+      }
+
+      function updateAxTree() {
+        const ejercicio = $('ax-f-ejercicio').value.trim();
+        const idCentro = $('ax-f-id-centro').value.trim();
+        const reducido = $('ax-f-reducido-grupo').value.trim();
+        const especialidad = $('ax-f-especialidad').value.trim();
+        const pertenece = $('ax-f-pertenece-curso').value.trim();
+        const codigo = $('ax-f-codigo-oficial').value.trim();
+        const modalidad = axDeriveModalidad(reducido);
+        const modDisplay = $('ax-f-modalidad-display');
+        if (modalidad) {
+          const cls = modalidad === 'PRESENCIAL' ? 'bg-emerald-600/30 text-emerald-300' : 'bg-purple-600/30 text-purple-300';
+          modDisplay.innerHTML = `<span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${cls}">${modalidad}</span>`;
+        } else {
+          modDisplay.innerHTML = '<span class="text-slate-500">Auto-detectada</span>';
+        }
+        const tree = $('ax-tree-preview');
+        const levels = [
+          { label: 'Ejercicio', value: ejercicio },
+          { label: 'ID Centro', value: idCentro },
+          { label: 'Modalidad', value: modalidad },
+          { label: 'Especialidad', value: especialidad },
+          { label: 'Pertenece Curso', value: pertenece },
+        ];
+        if (!levels.some(l => l.value)) { tree.innerHTML = '<p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>'; return; }
+        let html = '';
+        for (let i = 0; i < levels.length; i++) {
+          const l = levels[i];
+          const isLast = i === levels.length - 1;
+          const value = l.value || '...';
+          const valueClass = l.value ? (isLast ? 'text-primary-300 font-semibold' : 'text-white') : 'text-slate-600 italic';
+          const pad = i * 20;
+          const connector = i === 0 ? '' : `<span class="text-primary-500 mr-1">${isLast ? '└' : '├'}─</span>`;
+          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5">
+            ${connector}<span class="text-slate-400 text-xs">${l.label}:</span><span class="${valueClass} text-sm">${escapeHtml(value)}</span></div>`;
+        }
+        if (levels[levels.length - 1].value) {
+          const shortname = [reducido, codigo, idCentro, ejercicio].filter(Boolean).join('_');
+          const pad = levels.length * 20;
+          html += `<div style="padding-left:${pad}px" class="flex items-center gap-1 py-0.5 mt-1">
+            <span class="text-primary-400 mr-1">└─</span>
+            <span class="text-primary-300 text-xs italic">Curso importado aqui</span></div>`;
+          if (shortname) {
+            html += `<div style="padding-left:${pad + 20}px" class="mt-2 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 inline-block">
+              <span class="text-slate-400 text-xs">Codigo Alexia:</span>
+              <span class="text-primary-300 text-sm font-semibold ml-1">${escapeHtml(shortname)}</span></div>`;
+          }
+        }
+        tree.innerHTML = html;
+      }
+
+      ['ax-f-ejercicio', 'ax-f-id-centro', 'ax-f-especialidad', 'ax-f-pertenece-curso', 'ax-f-codigo-oficial', 'ax-f-reducido-grupo'].forEach(id => {
+        $(id).addEventListener('input', updateAxTree);
+      });
+
+      $('ax-btn-export').addEventListener('click', async function () {
+        if (!axSelectedCourseId) { toaster.show('Selecciona un curso de Catalejo primero', 'warning'); return; }
+        const fields = {
+          ejercicio: $('ax-f-ejercicio').value.trim(),
+          id_centro: $('ax-f-id-centro').value.trim(),
+          nombre_centro: $('ax-f-nombre-centro').value.trim(),
+          especialidad: $('ax-f-especialidad').value.trim(),
+          pertenece_curso: $('ax-f-pertenece-curso').value.trim(),
+          codigo_oficial: $('ax-f-codigo-oficial').value.trim(),
+          reducido_grupo: $('ax-f-reducido-grupo').value.trim(),
+          estudio: $('ax-f-estudio').value.trim(),
+          mat1: $('ax-f-mat1').value.trim(),
+          mat2: $('ax-f-mat2').value.trim(),
+          area: $('ax-f-area').value.trim(),
+        };
+        const required = ['ejercicio','id_centro','especialidad','pertenece_curso','codigo_oficial','reducido_grupo'];
+        if (required.some(f => !fields[f])) { toaster.show('Complete los campos obligatorios (*)', 'warning'); return; }
+        this.disabled = true;
+        const statusCard = $('ax-export-status-card');
+        statusCard.classList.remove('hidden');
+        $('ax-export-steps').innerHTML = '';
+        $('ax-export-result').classList.add('hidden');
+        $('ax-progress-bar').style.width = '0%';
+        $('ax-progress-percent').textContent = '0%';
+        try {
+          const data = await api('/api/alexia/export', { method: 'POST', body: JSON.stringify({ course_id: axSelectedCourseId, form_data: fields }) });
+          if (data.error) { toaster.show(data.error, 'error'); this.disabled = false; return; }
+          axCurrentJobId = data.job_id;
+          pollAxJob();
+        } catch (e) { toaster.show('Error: ' + e.message, 'error'); this.disabled = false; }
+      });
+
+      function pollAxJob() {
+        if (!axCurrentJobId) return;
+        if (axPollInterval) clearInterval(axPollInterval);
+        axPollInterval = setInterval(async () => {
+          try {
+            const job = await api(`/api/alexia/jobs/${axCurrentJobId}`);
+            renderAxJobStatus(job);
+            if (job.status === 'completed' || job.status === 'failed') {
+              clearInterval(axPollInterval); axPollInterval = null;
+              $('ax-btn-export').disabled = false;
+            }
+          } catch (e) { console.error('Poll error:', e); }
+        }, 1500);
+      }
+
+      function renderAxJobStatus(job) {
+        $('ax-progress-bar').style.width = job.progress + '%';
+        $('ax-progress-percent').textContent = job.progress + '%';
+        const stepsEl = $('ax-export-steps');
+        stepsEl.innerHTML = (job.steps || []).map((s, i) => {
+          const isLast = i === job.steps.length - 1;
+          const icon = job.status === 'failed' && isLast
+            ? '<svg class="w-4 h-4 text-red-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>'
+            : job.status === 'completed' || !isLast
+              ? '<svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>'
+              : '<div class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin shrink-0"></div>';
+          const textClass = isLast && job.status === 'failed' ? 'text-red-400' : isLast && job.status !== 'completed' ? 'text-white' : 'text-slate-400';
+          return `<div class="flex items-start gap-2">${icon}<span class="${textClass} text-xs">${escapeHtml(s.message)}</span></div>`;
+        }).join('');
+        const resultEl = $('ax-export-result');
+        if (job.status === 'completed' && job.result) {
+          resultEl.classList.remove('hidden');
+          resultEl.innerHTML = `<div class="bg-slate-800 border border-emerald-600/40 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-2">
+              <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+              <span class="text-emerald-300 font-semibold text-sm">Curso importado correctamente</span>
+            </div>
+            <div class="text-xs text-slate-300 space-y-1">
+              <p><strong class="text-slate-100">Curso:</strong> ${escapeHtml(job.result.course_fullname)}</p>
+              <p><strong class="text-slate-100">ID:</strong> ${job.result.course_id}</p>
+              ${job.result.course_url ? `<a href="${job.result.course_url}" target="_blank" class="inline-block mt-2 text-primary-400 hover:text-primary-300 underline">Abrir curso en Alexia &rarr;</a>` : ''}
+            </div></div>`;
+        } else if (job.status === 'failed') {
+          resultEl.classList.remove('hidden');
+          resultEl.innerHTML = `<div class="bg-slate-800 border border-red-600/40 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-1">
+              <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+              <span class="text-red-400 font-semibold text-sm">Error en la importacion</span>
+            </div>
+            <p class="text-xs text-red-300 mt-1">${escapeHtml(job.error)}</p></div>`;
+        }
+      }
+
       // --- Init ---
       window.__alexiaLoad = async function () {
         if (loaded) return;
         loaded = true;
+        switchAxTab('batch');
         await loadAxConfig();
+        updateAxTree();
       };
     })();
 
