@@ -7,6 +7,7 @@ import socket
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -65,6 +66,10 @@ HOST = os.getenv("APP_HOST", "0.0.0.0")
 PORT = int(os.getenv("APP_PORT", "8787"))
 MAX_LOG_CHARS = 250_000
 MAX_PLUGIN_ZIP_SIZE = 100 * 1024 * 1024  # 100 MB
+# Cuantas plataformas se instalan a la vez. Ajustable sin tocar codigo: el techo
+# real lo pone `admin/cli/upgrade.php`, que es un proceso PHP con migraciones de
+# base por plataforma, y varias plataformas comparten maquina y cluster.
+PLUGIN_INSTALL_CONCURRENCY = max(1, int(os.getenv("PLUGIN_INSTALL_CONCURRENCY", "8")))
 DEFAULT_REMOTE_HOST = "51.44.30.62"
 REMOTE_SSH_KEY = os.path.expanduser(os.getenv("REMOTE_SSH_KEY", str(Path.home() / ".ssh" / "id_ed25519")))
 DEFAULT_SOURCE_SSH_USER = "ubuntu"
@@ -532,21 +537,86 @@ def run_plugin_job(
             effective_zip = normalized
             plugin_folder_name = plugin_routes.detect_plugin_folder_name(effective_zip)
 
-        all_results = []
-        for i, server in enumerate(selected_servers, 1):
-            append_job_output(job_id, f"[{now_iso()}] --- {server['name']} ({i}/{total}) ---\n")
+        # Instalacion en paralelo con tope. Se paraleliza porque un plugin se
+        # suele instalar en TODAS las plataformas y en secuencia serian 35 veces
+        # varios minutos. El tope existe porque el paso pesado no es copiar el
+        # ZIP sino `admin/cli/upgrade.php`: un proceso PHP con migraciones de
+        # base por plataforma, y varias plataformas comparten cluster y maquina.
+        concurrency = max(1, min(PLUGIN_INSTALL_CONCURRENCY, total))
+        db_ok = True
+        try:
+            db.plugin_install_set_status(
+                job_id, "running",
+                message=f"Instalando en {total} plataforma(s), hasta {concurrency} a la vez.",
+            )
+        except Exception as exc:
+            db_ok = False
+            append_job_output(job_id, f"[{now_iso()}] AVISO: sin progreso persistido ({exc}).\n")
+
+        append_job_output(
+            job_id,
+            f"[{now_iso()}] Instalando en paralelo, hasta {concurrency} plataforma(s) a la vez.\n"
+            f"  Las lineas de distintas plataformas se intercalan; cada una lleva su nombre.\n\n",
+        )
+
+        def _set_target(index: int, status: str, **kw) -> None:
+            if not db_ok:
+                return
+            try:
+                db.plugin_install_update_target(job_id, index, status, **kw)
+            except Exception:
+                pass
+
+        results_by_index: list = [None] * total
+
+        def _install_one(index: int, server: dict) -> None:
+            _set_target(index, "running", message="Instalando...")
             result = plugin_routes.install_plugin_on_server(
                 server, effective_zip, plugin_type, plugin_folder_name,
                 on_output=lambda text, jid=job_id: append_job_output(jid, text),
             )
+            results_by_index[index] = plugin_routes.serialize_result(result)
             status_icon = "OK" if result.success else "ERROR"
+            first_line = result.error_detail.split(chr(10))[0] if result.error_detail else ""
             append_job_output(
                 job_id,
                 f"  {result.server_name}: {status_icon}"
-                + (f" - {result.error_detail.split(chr(10))[0]}" if result.error_detail else "")
-                + "\n\n",
+                + (f" - {first_line}" if first_line else "")
+                + "\n",
             )
-            all_results.append(plugin_routes.serialize_result(result))
+            _set_target(
+                index,
+                "completed" if result.success else "error",
+                message="Instalado" if result.success else None,
+                error=first_line or None if not result.success else None,
+            )
+
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = {
+                executor.submit(_install_one, i, srv): i
+                for i, srv in enumerate(selected_servers)
+            }
+            for future in as_completed(futures):
+                index = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    name = selected_servers[index].get("name", f"#{index}")
+                    append_job_output(job_id, f"  {name}: ERROR - {exc}\n")
+                    results_by_index[index] = {
+                        "server_name": name, "success": False,
+                        "error_detail": str(exc), "data": {}, "command_logs": [],
+                    }
+                    _set_target(index, "error", error=str(exc))
+
+        all_results = [
+            r if r is not None else {
+                "server_name": selected_servers[i].get("name", f"#{i}"),
+                "success": False, "error_detail": "La instalacion no devolvio resultado.",
+                "data": {}, "command_logs": [],
+            }
+            for i, r in enumerate(results_by_index)
+        ]
 
         successes = sum(1 for r in all_results if r["success"])
         failures = total - successes
@@ -555,6 +625,15 @@ def run_plugin_job(
             job_id, status=final_status, exit_code=0 if failures == 0 else 1,
             results=all_results,
         )
+        if db_ok:
+            try:
+                db.plugin_install_set_status(
+                    job_id, "completed" if failures == 0 else "failed",
+                    message=f"{successes} de {total} plataforma(s) instaladas.",
+                    finished=True,
+                )
+            except Exception:
+                pass
         append_job_output(
             job_id,
             f"[{now_iso()}] Finalizado: {successes}/{total} exitosos"
@@ -945,6 +1024,101 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 self._send_json(200, result, send_body=send_body)
             return
 
+        # Instalacion de plugin en curso (o la ultima), para reengancharse.
+        if path == "/api/plugin/jobs/current":
+            self._require_permission("can_access_plugin_cloner")
+            self._send_json(200, {"job": db.plugin_install_latest()}, send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/plugin/jobs/([0-9a-f-]+)/targets", path)
+        if m:
+            self._require_permission("can_access_plugin_cloner")
+            self._send_json(
+                200,
+                {"job_id": m.group(1), "targets": db.plugin_install_targets(m.group(1))},
+                send_body=send_body,
+            )
+            return
+
+        m = re.fullmatch(r"/api/plugin/jobs/([0-9a-f-]+)", path)
+        if m:
+            self._require_permission("can_access_plugin_cloner")
+            result = db.plugin_install_progress(m.group(1))
+            if not result:
+                self._send_json(404, {"error": "Instalacion no encontrada."}, send_body=send_body)
+            else:
+                self._send_json(200, result, send_body=send_body)
+            return
+
+        # Copia de curso en curso (o la ultima), para reengancharse al recargar.
+        if path == "/api/cc/copy-jobs/current":
+            self._require_permission("can_access_course_cloner")
+            self._send_json(200, {"job": course_routes.get_latest_copy_job()}, send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/cc/copy-jobs/([a-f0-9]+)/targets", path)
+        if m:
+            self._require_permission("can_access_course_cloner")
+            self._send_json(200, course_routes.get_copy_targets(m.group(1)), send_body=send_body)
+            return
+
+        # Logs de comandos por destino. Solo existen mientras el job sigue en
+        # memoria; el resumen por destino vive en la base y no se pierde.
+        m = re.fullmatch(r"/api/cc/copy-jobs/([a-f0-9]+)/logs", path)
+        if m:
+            self._require_permission("can_access_course_cloner")
+            self._send_json(200, course_routes.get_copy_logs(m.group(1)), send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/cc/copy-jobs/([a-f0-9]+)", path)
+        if m:
+            self._require_permission("can_access_course_cloner")
+            result = course_routes.get_copy_job(m.group(1))
+            if not result:
+                self._send_json(404, {"error": "Copia no encontrada."}, send_body=send_body)
+            else:
+                self._send_json(200, result, send_body=send_body)
+            return
+
+        # El lote en curso (o el ultimo). Con esto la UI vuelve a mostrar el
+        # progreso despues de recargar el navegador, sin recordar el batch_id.
+        if path == "/api/alexia/batches/current":
+            self._require_permission("can_access_alexia_cloner")
+            result = alexia_routes.get_latest_batch()
+            self._send_json(200, {"batch": result}, send_body=send_body)
+            return
+
+        # Filas paginadas: se piden solo al abrir el detalle. Devolver las 700
+        # en cada consulta de progreso era lo que ahogaba al navegador.
+        m = re.fullmatch(r"/api/alexia/batches/([a-f0-9]+)/rows", path)
+        if m:
+            self._require_permission("can_access_alexia_cloner")
+            q = parse_qs(parsed.query)
+            def _int(name: str, default: int) -> int:
+                try:
+                    return int((q.get(name) or [default])[0])
+                except (TypeError, ValueError):
+                    return default
+            row_status = (q.get("status") or [""])[0].strip() or None
+            result = alexia_routes.get_batch_rows(
+                m.group(1), offset=_int("offset", 0), limit=_int("limit", 50),
+                status=row_status,
+            )
+            self._send_json(200, result, send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/alexia/batches/([a-f0-9]+)", path)
+        if m:
+            self._require_permission("can_access_alexia_cloner")
+            result = alexia_routes.get_batch_job(m.group(1))
+            if not result:
+                self._send_json(404, {"error": "Lote no encontrado."}, send_body=send_body)
+            else:
+                self._send_json(200, result, send_body=send_body)
+            return
+
+        # Ruta anterior, mantenida por compatibilidad. Ahora devuelve el mismo
+        # payload liviano: contadores y estado, sin las filas.
         m = re.fullmatch(r"/api/alexia/jobs/batch/([a-f0-9]+)", path)
         if m:
             self._require_permission("can_access_alexia_cloner")
@@ -1159,13 +1333,14 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         self._send_json(200, result)
 
     def _handle_cc_copy_course(self) -> None:
-        self._require_permission("can_access_course_cloner")
+        # Antes esto corria dentro del request y bloqueaba varios minutos
+        # (backup + SFTP + un restore por destino). Ahora valida, registra el
+        # job, responde 202 y la copia sigue en un hilo del servidor.
+        user = self._require_permission("can_access_course_cloner")
         payload = self._read_json_body()
-        # The copy itself does SSH/SFTP work that can take minutes; the request
-        # blocks until it returns, like the original FastAPI impl. Phase 2 may
-        # promote this to the same job-pattern used by /api/clone.
-        result = course_routes.copy_course(payload)
-        self._send_json(200, result)
+        started_by = (user or {}).get("username") if isinstance(user, dict) else None
+        result = course_routes.start_copy(payload, started_by=started_by)
+        self._send_json(202, result)
 
     # --- Plugin-install endpoint -----------------------------------------
 
@@ -1218,7 +1393,7 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
 
     def _handle_plugin_install(self) -> None:
         import tempfile as _tempfile
-        self._require_permission("can_access_plugin_cloner")
+        user = self._require_permission("can_access_plugin_cloner")
 
         content_type = self.headers.get("Content-Type", "")
         if "multipart/form-data" not in content_type:
@@ -1291,6 +1466,24 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         job_id = str(uuid.uuid4())
         now = now_iso()
         server_names = [s["name"] for s in selected_servers]
+        # El progreso se persiste para que sobreviva a recargar el navegador y
+        # al reinicio del proceso. Si la base no esta disponible la instalacion
+        # sigue igual: se pierde el progreso persistido, no el trabajo.
+        try:
+            db.plugin_install_create(
+                job_id,
+                plugin_folder=plugin_folder_name,
+                plugin_type=plugin_type_path,
+                zip_name=filename,
+                concurrency=max(1, min(PLUGIN_INSTALL_CONCURRENCY, len(selected_servers))),
+                targets=[
+                    {"server_name": str(srv.get("name") or ""), "server_host": str(srv.get("host") or "")}
+                    for srv in selected_servers
+                ],
+                started_by=(user or {}).get("username") if isinstance(user, dict) else None,
+            )
+        except Exception as exc:
+            log_boot(f"WARNING: no se pudo registrar el job de plugin {job_id}: {exc}")
         with jobs_lock:
             jobs[job_id] = {
                 "id": job_id,
@@ -1390,11 +1583,15 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(e)})
 
     def _handle_alexia_export_batch(self) -> None:
-        self._require_permission("can_access_alexia_cloner")
+        # Acusa recibo y devuelve enseguida: el lote corre en un hilo del
+        # servidor y su progreso se consulta aparte. 202 en vez de 200 para que
+        # quede explicito que el trabajo no termino cuando responde.
+        user = self._require_permission("can_access_alexia_cloner")
         payload = self._read_json_body()
         rows = payload.get("rows", [])
-        result = alexia_routes.start_batch(rows)
-        self._send_json(200, result)
+        started_by = (user or {}).get("username") if isinstance(user, dict) else None
+        result = alexia_routes.start_batch(rows, started_by=started_by)
+        self._send_json(202, result)
 
     # --- Clone endpoint --------------------------------------------------
 
@@ -1499,6 +1696,39 @@ def init_app_db() -> None:
             log_boot(f"Seeded initial superadmin: {seeded}")
         db.get_or_create_session_secret()
         log_boot("Application database ready.")
+        # Los hilos del lote son daemon: un reinicio de pm2 los mata donde
+        # estaban y el lote queda "running" en la base. Se retoma aca, ya con
+        # el puerto escuchando, para no demorar el arranque.
+        try:
+            resumed = alexia_routes.resume_unfinished_batches()
+            if resumed:
+                log_boot(f"Alexia: reanudando lote(s) a medias: {', '.join(resumed)}")
+        except Exception as exc:
+            log_boot(f"WARNING: no se pudieron reanudar lotes de Alexia: {exc}")
+        # Las copias de curso NO se reanudan: el .mbz del backup vivia en un
+        # directorio temporal que murio con el proceso. Se cierran para que no
+        # queden eternamente en "running" bloqueando la guardia de concurrencia.
+        try:
+            stale = course_routes.mark_interrupted_copy_jobs()
+            if stale:
+                log_boot(f"Cursos: copia(s) interrumpida(s) por el reinicio: {', '.join(stale)}")
+        except Exception as exc:
+            log_boot(f"WARNING: no se pudieron cerrar copias de curso a medias: {exc}")
+        # Las instalaciones de plugin tampoco se reanudan: el ZIP vivia en un
+        # directorio temporal que murio con el proceso.
+        try:
+            stale = db.plugin_install_unfinished()
+            for jid in stale:
+                db.plugin_install_set_status(
+                    jid, "interrupted",
+                    error="El proceso del servidor se reinicio durante la instalacion. "
+                          "El ZIP temporal se perdio: hay que volver a subirlo.",
+                    finished=True,
+                )
+            if stale:
+                log_boot(f"Plugins: instalacion(es) interrumpida(s) por el reinicio: {', '.join(stale)}")
+        except Exception as exc:
+            log_boot(f"WARNING: no se pudieron cerrar instalaciones de plugin a medias: {exc}")
     except Exception as exc:
         log_boot(f"WARNING: could not initialize app DB: {type(exc).__name__}: {exc}")
         log_boot("The login/user-management features will not work until this is resolved.")

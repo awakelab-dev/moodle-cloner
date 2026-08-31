@@ -9,7 +9,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Optional
 
 import paramiko
 
@@ -98,33 +98,63 @@ def copy_course_between_servers(
     destination_servers: list[dict[str, Any]],
     course_id: int,
     local_work_dir: Path,
+    on_event: Optional[Callable[[str, dict[str, Any]], None]] = None,
 ) -> tuple[ServerResult, list[ServerResult]]:
+    """Copia un curso del origen a varios destinos.
+
+    `on_event(nombre, datos)` es opcional y sirve para reportar progreso sin que
+    este modulo sepa nada de HTTP ni de la base. Eventos: `backup_start`,
+    `backup_done`, `target_start`, `target_done`.
+    """
+    if on_event:
+        on_event("backup_start", {"course_id": course_id,
+                                  "source": str(source_server.get("name") or "")})
     source_result, backup_artifact = create_course_backup(
         source_server,
         course_id,
         local_work_dir,
     )
+    if on_event:
+        on_event("backup_done", {"success": bool(source_result.success),
+                                 "error": source_result.error_detail})
     if not source_result.success or backup_artifact is None:
         return source_result, []
 
     destination_results: list[ServerResult | None] = [None] * len(destination_servers)
-    max_workers = max(1, min(len(destination_servers), 20))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_index = {
-            executor.submit(restore_course_on_server, destination_server, backup_artifact): index
-            for index, destination_server in enumerate(destination_servers)
-        }
-        for future in as_completed(future_to_index):
-            index = future_to_index[future]
-            destination_server = destination_servers[index]
+
+    # Un restore por servidor a la vez, pero los servidores avanzan en paralelo.
+    # Antes se lanzaban hasta 20 restores simultaneos sin mirar el host, y varias
+    # plataformas del inventario comparten maquina (8 en una sola IP): eso podia
+    # dejar 8 procesos de restore de Moodle peleandose por el mismo servidor.
+    # Agrupando por host se protege cada maquina sin serializar todo el trabajo.
+    groups: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for index, destination_server in enumerate(destination_servers):
+        host = str(destination_server.get("host") or f"#{index}").strip().lower()
+        groups.setdefault(host, []).append((index, destination_server))
+
+    def _run_host_group(items: list[tuple[int, dict[str, Any]]]) -> None:
+        for index, destination_server in items:
+            name = str(destination_server.get("name") or f"Destino #{index + 1}")
+            if on_event:
+                on_event("target_start", {"index": index, "name": name})
             try:
-                destination_results[index] = future.result()
+                result = restore_course_on_server(destination_server, backup_artifact)
             except Exception as exc:
-                destination_results[index] = ServerResult(
-                    server_name=str(destination_server.get("name") or f"Destino #{index + 1}"),
+                result = ServerResult(
+                    server_name=name,
                     success=False,
                     error_detail=str(exc),
                 )
+            destination_results[index] = result
+            if on_event:
+                on_event("target_done", {"index": index, "name": name, "result": result})
+
+    with ThreadPoolExecutor(max_workers=len(groups)) as executor:
+        futures = [executor.submit(_run_host_group, items) for items in groups.values()]
+        for future in as_completed(futures):
+            # _run_host_group ya captura los errores por destino; esto solo
+            # propagaria un fallo del propio hilo.
+            future.result()
     completed_results = [
         result
         if result is not None

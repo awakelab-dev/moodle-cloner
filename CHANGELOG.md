@@ -5,6 +5,75 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.24.0 - 2026-08-31
+
+El Replicador de plugins instala en varias plataformas a la vez (tope configurable, 8 por defecto) y gana progreso persistido plataforma por plataforma.
+
+**Que se encontro al revisarlo.** A diferencia de los otros dos modulos, aca **si habia job en background** (`jobs[]` en memoria + `GET /api/jobs/<id>`, con guardia de un job a la vez). Lo que faltaba era otra cosa:
+
+- **La instalacion era estrictamente secuencial**: un `for` sobre las plataformas seleccionadas. Como un plugin tarda varios minutos por plataforma y suele ir a **todas**, instalar en 20 plataformas costaba 20 veces el tiempo de una, aun cuando cada instalacion casi no consume recursos del servidor de destino (descomprimir un ZIP liviano y correr `upgrade.php`).
+- **El progreso se deducia contando `Paso N/5` en el log crudo.** Un heuristico que ya era fragil siendo secuencial, y que con instalaciones en paralelo se rompe del todo: los logs de todas las plataformas se intercalan en el mismo texto.
+- **El estado vivia solo en memoria del proceso**: recargar el navegador perdia el handle del job, y un `pm2 restart` se llevaba el job y su estado.
+
+**Lo que cambia:**
+
+- **Instalacion en paralelo con tope configurable.** `ThreadPoolExecutor` con `max_workers = min(PLUGIN_INSTALL_CONCURRENCY, plataformas seleccionadas)`; la variable de entorno `PLUGIN_INSTALL_CONCURRENCY` la ajusta y el **default es 8**. No se agrupa por host, a diferencia de la copia de cursos: aca el trabajo pesado no es un restore de Moodle sino un `unzip` y un `upgrade.php`, y varias plataformas del mismo servidor pueden atenderse a la vez sin saturarlo.
+- **Estado en MySQL** (`plugin_install_jobs` + `plugin_install_targets`): una fila por plataforma con su estado (`pending` / `running` / `completed` / `error`), mensaje y error. El progreso ya **no se deduce del log**, se lee de la base.
+- **Progreso real en la UI**: contador `hechas / total`, `ok` / `con error` / **`en curso`** (varias a la vez, de ahi el contador nuevo), porcentaje, y una rejilla con una ficha por plataforma que dice en que va cada una. La etiqueta anuncia el tope activo ("hasta 8 plataforma(s) a la vez").
+- **Endpoints livianos**: `GET /api/plugin/jobs/<id>` (contadores, sin el log), `GET /api/plugin/jobs/<id>/targets` (detalle por plataforma) y `GET /api/plugin/jobs/current` para **reengancharse tras recargar el navegador**. El log crudo se sigue sirviendo por `GET /api/jobs/<id>`, que es donde vive.
+- **Las instalaciones cortadas por un reinicio NO se reanudan, se marcan `interrupted`**, por la misma razon que las copias de cursos: el ZIP subido vive en un temporal que muere con el proceso. Se cierran al arrancar para que no bloqueen la guardia de concurrencia.
+
+**Verificacion.** Contra el MariaDB real del sandbox, con dobles de `install_plugin_on_server` que tardan 300 ms: 20 plataformas en **2,04 s** contra los 6,00 s del camino secuencial, **pico medido de 8 instalaciones simultaneas** (igual al tope, nunca por encima), `running_count > 1` observado en el progreso persistido, final `failed` con 19 ok / 1 error, todas las filas por plataforma en estado terminal, el log llevando el nombre de cada plataforma intercalado, y una instalacion a medias marcada `interrupted`. En el navegador, con el `index.html` real: la barra apareciendo al entrar a la seccion, 8 fichas en "Instalando" a la vez, contador y barra avanzando (5/20, 25%), el error apareciendo en su ficha, **recarga del navegador reenganchando el mismo job (12/20)**, estado final sin spinner con el resumen del backend y el detalle por plataforma, y nada en pantalla cuando no hay job. Cero errores de JS propios de la app (el CDN de Tailwind esta bloqueado en el sandbox y ese si da error).
+
+## v0.23.0 - 2026-08-31
+
+El Replicador de Cursos deja de bloquear el request, gana progreso persistido, y los restores dejan de amontonarse en un mismo servidor.
+
+**Que se encontro al revisarlo.** El diagnostico no es el mismo que en Alexia: aca el problema no era el peso del polling (una copia son 1 curso x hasta 35 destinos, no 700 filas), sino que **no habia job en background en absoluto**.
+
+- `POST /api/cc/copy-course` **corria la copia entera dentro del request**: backup del origen, descarga por SFTP, y un restore por destino. Minutos de trabajo con la conexion HTTP abierta. El propio codigo lo admitia en un comentario ("Phase 2 may promote this to the same job-pattern used by /api/clone"). Cualquier proxy con un `read_timeout` menor a la duracion real corta la respuesta mientras el trabajo sigue, y el usuario nunca se enteraba de como termino.
+- **No habia ningun progreso**: la UI mostraba "Copia en curso. Mantente en esta pagina hasta recibir el resumen" y nada mas hasta el final. Recargar o cambiar de seccion perdia el resumen para siempre, aunque la copia hubiera terminado bien.
+- **Los destinos se restauraban hasta 20 en paralelo** (`ThreadPoolExecutor(max_workers=min(len(dests), 20))`), sin mirar en que maquina vive cada plataforma. Y en el inventario **hay hasta 9 plataformas por host**: seleccionar los 8 destinos de `15.236.38.50` lanzaba 8 procesos de restore de Moodle peleandose por el mismo servidor. Justo el tipo de saturacion que se evita a mano en el lote de Alexia.
+
+**Lo que cambia:**
+
+- **Job en background con estado en MySQL** (`course_copy_jobs` + `course_copy_targets`). `POST /api/cc/copy-course` valida, registra el job y responde **202** con el `job_id`; la copia sigue en un hilo. `plan_copy` (antes `copy_course`) quedo como la parte que solo valida y resuelve origen y destinos, sin ejecutar nada.
+- **Progreso por etapa y por destino**: `GET /api/cc/copy-jobs/<id>` da `stage` (`queued` / `backup` / `restore` / `done`), contadores y el destino que se esta restaurando; `GET /api/cc/copy-jobs/<id>/targets` da la lista completa — son hasta 35, no hace falta paginar. `GET /api/cc/copy-jobs/current` devuelve la copia en curso o la ultima, para reengancharse tras recargar.
+- **`course_copier` ahora reporta progreso sin saber de HTTP ni de la base**: un callback `on_event` opcional con cuatro eventos (`backup_start`, `backup_done`, `target_start`, `target_done`). `course_routes` los traduce a filas.
+- **Un restore por servidor a la vez, servidores en paralelo.** Los destinos se agrupan por `host` y cada grupo se procesa en orden, con un hilo por host. Medido con 12 destinos (8 en un host, 3 en otro, 1 en un tercero): **maximo 1 restore simultaneo por maquina** y **2,00 s** de duracion total, contra los 3,00 s que habria costado serializar todo — el paralelismo entre hosts se conserva.
+- **Una copia a la vez** (409 con el progreso de la que corre), igual que el lote de Alexia y que el clonador de instancias.
+- **Los logs de comandos se sirven aparte** (`GET /api/cc/copy-jobs/<id>/logs`, boton "Ver logs" al terminar). Son enormes y solo existen mientras el job sigue en memoria; el resumen por destino vive en la base y no se pierde.
+- **Las copias cortadas por un reinicio NO se reanudan, se marcan `interrupted`.** Y es a proposito, a diferencia de Alexia: el `.mbz` del backup vive en un `TemporaryDirectory` que muere con el proceso, asi que no hay nada desde donde continuar. Se cierran al arrancar para que no queden en `running` bloqueando la guardia de concurrencia, con un mensaje que dice que hay que relanzar.
+
+**Verificacion.** Contra el MariaDB real del sandbox: `start_copy` respondiendo en 0,06 s, la guardia 409, las etapas observadas en orden (`backup` -> `restore` con el destino actual -> `done`), el detalle por destino con 2 ok y 1 error, los logs en memoria, y el cierre de una copia a medias como `interrupted`. El agrupamiento por host se probo con dobles de `create_course_backup` y `restore_course_on_server`, midiendo concurrencia real por maquina. En el navegador, con el formulario de verdad (origen, ID de curso, dos destinos marcados y categoria por nombre): 202, tarjeta de progreso con la etapa y el curso, submit deshabilitado mientras corre, **recarga del navegador reenganchando la copia**, estado final, "Ver logs" con el resumen completo y "Nueva copia" limpiando. Y se re-corrio la suite del lote de Alexia para confirmar que sigue igual. Cero errores de consola.
+
+**Ojo al desplegar**: el contrato de `POST /api/cc/copy-course` cambio (antes devolvia el resumen completo, ahora un `job_id`). Una pestaña vieja cacheada haria el POST y no sabria interpretar la respuesta; basta recargar.
+
+## v0.22.0 - 2026-08-31
+
+El lote del replicador Alexia deja de depender del navegador: estado en base, progreso liviano y reanudacion automatica.
+
+**El diagnostico primero, porque cambia lo que habia que arreglar.** El lote **ya corria en el servidor** desde antes: `start_batch` lanzaba un thread daemon y devolvia el `batch_id` sin esperar. El problema no era donde corria, sino como se miraba:
+
+- **Lo que dejaba la maquina sin recursos era el front.** `renderAxBatchProgress` llamaba a `renderAxTable()` en cada consulta, o sea reconstruia por `innerHTML` las 700 filas y re-enganchaba ~1400 listeners **cada 2 segundos**. Y el payload de la consulta traia las 700 filas completas mas la lista de `steps`, que crecia sin tope: medido con la forma real de los datos, **523 KB por consulta, unos 15 MB por minuto** solo para pintar una barra de progreso.
+- **"Si salgo del replicador el proceso se interrumpe" era una ilusion, y por eso era peor**: el lote seguia corriendo en el servidor, pero el `batch_id` vivia en una variable de JavaScript. Al recargar se perdia el handle y no habia forma de volver a ver el progreso ni de saber si termino. El trabajo seguia, a ciegas.
+- **Y los jobs vivian solo en memoria**: un `pm2 restart` a mitad de una corrida de horas se llevaba el lote y su estado sin dejar rastro.
+
+**Lo que cambia:**
+
+- **Estado del lote en MySQL** (`alexia_batches` + `alexia_batch_rows`, en el esquema de `db.py`). La base es la fuente de verdad: el progreso sobrevive al recargar el navegador y al reinicio del proceso. Se guardan tambien `form_data` y `category_path` de cada fila, que es lo que hace posible reanudar sin volver a pedir el Excel.
+- **La persistencia va en un hilo aparte** (`_persist_batch`), que espeja el job en memoria a la base cada 2 s y solo escribe las filas que cambiaron. Se hizo asi, y no escribiendo en cada mutacion, para no tener que tocar las ~10 asignaciones de estado repartidas por el bucle de exportacion: cualquiera que se olvidara dejaria el progreso desincronizado en silencio.
+- **Consulta de progreso liviana**: `GET /api/alexia/batches/<id>` devuelve contadores, estado y la cola del log — **455 bytes medidos**, contra los 523 KB de antes (1178x menos). Los contadores salen de un `COUNT(*) GROUP BY status`, que con 700 filas tarda 28 ms. `GET /api/alexia/jobs/batch/<id>` se mantiene por compatibilidad y devuelve el mismo payload liviano.
+- **`GET /api/alexia/batches/current`**: el lote en curso, o el ultimo. Con esto el navegador vuelve a engancharse al progreso sin recordar ningun id — es lo que hace que recargar ya no pierda el hilo.
+- **Filas paginadas y bajo demanda**: `GET /api/alexia/batches/<id>/rows?offset&limit&status`. La tabla fila por fila ya no se redibuja nunca durante la corrida; el detalle se abre con "Ver detalle", trae 50 por pagina y filtra por completadas / con error / pendientes.
+- **La UI muestra un spinner con "101 / 700 cursos"**, el shortname que se esta replicando, los tres contadores y la barra. Al terminar, el spinner pasa a tilde y la etiqueta dice "Completado — N replicados, N con error". El poll se detiene solo (verificado: 19 consultas y no sube).
+- **Reanudacion automatica al arrancar** (`resume_unfinished_batches`, enganchada despues de `init_schema` para no demorar el bind del puerto). Retoma desde la primera fila pendiente: las `completed` y `error` se saltan, y las que quedaron a medio camino (`searching` / `backing_up` / `restoring`) se reintentan, porque no se sabe hasta donde llegaron. Si hubiera mas de un lote a medias, se reanuda el mas antiguo y el resto se marca `interrupted`, para no romper la regla de un lote a la vez.
+- **La copia sigue siendo secuencial**, sin cambios en el bucle: un curso detras de otro, con la cache de backups por `codigo_oficial` que ya existia. Se agrego una **guardia de un solo lote a la vez** (`409` con el progreso del lote en curso en el mensaje): dos lotes en paralelo anularian justamente la proteccion de no saturar la API de Moodle.
+- **`POST /api/alexia/export-batch` responde `202`** en vez de `200`, para que quede explicito que acusa recibo y el trabajo sigue despues. El toast lo dice: "Corre en el servidor, podes cerrar esta pagina".
+- Cuando la base dice `running` pero no hay job en memoria (`live: false`), la UI avisa que el proceso se reinicio y que el lote se reanuda solo.
+
+**Verificacion.** Se levanto un **MariaDB real** en el sandbox y se probo contra el: creacion de un lote de 700 filas (0,05 s), progreso incremental observado avanzando (1, 6, 10, 15, 19, 24, 28, 32... 40) en vez de saltar de 0 a 40, paginacion y filtros (2 errores y 599 pendientes contados bien), y **reanudacion**: de un lote de 30 con 12 hechas y 2 a medio camino, retomo exactamente las filas 12 a 29, sin reprocesar las 11 completadas ni reintentar la que ya habia fallado, y dejo el segundo lote a medias en `interrupted`. La guardia de concurrencia devolvio 409. En el navegador, con un lote simulado de 700: respuesta de la UI en 68 ms al lanzar, progreso en vivo, **recarga del navegador reenganchando en 42/700 y siguiendo**, detalle paginado que no pide ni una fila hasta que se abre, filtros, estado final y el boton "Cargar otro Excel". Cero errores de consola.
+
 ## v0.21.0 - 2026-08-31
 
 Vuelve la importacion individual del modulo Alexia, extraida del commit donde estaba, y con el nombre corregido.
