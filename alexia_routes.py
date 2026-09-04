@@ -223,6 +223,45 @@ if ($course) {{
 """
 
 
+def _build_search_by_shortname_like_script(moodle_path, shortname):
+    """Search for a course by exact shortname OR any Moodle-generated variant.
+
+    Moodle appends suffixes like '_1', '_2', ' copia 1', etc. when restoring
+    a course whose shortname already exists.  This function uses SQL LIKE to
+    catch those variants so we can detect duplicates reliably.
+    """
+    safe = shortname.replace("'", "\\'").replace("\\", "\\\\")
+    return _php_header(moodle_path) + f"""
+$shortname = '{safe}';
+// First try exact match
+$course = $DB->get_record('course', ['shortname' => $shortname], 'id, fullname, shortname, category, visible');
+if (!$course) {{
+    // Try LIKE to catch Moodle-generated variants (_1, _2, copia 1, etc.)
+    $like = $DB->sql_like('shortname', ':pattern');
+    $courses = $DB->get_records_select('course', $like, ['pattern' => $shortname . '%'], 'id ASC', 'id, fullname, shortname, category, visible', 0, 5);
+    if ($courses) {{
+        $course = reset($courses);
+    }}
+}}
+if ($course) {{
+    $cat = $DB->get_record('course_categories', ['id' => $course->category], 'name');
+    echo json_encode([
+        'success' => true,
+        'found' => true,
+        'course' => [
+            'id' => (int)$course->id,
+            'fullname' => $course->fullname,
+            'shortname' => $course->shortname,
+            'category_name' => $cat ? $cat->name : '',
+            'visible' => (int)$course->visible,
+        ],
+    ]);
+}} else {{
+    echo json_encode(['success' => true, 'found' => false]);
+}}
+"""
+
+
 def _build_create_tree_script(moodle_path):
     return _php_header(moodle_path) + r"""
 $data_file = $argv[1];
@@ -663,6 +702,7 @@ class _ExportBatchJob:
         self.total = len(rows)
         self.completed_count = 0
         self.error_count = 0
+        self.cancelled = False
         self.rows: List[_BatchRowStatus] = []
         for i, r in enumerate(rows):
             self.rows.append(_BatchRowStatus(
@@ -691,6 +731,7 @@ class _ExportBatchJob:
             "total": self.total,
             "completed_count": self.completed_count,
             "error_count": self.error_count,
+            "cancelled": self.cancelled,
             "steps": self.steps,
             "rows": [r.to_dict() for r in self.rows],
             "error": self.error,
@@ -825,23 +866,35 @@ def _run_batch_export(job: _ExportBatchJob):
         last_mbz_remote = None
 
         for row_status in job.rows:
+            # --- Check cancellation before each row ---
+            if job.cancelled:
+                row_status.status = "error"
+                row_status.message = "Cancelado por el usuario"
+                row_status.error = "Cancelado"
+                job.update_progress()
+                continue
+
             codigo = row_status.form_data["codigo_oficial"]
             target_shortname = row_status.shortname_alexia
 
             try:
-                check_script = _build_search_by_shortname_script(
+                check_script = _build_search_by_shortname_like_script(
                     alexia_cfg.moodle_path, target_shortname
                 )
                 check_result = alexia_srv._run_php(check_script)
                 if check_result.get("success") and check_result.get("found"):
+                    found_sn = check_result["course"]["shortname"]
                     row_status.status = "completed"
-                    row_status.message = f'Ya existe en Alexia (ID:{check_result["course"]["id"]})'
+                    row_status.message = (
+                        f'Ya existe en Alexia (ID:{check_result["course"]["id"]}, '
+                        f'shortname: {found_sn})'
+                    )
                     row_status.result = {
                         "course_id": check_result["course"]["id"],
-                        "course_shortname": check_result["course"]["shortname"],
+                        "course_shortname": found_sn,
                         "skipped": True,
                     }
-                    job.step(f"{target_shortname} ya existe, omitiendo")
+                    job.step(f"{target_shortname} ya existe como '{found_sn}', omitiendo")
                     job.update_progress()
                     continue
             except Exception:
@@ -964,8 +1017,12 @@ def _run_batch_export(job: _ExportBatchJob):
                 pass
 
         job.update_progress()
-        job.status = "completed"
-        job.step(f"Batch finalizado: {job.completed_count} exitosos, {job.error_count} errores")
+        if job.cancelled:
+            job.status = "cancelled"
+            job.step(f"Batch cancelado: {job.completed_count} exitosos, {job.error_count} errores/cancelados")
+        else:
+            job.status = "completed"
+            job.step(f"Batch finalizado: {job.completed_count} exitosos, {job.error_count} errores")
 
     except Exception as e:
         job.status = "failed"
@@ -1241,3 +1298,21 @@ def get_batch_job(batch_id: str) -> Optional[dict]:
     if not job:
         return None
     return job.to_dict()
+
+
+def cancel_batch(batch_id: str) -> Optional[dict]:
+    """Set the cancelled flag so the worker thread stops after the current row."""
+    with _batch_jobs_lock:
+        job = _batch_jobs.get(batch_id)
+    if not job:
+        return None
+    job.cancelled = True
+    job.step("Cancelacion solicitada por el usuario")
+    return job.to_dict()
+
+
+def list_batch_jobs() -> list:
+    """Return all batch jobs (active and recent), newest first."""
+    with _batch_jobs_lock:
+        jobs = list(_batch_jobs.values())
+    return [j.to_dict() for j in sorted(jobs, key=lambda j: j.id, reverse=True)]
