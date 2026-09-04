@@ -1320,3 +1320,18 @@ def list_batch_jobs() -> list:
     with _batch_jobs_lock:
         jobs = list(_batch_jobs.values())
     return [j.to_dict() for j in sorted(jobs, key=lambda j: j.id, reverse=True)]
+
+
+def get_batch_rows(batch_id: str, offset: int = 0, limit: int = 50,
+                   status: Optional[str] = None) -> dict:
+    """Return paginated rows for a batch job."""
+    with _batch_jobs_lock:
+        job = _batch_jobs.get(batch_id)
+    if not job:
+        raise AlexiaRouteError(404, "Lote no encontrado")
+    rows = [r.to_dict() for r in job.rows]
+    if status:
+        rows = [r for r in rows if r.get("status") == status]
+    total = len(rows)
+    page = rows[offset:offset + limit]
+    return {"rows": page, "total": total, "offset": offset, "limit": limit}
