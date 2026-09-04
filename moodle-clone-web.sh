@@ -216,6 +216,9 @@ DISABLE_NEW_MAINT="${DISABLE_NEW_MAINT:-1}"
 DISABLE_SRC_MAINT_AFTER="${DISABLE_SRC_MAINT_AFTER:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 SAFE_MODE="${SAFE_MODE:-1}"
+# Eliminar la BD destino si ya existe con datos. Default 0: sin confirmacion
+# explicita del usuario el script aborta en vez de importar encima.
+DROP_DEST_DB="${DROP_DEST_DB:-0}"
 RDS_HOST_ALLOWLIST="${RDS_HOST_ALLOWLIST:-}"
 PROTECTED_DATABASES="${PROTECTED_DATABASES:-}"
 
@@ -245,8 +248,31 @@ if [[ "$DEPLOY_TARGET" == "remote" ]]; then
   fi
 
   REMOTE_SSH_TARGET="${REMOTE_SSH_USER}@${REMOTE_HOST}"
-  SSH_OPTS=(-i "$REMOTE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
-  RSYNC_SSH="ssh -i $REMOTE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+  SSH_OPTS=(-i "$REMOTE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+  RSYNC_SSH="ssh -i $REMOTE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+
+  # Preflight: probar el SSH al destino ANTES de tocar nada. Antes esta prueba
+  # ocurria recien despues del dump y del import (74% del job), asi que un
+  # destino inalcanzable dejaba el sitio de origen en modo mantenimiento
+  # durante todo el dump y una BD destino a medio importar. Corre tambien en
+  # dry-run: un dry-run que pasa sin poder alcanzar el destino no sirve de nada.
+  log "Preflight: probando SSH al destino $REMOTE_SSH_TARGET ..."
+  if ! ssh "${SSH_OPTS[@]}" "$REMOTE_SSH_TARGET" true; then
+    err "No se pudo conectar por SSH al destino $REMOTE_SSH_TARGET (puerto 22)."
+    err "Un 'Connection timed out' es de red, no de credenciales: si fuera la llave"
+    err "diria 'Permission denied', y si el puerto estuviera cerrado, 'Connection refused'."
+    err "Revisa, en este orden:"
+    err "  1) Si el destino es Lightsail: instancia > Networking > IPv4 Firewall,"
+    err "     regla SSH/TCP 22. Una lista de IPs permitidas no incluye por defecto"
+    err "     la del clonador. (La lista IPv6 es aparte.)"
+    err "  2) Si el destino es EC2: el security group debe permitir el 22."
+    err "  3) Que la instancia este encendida y que la IP sea la correcta: una"
+    err "     instancia sin IP elastica la cambia al reiniciarse."
+    err "La IP a habilitar es la de salida de este host, $(hostname)."
+    err "Obtenela con: curl -s -H \"X-aws-ec2-metadata-token: \$TOKEN\" http://169.254.169.254/latest/meta-data/public-ipv4"
+    err "Nada fue modificado en el origen ni en el destino."
+    exit 1
+  fi
 fi
 
 if [[ "$SOURCE_MODE" == "remote" ]]; then
@@ -257,8 +283,17 @@ if [[ "$SOURCE_MODE" == "remote" ]]; then
     exit 1
   fi
   SOURCE_SSH_TARGET="${SOURCE_SSH_USER}@${SOURCE_HOST}"
-  SOURCE_SSH_OPTS=(-i "$SOURCE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
-  SOURCE_RSYNC_SSH="ssh -i $SOURCE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+  SOURCE_SSH_OPTS=(-i "$SOURCE_SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+  SOURCE_RSYNC_SSH="ssh -i $SOURCE_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+
+  log "Preflight: probando SSH al origen $SOURCE_SSH_TARGET ..."
+  if ! ssh "${SOURCE_SSH_OPTS[@]}" "$SOURCE_SSH_TARGET" true; then
+    err "No se pudo conectar por SSH al origen $SOURCE_SSH_TARGET (puerto 22)."
+    err "Si el origen salio del inventario, revisa sus campos 'host', 'ssh_user'"
+    err "y 'ssh_key_path' en Plataformas. La clave usada fue $SOURCE_SSH_KEY."
+    err "Nada fue modificado."
+    exit 1
+  fi
 fi
 
 if bool_true "$ENABLE_NGINX" && [[ "$DEPLOY_TARGET" == "local" ]]; then
@@ -266,10 +301,23 @@ if bool_true "$ENABLE_NGINX" && [[ "$DEPLOY_TARGET" == "local" ]]; then
 fi
 
 CONFIG_FILE="$SRC_DIR/config.php"
+# Los mensajes nombran EN QUE MAQUINA se busco. Sin eso, un "config.php not
+# found" con SOURCE_MODE=local se lee como si el archivo no existiera en el
+# servidor de origen, cuando en realidad se busco en el host del clonador.
 if [[ "$SOURCE_MODE" == "local" ]]; then
-  [[ -f "$CONFIG_FILE" ]] || { err "config.php not found at $CONFIG_FILE"; exit 1; }
+  [[ -f "$CONFIG_FILE" ]] || {
+    err "config.php not found at $CONFIG_FILE en este servidor ($(hostname))."
+    err "SOURCE_MODE=local: se busco el Moodle en esta misma maquina, la del clonador."
+    err "Si la plataforma de origen vive en otro servidor, revisa que su entrada del"
+    err "inventario tenga el campo 'host' correcto (Plataformas), o usa 'Servidor"
+    err "manual por SSH' y cargalo a mano."
+    exit 1
+  }
 else
-  source_exec "test -f $(quote_shell "$CONFIG_FILE")" || { err "Remote config.php not found at $CONFIG_FILE"; exit 1; }
+  source_exec "test -f $(quote_shell "$CONFIG_FILE")" || {
+    err "config.php not found at $CONFIG_FILE en el origen remoto ${SOURCE_SSH_TARGET}."
+    exit 1
+  }
 fi
 
 SRC_WEB_USER=""
@@ -282,14 +330,22 @@ if [[ -z "${SRC_WEB_USER:-}" || "$SRC_WEB_USER" == "UNKNOWN" ]]; then
   SRC_WEB_USER="www-data"
 fi
 
+CFG_AWK_PROG='$0 ~ "\\$CFG->" k "[[:space:]]*=" { print $2; exit }'
+
 parse_cfg() {
   local key="$1"
   if [[ "$SOURCE_MODE" == "local" ]]; then
-    sudo awk -v k="$key" -F"'" '
-    $0 ~ "\\$CFG->" k "[[:space:]]*=" { print $2; exit }
-  ' "$CONFIG_FILE"
+    sudo awk -v k="$key" -F"'" "$CFG_AWK_PROG" "$CONFIG_FILE"
   else
-    source_exec "awk -v k=$(quote_shell "$key") -F\' '\$0 ~ \"\\\\\$CFG->\" k \"[[:space:]]*=\" { print \$2; exit }' $(quote_shell "$CONFIG_FILE")"
+    # El usuario SSH puede no tener permiso de lectura sobre config.php: un
+    # modo tipico es -r--rw---- www-data:support, que no da nada a "others".
+    # `test -f` pasa igual (solo necesita traspasar el directorio), asi que el
+    # fallo aparecia recien aca, y como esto corre en $(...) el codigo de salida
+    # se descartaba y la variable quedaba vacia. Se intenta directo y, si falla,
+    # con sudo -n (no interactivo, para no colgarse pidiendo password).
+    local awk_cmd
+    awk_cmd="awk -v k=$(quote_shell "$key") -F\"'\" $(quote_shell "$CFG_AWK_PROG") $(quote_shell "$CONFIG_FILE")"
+    source_exec "$awk_cmd 2>/dev/null || sudo -n $awk_cmd"
   fi
 }
 
@@ -301,6 +357,10 @@ SRC_WWWROOT="$(parse_cfg wwwroot)"
 
 if [[ -z "${SRC_DBNAME:-}" ]]; then
   err "Could not read source dbname from $CONFIG_FILE."
+  if [[ "$SOURCE_MODE" == "remote" ]]; then
+    err "El archivo existe pero no se pudo leer como ${SOURCE_SSH_TARGET}, ni con sudo -n."
+    err "Revisa permisos (ls -l $CONFIG_FILE) y que ${SOURCE_SSH_USER} tenga sudo sin password en el origen."
+  fi
   exit 1
 fi
 
@@ -333,6 +393,55 @@ if [[ "$DEST_DB" == "$SRC_DBNAME" ]]; then
 fi
 
 require_production_ack_if_needed "$SAFE_MODE" "$DRY_RUN"
+
+# --- Estado de la BD destino -------------------------------------------------
+# Se inspecciona ACA a proposito: despues de las guardas de seguridad (que ya
+# garantizaron que DEST_DB no es la base de origen, que no esta en
+# PROTECTED_DATABASES y que el host esta en la allowlist si hay una) y ANTES de
+# habilitar el modo mantenimiento y del dump. Si hay que abortar por una base
+# preexistente, que sea sin haber tocado el sitio de origen.
+#
+# `CREATE DATABASE IF NOT EXISTS` + import no falla si la base ya existe, pero
+# tampoco limpia: el dump trae DROP/CREATE por tabla, asi que sobreescribe las
+# tablas que trae y **deja intactas** las que no. Una base de una clonacion
+# anterior queda entonces mezclada con restos desactualizados.
+log "Preflight: inspeccionando la BD destino $DEST_DB en $TARGET_DB_HOST ..."
+DEST_DB_TABLES="$(
+  export MYSQL_PWD="$TARGET_DB_PASS"
+  mysql -N -B -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" \
+    -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${DEST_DB}';"
+)" || {
+  err "No se pudo consultar el estado de la BD destino en $TARGET_DB_HOST."
+  err "Nada fue modificado."
+  exit 1
+}
+DEST_DB_TABLES="${DEST_DB_TABLES//[^0-9]/}"
+DEST_DB_TABLES="${DEST_DB_TABLES:-0}"
+
+if (( DEST_DB_TABLES > 0 )); then
+  warn "La base destino $DEST_DB ya existe y contiene $DEST_DB_TABLES tablas."
+  if ! bool_true "$DROP_DEST_DB"; then
+    err "Se aborta para no importar encima de datos preexistentes."
+    err "Importar encima sobreescribe las tablas que trae el dump pero deja las"
+    err "que no, asi que la instancia quedaria con restos de la clonacion anterior."
+    err "Opciones: (a) reintentar confirmando la eliminacion en la UI, o"
+    err "(b) elegir otro nombre de base destino."
+    err "Nada fue modificado."
+    exit 1
+  fi
+  if bool_true "$DRY_RUN"; then
+    log "[dry-run] Se eliminaria y recrearia la base $DEST_DB ($DEST_DB_TABLES tablas)."
+  else
+    warn "DROP_DEST_DB=1 (confirmado en la UI): eliminando $DEST_DB con sus $DEST_DB_TABLES tablas..."
+    (
+      export MYSQL_PWD="$TARGET_DB_PASS"
+      mysql -h "$TARGET_DB_HOST" -u "$TARGET_DB_USER" -e "DROP DATABASE \`${DEST_DB}\`;"
+    ) || { err "No se pudo eliminar la base $DEST_DB."; exit 1; }
+    log "Base $DEST_DB eliminada. Se recreara vacia antes del import."
+  fi
+else
+  log "La BD destino $DEST_DB no existe o esta vacia. Se creara/usara limpia."
+fi
 
 if bool_true "$ENABLE_SRC_MAINT"; then
   log "Enabling maintenance mode on source..."
@@ -376,6 +485,8 @@ Dry-run:          $DRY_RUN
 Safe mode:        $SAFE_MODE
 RDS allowlist:    ${RDS_HOST_ALLOWLIST:-<not set>}
 Protected DBs:    ${PROTECTED_DATABASES:-<not set>}
+Dest DB tables:   ${DEST_DB_TABLES:-0} (preexistentes)
+Drop dest DB:     $DROP_DEST_DB
 Maintenance on source now: $SRC_MAINT_ENABLED
 ----------------
 SUM

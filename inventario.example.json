@@ -1,6 +1,7 @@
 [
   {
     "name": "ejemplo_plataforma",
+    "url": "https://ejemplo.awakelab.world",
     "host": "10.0.0.10",
     "port": 22,
     "ssh_user": "ubuntu",

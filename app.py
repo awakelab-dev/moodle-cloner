@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import re
+import socket
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from subprocess import PIPE, STDOUT, Popen
 from typing import Any, Callable, Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
-LOGO_FILE = ROOT / "RESIZED_logo_fondooscuro_horizontal.png"
+LOGO_FILE = ROOT / "aulacloner_logo_blank.png"
 SCRIPT_FILE = ROOT / "moodle-clone-web.sh"
 ENV_FILE = ROOT / ".env"
 VERSION_FILE = ROOT / "VERSION"
@@ -63,6 +66,10 @@ HOST = os.getenv("APP_HOST", "0.0.0.0")
 PORT = int(os.getenv("APP_PORT", "8787"))
 MAX_LOG_CHARS = 250_000
 MAX_PLUGIN_ZIP_SIZE = 100 * 1024 * 1024  # 100 MB
+# Cuantas plataformas se instalan a la vez. Ajustable sin tocar codigo: el techo
+# real lo pone `admin/cli/upgrade.php`, que es un proceso PHP con migraciones de
+# base por plataforma, y varias plataformas comparten maquina y cluster.
+PLUGIN_INSTALL_CONCURRENCY = max(1, int(os.getenv("PLUGIN_INSTALL_CONCURRENCY", "8")))
 DEFAULT_REMOTE_HOST = "51.44.30.62"
 REMOTE_SSH_KEY = os.path.expanduser(os.getenv("REMOTE_SSH_KEY", str(Path.home() / ".ssh" / "id_ed25519")))
 DEFAULT_SOURCE_SSH_USER = "ubuntu"
@@ -83,6 +90,14 @@ def esc_html(value: str) -> str:
 
 def render_index_html() -> bytes:
     html = INDEX_FILE.read_text(encoding="utf-8")
+    # A truncated index.html (interrupted upload, unquoted-heredoc paste) leaves
+    # an unterminated <script> that browsers discard silently — blank page, no
+    # console error, nothing in the server log. Fail loudly instead.
+    if not html.rstrip().endswith("</html>"):
+        raise RuntimeError(
+            f"index.html looks truncated ({len(html)} chars, does not end with </html>). "
+            "Re-upload it (git checkout -- index.html) — a partial file renders as a blank page."
+        )
     html = html.replace("{{TARGET_DB_HOST}}", esc_html(TARGET_DB_HOST_ENV.strip()))
     html = html.replace("{{APP_VERSION}}", esc_html(APP_VERSION))
     return html.encode("utf-8")
@@ -96,12 +111,64 @@ def now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def dest_db_status(name: str) -> Dict[str, Any]:
+    """Cuenta las tablas de `name` en el cluster destino.
+
+    `tables > 0` significa que una clonacion anterior dejo datos ahi. El
+    caller decide que hacer; aca no se modifica nada.
+    """
+    try:
+        conn = db._connect(database=None)
+    except Exception as exc:
+        raise ValueError(f"No se pudo conectar al cluster destino: {exc}")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = %s",
+                (name,),
+            )
+            tables = int((cur.fetchone() or {}).get("n") or 0)
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = %s",
+                (name,),
+            )
+            exists = int((cur.fetchone() or {}).get("n") or 0) > 0
+    finally:
+        conn.close()
+    return {"name": name, "exists": exists, "tables": tables}
+
+
 def bool_to_env(value: Any) -> str:
     return "1" if bool(value) else "0"
 
 
 def is_safe_path(value: str) -> bool:
     return bool(re.fullmatch(r"/[A-Za-z0-9_./-]+", value))
+
+
+_local_hosts_cache: Optional[set] = None
+
+
+def local_host_identifiers() -> set:
+    """Nombres e IPs que identifican a ESTA maquina (el host del clonador).
+
+    Se usa para decidir si una plataforma del inventario vive aca o hay que
+    alcanzarla por SSH. Se calcula una sola vez: getaddrinfo puede ser lento.
+    """
+    global _local_hosts_cache
+    if _local_hosts_cache is not None:
+        return _local_hosts_cache
+    names = {"localhost", "127.0.0.1", "::1"}
+    try:
+        hostname = socket.gethostname()
+        names.add(hostname)
+        names.add(hostname.split(".")[0])
+        for info in socket.getaddrinfo(hostname, None):
+            names.add(str(info[4][0]))
+    except OSError:
+        pass
+    _local_hosts_cache = {n.strip().lower() for n in names if n.strip()}
+    return _local_hosts_cache
 
 
 def sanitize_preview(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -116,8 +183,31 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Payload inválido.")
 
-    source_mode = str(payload.get("source_mode", "local")).strip().lower()
+    # Dos conceptos que antes estaban confundidos en uno:
+    #   source_origin (inventory | manual) = DE DONDE salen los datos del origen.
+    #                                        Es lo que elige el usuario.
+    #   source_mode   (local | remote)     = DONDE corren los comandos: en esta
+    #                                        maquina o por SSH. Se DERIVA.
+    # Historicamente el script corria en la propia maquina de origen y "local"
+    # era correcto. Ya no: el clonador tiene su propio host, asi que llamar
+    # "local" a "plataforma del inventario" describia mal el 100% de los casos
+    # reales y producia el "config.php not found" en el host del clonador.
+    # Se aceptan los valores viejos como alias para no romper una pagina cacheada.
+    raw_origin = str(payload.get("source_origin") or payload.get("source_mode") or "inventory").strip().lower()
+    origin_aliases = {
+        "inventory": "inventory",
+        "local": "inventory",   # legacy
+        "manual": "manual",
+        "remote": "manual",     # legacy
+    }
+    source_origin = origin_aliases.get(raw_origin)
+    if source_origin is None:
+        raise ValueError("Origen inválido. Usa 'inventory' (plataforma del inventario) o 'manual' (SSH a mano).")
+    source_mode = "local" if source_origin == "inventory" else "remote"
+
     source_host = str(payload.get("source_host", "")).strip()
+    source_ssh_user = DEFAULT_SOURCE_SSH_USER
+    source_ssh_key = REMOTE_SSH_KEY
     source_dir = str(payload.get("source_dir", "")).strip()
     source_data = str(payload.get("source_data", "")).strip()
     source_vhost = str(payload.get("source_vhost", "")).strip()
@@ -136,14 +226,11 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     target_db_pass = str(payload.get("target_db_pass", payload.get("db_pass", "")))
     dest_db = str(payload.get("dest_db", "")).strip()
 
-    if source_mode not in ("local", "remote"):
-        raise ValueError("Modo de origen inválido. Usa 'local' o 'remote'.")
-
-    if source_mode == "local":
+    if source_origin == "inventory":
         try:
             source_index = int(payload.get("source_index", -1))
         except (TypeError, ValueError):
-            raise ValueError("source_index inválido para modo local.")
+            raise ValueError("source_index inválido: no se identificó la plataforma del inventario.")
         try:
             inv_servers = course_routes._load_servers()
         except Exception as exc:
@@ -151,15 +238,51 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         if source_index < 0 or source_index >= len(inv_servers):
             raise ValueError("Plataforma origen no encontrada en el inventario.")
         src_entry = inv_servers[source_index]
+        src_name = str(src_entry.get("name") or f"#{source_index}")
         source_dir = str(src_entry.get("moodle_path") or "").rstrip("/")
         source_data = str(src_entry.get("moodledata_path") or "")
         source_vhost = str(src_entry.get("vhost_path") or "")
         if not source_dir:
-            raise ValueError("La plataforma origen no tiene ruta Moodle configurada (moodle_path).")
+            raise ValueError(f"La plataforma origen '{src_name}' no tiene ruta Moodle configurada (moodle_path).")
         if not source_data:
-            raise ValueError("La plataforma origen no tiene ruta moodledata configurada (moodledata_path).")
+            raise ValueError(f"La plataforma origen '{src_name}' no tiene ruta moodledata configurada (moodledata_path).")
         if not source_vhost:
-            raise ValueError("La plataforma origen no tiene ruta vhost configurada (vhost_path).")
+            raise ValueError(f"La plataforma origen '{src_name}' no tiene ruta vhost configurada (vhost_path).")
+
+        # Las entradas del inventario describen servidores REMOTOS: cada una
+        # tiene su propio `host` y credenciales SSH. Antes se tomaban las rutas
+        # de la entrada pero se ignoraba el `host`, y los comandos corrian en el
+        # host del clonador — de ahi el "config.php not found" al clonar una
+        # plataforma que vive en otra maquina. Si el host de la entrada no es
+        # esta misma maquina, se pasa a modo remoto contra ese host.
+        entry_host = str(src_entry.get("host") or "").strip()
+        if entry_host and entry_host.lower() not in local_host_identifiers():
+            if not re.fullmatch(r"[A-Za-z0-9.-]+", entry_host):
+                raise ValueError(
+                    f"La plataforma origen '{src_name}' tiene un host inválido en el inventario: '{entry_host}'."
+                )
+            entry_ssh_key = str(src_entry.get("ssh_key_path") or "").strip()
+            if not entry_ssh_key:
+                raise ValueError(
+                    f"La plataforma origen '{src_name}' está en {entry_host}, así que hay que alcanzarla "
+                    "por SSH, pero no tiene 'ssh_key_path' en el inventario. El clonador de instancias "
+                    "autentica por clave (ssh -o BatchMode=yes -i <clave>); 'ssh_password' no está "
+                    "soportado en este módulo. Configura la clave en Plataformas."
+                )
+            source_mode = "remote"
+            source_host = entry_host
+            source_ssh_user = str(src_entry.get("ssh_user") or "").strip() or DEFAULT_SOURCE_SSH_USER
+            source_ssh_key = entry_ssh_key
+
+        for label, value in (
+            ("Moodle", source_dir),
+            ("moodledata", source_data),
+            ("vhost", source_vhost),
+        ):
+            if not is_safe_path(value):
+                raise ValueError(
+                    f"La ruta {label} de la plataforma origen '{src_name}' es inválida en el inventario: '{value}'."
+                )
     else:
         if not re.fullmatch(r"[A-Za-z0-9.-]+", source_host):
             raise ValueError("Host origen inválido.")
@@ -220,8 +343,11 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Nombre de BD destino inválido (solo letras, números y _).")
 
     validated = {
+        "source_origin": source_origin,
         "source_mode": source_mode,
         "source_host": source_host,
+        "source_ssh_user": source_ssh_user,
+        "source_ssh_key": source_ssh_key,
         "source_dir": source_dir,
         "source_data": source_data,
         "source_vhost": source_vhost,
@@ -239,6 +365,9 @@ def validate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "target_db_admin_pass": target_db_admin_pass,
         "dest_db": dest_db,
         "maintenance_source": bool(payload.get("maintenance_source", True)),
+        # Solo lo manda la UI tras una confirmacion explicita del usuario. El
+        # script aborta si la base destino tiene tablas y esto no viene en true.
+        "drop_dest_db": bool(payload.get("drop_dest_db", False)),
         "opt_replace": bool(payload.get("opt_replace", True)),
         "opt_purge": bool(payload.get("opt_purge", True)),
         "opt_nginx": bool(payload.get("opt_nginx", True)),
@@ -289,8 +418,10 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "SRC_VHOST": src_vhost,
             "SOURCE_MODE": payload["source_mode"],
             "SOURCE_HOST": payload["source_host"],
-            "SOURCE_SSH_USER": DEFAULT_SOURCE_SSH_USER,
-            "SOURCE_SSH_KEY": REMOTE_SSH_KEY,
+            # Derivados de la entrada del inventario cuando el origen sale de
+            # ahi; si no, los defaults de siempre.
+            "SOURCE_SSH_USER": payload.get("source_ssh_user") or DEFAULT_SOURCE_SSH_USER,
+            "SOURCE_SSH_KEY": payload.get("source_ssh_key") or REMOTE_SSH_KEY,
             "NEW_KEY": payload["new_key"],
             "NEW_DOMAIN": payload["new_domain"],
             "NEW_URL": payload["new_url"],
@@ -307,6 +438,7 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
             "DB_USER": payload["target_db_user"],
             "DB_PASS": payload["target_db_pass"],
             "ENABLE_SRC_MAINT": bool_to_env(payload["maintenance_source"]),
+            "DROP_DEST_DB": bool_to_env(payload["drop_dest_db"]),
             "ENABLE_REPLACE": bool_to_env(payload["opt_replace"]),
             "ENABLE_PURGE": bool_to_env(payload["opt_purge"]),
             "ENABLE_NGINX": bool_to_env(payload["opt_nginx"]),
@@ -325,8 +457,13 @@ def run_clone_job(job_id: str, payload: Dict[str, Any]) -> None:
     append_job_output(job_id, f"[{now_iso()}] Starting clone job...\n")
 
     try:
+        # Invocado como `bash <script>` en vez de ejecutarlo directo: asi el bit
+        # de ejecucion deja de ser un punto de fallo. Se perdio una vez al
+        # reescribir el archivo desde fuera de git (el modo quedo en 100644) y
+        # el job moria con un [Errno 13] Permission denied opaco, que no dice
+        # que el problema es el permiso del script y no algo del clonado.
         process = Popen(
-            [str(SCRIPT_FILE)],
+            ["bash", str(SCRIPT_FILE)],
             cwd=str(ROOT),
             env=env,
             stdout=PIPE,
@@ -400,21 +537,86 @@ def run_plugin_job(
             effective_zip = normalized
             plugin_folder_name = plugin_routes.detect_plugin_folder_name(effective_zip)
 
-        all_results = []
-        for i, server in enumerate(selected_servers, 1):
-            append_job_output(job_id, f"[{now_iso()}] --- {server['name']} ({i}/{total}) ---\n")
+        # Instalacion en paralelo con tope. Se paraleliza porque un plugin se
+        # suele instalar en TODAS las plataformas y en secuencia serian 35 veces
+        # varios minutos. El tope existe porque el paso pesado no es copiar el
+        # ZIP sino `admin/cli/upgrade.php`: un proceso PHP con migraciones de
+        # base por plataforma, y varias plataformas comparten cluster y maquina.
+        concurrency = max(1, min(PLUGIN_INSTALL_CONCURRENCY, total))
+        db_ok = True
+        try:
+            db.plugin_install_set_status(
+                job_id, "running",
+                message=f"Instalando en {total} plataforma(s), hasta {concurrency} a la vez.",
+            )
+        except Exception as exc:
+            db_ok = False
+            append_job_output(job_id, f"[{now_iso()}] AVISO: sin progreso persistido ({exc}).\n")
+
+        append_job_output(
+            job_id,
+            f"[{now_iso()}] Instalando en paralelo, hasta {concurrency} plataforma(s) a la vez.\n"
+            f"  Las lineas de distintas plataformas se intercalan; cada una lleva su nombre.\n\n",
+        )
+
+        def _set_target(index: int, status: str, **kw) -> None:
+            if not db_ok:
+                return
+            try:
+                db.plugin_install_update_target(job_id, index, status, **kw)
+            except Exception:
+                pass
+
+        results_by_index: list = [None] * total
+
+        def _install_one(index: int, server: dict) -> None:
+            _set_target(index, "running", message="Instalando...")
             result = plugin_routes.install_plugin_on_server(
                 server, effective_zip, plugin_type, plugin_folder_name,
                 on_output=lambda text, jid=job_id: append_job_output(jid, text),
             )
+            results_by_index[index] = plugin_routes.serialize_result(result)
             status_icon = "OK" if result.success else "ERROR"
+            first_line = result.error_detail.split(chr(10))[0] if result.error_detail else ""
             append_job_output(
                 job_id,
                 f"  {result.server_name}: {status_icon}"
-                + (f" - {result.error_detail.split(chr(10))[0]}" if result.error_detail else "")
-                + "\n\n",
+                + (f" - {first_line}" if first_line else "")
+                + "\n",
             )
-            all_results.append(plugin_routes.serialize_result(result))
+            _set_target(
+                index,
+                "completed" if result.success else "error",
+                message="Instalado" if result.success else None,
+                error=first_line or None if not result.success else None,
+            )
+
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = {
+                executor.submit(_install_one, i, srv): i
+                for i, srv in enumerate(selected_servers)
+            }
+            for future in as_completed(futures):
+                index = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    name = selected_servers[index].get("name", f"#{index}")
+                    append_job_output(job_id, f"  {name}: ERROR - {exc}\n")
+                    results_by_index[index] = {
+                        "server_name": name, "success": False,
+                        "error_detail": str(exc), "data": {}, "command_logs": [],
+                    }
+                    _set_target(index, "error", error=str(exc))
+
+        all_results = [
+            r if r is not None else {
+                "server_name": selected_servers[i].get("name", f"#{i}"),
+                "success": False, "error_detail": "La instalacion no devolvio resultado.",
+                "data": {}, "command_logs": [],
+            }
+            for i, r in enumerate(results_by_index)
+        ]
 
         successes = sum(1 for r in all_results if r["success"])
         failures = total - successes
@@ -423,6 +625,15 @@ def run_plugin_job(
             job_id, status=final_status, exit_code=0 if failures == 0 else 1,
             results=all_results,
         )
+        if db_ok:
+            try:
+                db.plugin_install_set_status(
+                    job_id, "completed" if failures == 0 else "failed",
+                    message=f"{successes} de {total} plataforma(s) instaladas.",
+                    finished=True,
+                )
+            except Exception:
+                pass
         append_job_output(
             job_id,
             f"[{now_iso()}] Finalizado: {successes}/{total} exitosos"
@@ -492,12 +703,49 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             data = render_index_html()
         else:
             data = filepath.read_bytes()
+
+        # Validators + revalidation. Without an ETag/Last-Modified and without
+        # Cache-Control, the HTML shell has nothing a browser can revalidate
+        # against, so a heuristically cached copy can be served indefinitely
+        # (Safari is notably aggressive here). That makes "did my deploy reach
+        # the browser?" unanswerable — exactly the ambiguity that cost hours on
+        # 2026-08-11. `no-cache` means "revalidate every time", not "never
+        # store", so the ETag still buys us cheap 304s.
+        etag = '"' + hashlib.sha256(data).hexdigest()[:32] + '"'
+        if self._if_none_match_matches(etag):
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
+            self.send_header("X-App-Version", APP_VERSION)
+            self.end_headers()
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        # Lets us confirm from curl or the Network tab which build the browser
+        # actually received, without parsing the HTML.
+        self.send_header("X-App-Version", APP_VERSION)
         self.end_headers()
         if send_body:
             self.wfile.write(data)
+
+    def _if_none_match_matches(self, etag: str) -> bool:
+        header = self.headers.get("If-None-Match")
+        if not header:
+            return False
+        for candidate in header.split(","):
+            candidate = candidate.strip()
+            if candidate == "*":
+                return True
+            # Tolerate weak validators ('W/"abc"') from proxies.
+            if candidate.startswith("W/"):
+                candidate = candidate[2:]
+            if candidate == etag:
+                return True
+        return False
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))
@@ -562,6 +810,9 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 return self._handle_clone()
             if parsed.path == "/api/cc/admin/servers":
                 return self._handle_cc_create_server()
+            m = re.fullmatch(r"/api/cc/admin/servers/(\d+)/verify", parsed.path)
+            if m:
+                return self._handle_cc_verify_server(int(m.group(1)))
             m = re.fullmatch(r"/api/cc/servers/(\d+)/categories", parsed.path)
             if m:
                 return self._handle_cc_create_category(int(m.group(1)))
@@ -569,6 +820,9 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 return self._handle_cc_copy_course()
             if parsed.path == "/api/plugin/install":
                 return self._handle_plugin_install()
+
+            if parsed.path == "/api/plugin/detect":
+                return self._handle_plugin_detect()
             if parsed.path == "/api/alexia/config":
                 return self._handle_alexia_save_config()
             if parsed.path == "/api/alexia/test-connection":
@@ -661,6 +915,17 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
 
         if path == "/api/version":
             self._send_json(200, {"version": APP_VERSION}, send_body=send_body)
+            return
+
+        # Estado de una BD destino, para que la UI pueda advertir ANTES de
+        # lanzar el job (y pedir confirmacion del borrado) en vez de que el
+        # usuario descubra la base preexistente leyendo el log.
+        if path == "/api/clone/dest-db":
+            self._require_permission("can_access_moodle_cloner")
+            name = (parse_qs(parsed.query).get("name") or [""])[0].strip()
+            if not re.fullmatch(r"[A-Za-z0-9_]+", name):
+                raise ValueError("Nombre de base destino inválido.")
+            self._send_json(200, dest_db_status(name), send_body=send_body)
             return
 
         # Auth status
@@ -759,6 +1024,101 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
                 self._send_json(200, result, send_body=send_body)
             return
 
+        # Instalacion de plugin en curso (o la ultima), para reengancharse.
+        if path == "/api/plugin/jobs/current":
+            self._require_permission("can_access_plugin_cloner")
+            self._send_json(200, {"job": db.plugin_install_latest()}, send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/plugin/jobs/([0-9a-f-]+)/targets", path)
+        if m:
+            self._require_permission("can_access_plugin_cloner")
+            self._send_json(
+                200,
+                {"job_id": m.group(1), "targets": db.plugin_install_targets(m.group(1))},
+                send_body=send_body,
+            )
+            return
+
+        m = re.fullmatch(r"/api/plugin/jobs/([0-9a-f-]+)", path)
+        if m:
+            self._require_permission("can_access_plugin_cloner")
+            result = db.plugin_install_progress(m.group(1))
+            if not result:
+                self._send_json(404, {"error": "Instalacion no encontrada."}, send_body=send_body)
+            else:
+                self._send_json(200, result, send_body=send_body)
+            return
+
+        # Copia de curso en curso (o la ultima), para reengancharse al recargar.
+        if path == "/api/cc/copy-jobs/current":
+            self._require_permission("can_access_course_cloner")
+            self._send_json(200, {"job": course_routes.get_latest_copy_job()}, send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/cc/copy-jobs/([a-f0-9]+)/targets", path)
+        if m:
+            self._require_permission("can_access_course_cloner")
+            self._send_json(200, course_routes.get_copy_targets(m.group(1)), send_body=send_body)
+            return
+
+        # Logs de comandos por destino. Solo existen mientras el job sigue en
+        # memoria; el resumen por destino vive en la base y no se pierde.
+        m = re.fullmatch(r"/api/cc/copy-jobs/([a-f0-9]+)/logs", path)
+        if m:
+            self._require_permission("can_access_course_cloner")
+            self._send_json(200, course_routes.get_copy_logs(m.group(1)), send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/cc/copy-jobs/([a-f0-9]+)", path)
+        if m:
+            self._require_permission("can_access_course_cloner")
+            result = course_routes.get_copy_job(m.group(1))
+            if not result:
+                self._send_json(404, {"error": "Copia no encontrada."}, send_body=send_body)
+            else:
+                self._send_json(200, result, send_body=send_body)
+            return
+
+        # El lote en curso (o el ultimo). Con esto la UI vuelve a mostrar el
+        # progreso despues de recargar el navegador, sin recordar el batch_id.
+        if path == "/api/alexia/batches/current":
+            self._require_permission("can_access_alexia_cloner")
+            result = alexia_routes.get_latest_batch()
+            self._send_json(200, {"batch": result}, send_body=send_body)
+            return
+
+        # Filas paginadas: se piden solo al abrir el detalle. Devolver las 700
+        # en cada consulta de progreso era lo que ahogaba al navegador.
+        m = re.fullmatch(r"/api/alexia/batches/([a-f0-9]+)/rows", path)
+        if m:
+            self._require_permission("can_access_alexia_cloner")
+            q = parse_qs(parsed.query)
+            def _int(name: str, default: int) -> int:
+                try:
+                    return int((q.get(name) or [default])[0])
+                except (TypeError, ValueError):
+                    return default
+            row_status = (q.get("status") or [""])[0].strip() or None
+            result = alexia_routes.get_batch_rows(
+                m.group(1), offset=_int("offset", 0), limit=_int("limit", 50),
+                status=row_status,
+            )
+            self._send_json(200, result, send_body=send_body)
+            return
+
+        m = re.fullmatch(r"/api/alexia/batches/([a-f0-9]+)", path)
+        if m:
+            self._require_permission("can_access_alexia_cloner")
+            result = alexia_routes.get_batch_job(m.group(1))
+            if not result:
+                self._send_json(404, {"error": "Lote no encontrado."}, send_body=send_body)
+            else:
+                self._send_json(200, result, send_body=send_body)
+            return
+
+        # Ruta anterior, mantenida por compatibilidad. Ahora devuelve el mismo
+        # payload liviano: contadores y estado, sin las filas.
         m = re.fullmatch(r"/api/alexia/jobs/batch/([a-f0-9]+)", path)
         if m:
             self._require_permission("can_access_alexia_cloner")
@@ -964,20 +1324,76 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         result = course_routes.admin_delete_server(server_index)
         self._send_json(200, result)
 
-    def _handle_cc_copy_course(self) -> None:
-        self._require_permission("can_access_course_cloner")
-        payload = self._read_json_body()
-        # The copy itself does SSH/SFTP work that can take minutes; the request
-        # blocks until it returns, like the original FastAPI impl. Phase 2 may
-        # promote this to the same job-pattern used by /api/clone.
-        result = course_routes.copy_course(payload)
+    def _handle_cc_verify_server(self, server_index: int) -> None:
+        # Hace red (HTTP al sitio y SSH al servidor) pero no modifica nada. Es
+        # POST y no GET para que quede claro que dispara trabajo y para que
+        # ningun intermediario lo cachee.
+        self._require_superadmin()
+        result = course_routes.admin_verify_server(server_index)
         self._send_json(200, result)
+
+    def _handle_cc_copy_course(self) -> None:
+        # Antes esto corria dentro del request y bloqueaba varios minutos
+        # (backup + SFTP + un restore por destino). Ahora valida, registra el
+        # job, responde 202 y la copia sigue en un hilo del servidor.
+        user = self._require_permission("can_access_course_cloner")
+        payload = self._read_json_body()
+        started_by = (user or {}).get("username") if isinstance(user, dict) else None
+        result = course_routes.start_copy(payload, started_by=started_by)
+        self._send_json(202, result)
 
     # --- Plugin-install endpoint -----------------------------------------
 
+    def _handle_plugin_detect(self) -> None:
+        """Inspecciona un ZIP y devuelve el tipo de plugin, sin instalar nada.
+
+        Existe para que la UI pueda preseleccionar el tipo al elegir el archivo.
+        El tipo real esta en `$plugin->component` del version.php, dentro del
+        ZIP, asi que hay que subirlo: el nombre del archivo no alcanza.
+        """
+        import shutil as _shutil
+        import tempfile as _tempfile
+
+        self._require_permission("can_access_plugin_cloner")
+
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            self._send_json(400, {"error": "Se espera multipart/form-data."})
+            return
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0:
+            self._send_json(400, {"error": "Body vacio."})
+            return
+        if content_length > MAX_PLUGIN_ZIP_SIZE:
+            self._send_json(413, {"error": "El archivo excede el limite de 100 MB."})
+            return
+
+        raw_body = self.rfile.read(content_length)
+        _, files = plugin_routes.parse_multipart_form_data(content_type, raw_body)
+        if "plugin_zip" not in files:
+            self._send_json(400, {"error": "Falta el archivo plugin_zip."})
+            return
+        filename, zip_data = files["plugin_zip"]
+        if not filename.lower().endswith(".zip"):
+            self._send_json(400, {"error": "El archivo debe ser un .zip."})
+            return
+
+        temp_dir = _tempfile.mkdtemp(prefix="moodle_plugin_detect_")
+        try:
+            zip_path = Path(temp_dir) / filename
+            zip_path.write_bytes(zip_data)
+            try:
+                info = plugin_routes.detect_plugin_info(zip_path)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(200, info)
+        finally:
+            _shutil.rmtree(temp_dir, ignore_errors=True)
+
     def _handle_plugin_install(self) -> None:
         import tempfile as _tempfile
-        self._require_permission("can_access_plugin_cloner")
+        user = self._require_permission("can_access_plugin_cloner")
 
         content_type = self.headers.get("Content-Type", "")
         if "multipart/form-data" not in content_type:
@@ -1050,6 +1466,24 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         job_id = str(uuid.uuid4())
         now = now_iso()
         server_names = [s["name"] for s in selected_servers]
+        # El progreso se persiste para que sobreviva a recargar el navegador y
+        # al reinicio del proceso. Si la base no esta disponible la instalacion
+        # sigue igual: se pierde el progreso persistido, no el trabajo.
+        try:
+            db.plugin_install_create(
+                job_id,
+                plugin_folder=plugin_folder_name,
+                plugin_type=plugin_type_path,
+                zip_name=filename,
+                concurrency=max(1, min(PLUGIN_INSTALL_CONCURRENCY, len(selected_servers))),
+                targets=[
+                    {"server_name": str(srv.get("name") or ""), "server_host": str(srv.get("host") or "")}
+                    for srv in selected_servers
+                ],
+                started_by=(user or {}).get("username") if isinstance(user, dict) else None,
+            )
+        except Exception as exc:
+            log_boot(f"WARNING: no se pudo registrar el job de plugin {job_id}: {exc}")
         with jobs_lock:
             jobs[job_id] = {
                 "id": job_id,
@@ -1149,11 +1583,15 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(e)})
 
     def _handle_alexia_export_batch(self) -> None:
-        self._require_permission("can_access_alexia_cloner")
+        # Acusa recibo y devuelve enseguida: el lote corre en un hilo del
+        # servidor y su progreso se consulta aparte. 202 en vez de 200 para que
+        # quede explicito que el trabajo no termino cuando responde.
+        user = self._require_permission("can_access_alexia_cloner")
         payload = self._read_json_body()
         rows = payload.get("rows", [])
-        result = alexia_routes.start_batch(rows)
-        self._send_json(200, result)
+        started_by = (user or {}).get("username") if isinstance(user, dict) else None
+        result = alexia_routes.start_batch(rows, started_by=started_by)
+        self._send_json(202, result)
 
     # --- Clone endpoint --------------------------------------------------
 
@@ -1164,7 +1602,12 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
             validated = validate_payload(payload)
 
             if not SCRIPT_FILE.exists():
-                raise ValueError("No se encontró moodle-clone-web.sh")
+                raise ValueError(f"No se encontró moodle-clone-web.sh en {SCRIPT_FILE}")
+            if not os.access(SCRIPT_FILE, os.R_OK):
+                raise ValueError(
+                    f"moodle-clone-web.sh existe en {SCRIPT_FILE} pero no se puede leer. "
+                    "Revisa permisos: debe ser legible por el usuario que corre la API."
+                )
 
             with jobs_lock:
                 running_job_id = next(
@@ -1219,20 +1662,89 @@ class MoodleCloneHandler(BaseHTTPRequestHandler):
         return
 
 
-def main() -> None:
-    print("Initializing application database...")
+def log_boot(message: str) -> None:
+    # pm2 captures stdout as a pipe, so Python block-buffers it and short boot
+    # messages never reach `pm2 logs`. Flush every line explicitly.
+    print(message, flush=True)
+
+
+def check_optional_dependencies() -> None:
+    """Avisa al arrancar de las dependencias de sistema que faltan.
+
+    Sin esto, que falte openpyxl solo se descubre cuando un usuario sube un
+    Excel al modulo Alexia y recibe un error. Aparece en `pm2 logs` justo
+    despues del deploy, que es cuando se puede resolver.
+    """
+    if getattr(alexia_routes, "openpyxl", None) is None:
+        log_boot(
+            "WARNING: openpyxl no esta instalado. La importacion masiva por Excel "
+            "del modulo Alexia va a fallar. Instalalo con: "
+            "sudo apt-get install -y python3-openpyxl"
+        )
+
+
+def init_app_db() -> None:
+    log_boot("Initializing application database...")
     try:
-        db.init_schema()
+        added = db.init_schema()
+        if added:
+            log_boot(f"Schema migration: added users columns {', '.join(added)}")
+        else:
+            log_boot("Schema up to date.")
         seeded = db.seed_initial_admin()
         if seeded:
-            print(f"Seeded initial superadmin: {seeded}")
+            log_boot(f"Seeded initial superadmin: {seeded}")
         db.get_or_create_session_secret()
+        log_boot("Application database ready.")
+        # Los hilos del lote son daemon: un reinicio de pm2 los mata donde
+        # estaban y el lote queda "running" en la base. Se retoma aca, ya con
+        # el puerto escuchando, para no demorar el arranque.
+        try:
+            resumed = alexia_routes.resume_unfinished_batches()
+            if resumed:
+                log_boot(f"Alexia: reanudando lote(s) a medias: {', '.join(resumed)}")
+        except Exception as exc:
+            log_boot(f"WARNING: no se pudieron reanudar lotes de Alexia: {exc}")
+        # Las copias de curso NO se reanudan: el .mbz del backup vivia en un
+        # directorio temporal que murio con el proceso. Se cierran para que no
+        # queden eternamente en "running" bloqueando la guardia de concurrencia.
+        try:
+            stale = course_routes.mark_interrupted_copy_jobs()
+            if stale:
+                log_boot(f"Cursos: copia(s) interrumpida(s) por el reinicio: {', '.join(stale)}")
+        except Exception as exc:
+            log_boot(f"WARNING: no se pudieron cerrar copias de curso a medias: {exc}")
+        # Las instalaciones de plugin tampoco se reanudan: el ZIP vivia en un
+        # directorio temporal que murio con el proceso.
+        try:
+            stale = db.plugin_install_unfinished()
+            for jid in stale:
+                db.plugin_install_set_status(
+                    jid, "interrupted",
+                    error="El proceso del servidor se reinicio durante la instalacion. "
+                          "El ZIP temporal se perdio: hay que volver a subirlo.",
+                    finished=True,
+                )
+            if stale:
+                log_boot(f"Plugins: instalacion(es) interrumpida(s) por el reinicio: {', '.join(stale)}")
+        except Exception as exc:
+            log_boot(f"WARNING: no se pudieron cerrar instalaciones de plugin a medias: {exc}")
     except Exception as exc:
-        print(f"WARNING: could not initialize app DB: {exc}")
-        print("The login/user-management features will not work until this is resolved.")
+        log_boot(f"WARNING: could not initialize app DB: {type(exc).__name__}: {exc}")
+        log_boot("The login/user-management features will not work until this is resolved.")
 
+
+def main() -> None:
+    # Bind the port BEFORE touching Aurora. A slow, unreachable or lock-blocked
+    # database used to stall this function before serve_forever(), so nothing
+    # was listening and the browser got a blank page with no clue why. Now the
+    # login screen always renders and any DB problem surfaces as an API error.
     server = ThreadingHTTPServer((HOST, PORT), MoodleCloneHandler)
-    print(f"Moodle Cloner UI available at http://{HOST}:{PORT}")
+    log_boot(f"Moodle Cloner UI available at http://{HOST}:{PORT} (v{APP_VERSION})")
+
+    check_optional_dependencies()
+    threading.Thread(target=init_app_db, name="db-init", daemon=True).start()
+
     server.serve_forever()
 
 

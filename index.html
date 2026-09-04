@@ -27,6 +27,30 @@
       }
     }
   </script>
+
+  <style>
+    /* Los <select> salian mucho mas bajos que un <input> con exactamente las
+       mismas clases: 36px en Chrome y 22px en Safari, contra 38px del input.
+       Mientras el control conserva su apariencia nativa (`appearance: menulist`)
+       el motor decide la altura por sus propias metricas e ignora el padding, la
+       line-height y hasta el min-height — por eso el intento anterior, que solo
+       fijaba min-height, funcionaba en Chrome y no en Safari.
+       La unica forma de que el modelo de caja valga es apagar la apariencia
+       nativa. Al hacerlo hay que reponer la flecha a mano, porque desaparece. */
+    select {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      height: 2.375rem; /* 38px: la misma altura que un input px-3 py-2 text-sm */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='2' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 1rem 1rem;
+    }
+    /* El padding tiene que dejarle sitio a la flecha. `select[class]` suma
+       especificidad (0,1,1) para ganarle al `px-3` de Tailwind (0,1,0). */
+    select[class] { padding-right: 2.25rem; }
+  </style>
 </head>
 <body class="min-h-screen bg-slate-950 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-100">
 
@@ -34,8 +58,13 @@
   <div id="toaster" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
 
   <!-- Login view -->
-  <div id="login-view" class="hidden min-h-screen items-center justify-center px-4 py-10">
-    <div class="w-full max-w-md bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-8">
+  <!-- Visible by default on purpose: if the inline script below ever fails to
+       parse or arrives truncated, the browser discards it silently (no console
+       error) and a JS-gated login screen would leave the page completely blank.
+       Rendering it by default degrades to "login shown" instead. The boot code
+       hides it via showAppView() when there is already a valid session. -->
+  <div id="login-view" class="flex min-h-screen items-center justify-center px-4 py-10">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60 p-8">
       <h1 class="text-2xl font-semibold text-slate-50">Iniciar sesion</h1>
       <p class="text-sm text-slate-400 mt-1 mb-6">Accede a la plataforma de clonado.</p>
       <form id="login-form" class="space-y-4">
@@ -75,30 +104,24 @@
   <div id="app-view" class="hidden min-h-screen flex flex-col">
 
     <!-- Top header / nav -->
-    <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-30">
-      <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
-          <img src="/assets/logo.png" alt="AWAKELAB" class="h-9 w-auto" />
-          <div class="hidden sm:flex items-center gap-2 text-xs text-slate-400">
-            <span>Plataforma de clonado</span>
-            <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-slate-300">v{{APP_VERSION}}</span>
-          </div>
+    <header class="border-b border-slate-800 bg-slate-900 sticky top-0 z-30">
+      <!-- pr-16 reserva el espacio del boton hamburguesa, que va posicionado
+           contra el borde derecho del header (ver mas abajo) y por lo tanto
+           esta fuera de este contenedor centrado. -->
+      <div class="max-w-6xl mx-auto pl-6 pr-16 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-2.5">
+          <!-- h-[72px]: el doble que antes (h-9 = 36px). A 36px la bajada
+               "Clonador de Instancia Moodle" del logo era ilegible. -->
+          <img src="/assets/logo.png" alt="AulaCloner" class="h-[72px] w-auto" />
+          <span class="text-[11px] font-mono leading-none text-slate-400 border border-slate-700 rounded-full px-2 py-1 whitespace-nowrap">v{{APP_VERSION}}</span>
         </div>
 
         <nav class="flex items-center gap-1">
-          <button data-section="moodle" data-perm="can_access_moodle_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador Moodle</button>
-          <button data-section="course" data-perm="can_access_course_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador de cursos</button>
-          <button data-section="plugin" data-perm="can_access_plugin_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador de plugins</button>
-          <button data-section="alexia" data-perm="can_access_alexia_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Clonador Alexia</button>
+          <button data-section="moodle" data-perm="can_access_moodle_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Moodle</button>
+          <button data-section="course" data-perm="can_access_course_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Cursos</button>
+          <button data-section="plugin" data-perm="can_access_plugin_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plugins</button>
+          <button data-section="alexia" data-perm="can_access_alexia_cloner" class="nav-tab px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Alexia</button>
         </nav>
-
-        <div class="flex items-center gap-2">
-          <!-- Hamburger button — wraps admin controls -->
-          <button id="hamburger-btn" class="p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu">
-            <svg id="hamburger-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-            <svg id="hamburger-close-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
 
         <!-- Hidden originals kept for JS compatibility -->
         <button id="platforms-btn" class="hidden"></button>
@@ -108,16 +131,16 @@
         <span id="current-user-label" class="hidden"></span>
       </div>
 
-      <!-- Dropdown menu panel (admin controls) -->
-      <div id="mobile-menu" class="hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur">
-        <div class="max-w-6xl mx-auto px-6 py-3 flex flex-col gap-1">
-          <div id="menu-user-label" class="px-3 py-1.5 text-xs text-slate-400"></div>
-          <button id="mobile-platforms-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plataformas</button>
-          <button id="mobile-users-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Usuarios</button>
-          <button id="mobile-account-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Mi cuenta</button>
-          <button id="mobile-logout-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white text-red-400">Salir</button>
-        </div>
-      </div>
+      <!-- Boton hamburguesa, pegado al borde derecho del header. Va fuera del
+           contenedor centrado a proposito: dentro quedaba con el margen del
+           max-w-6xl y en pantallas anchas se veia despegado del borde.
+           `position: sticky` del header ya sirve de bloque contenedor.
+           Centrado con top-1/2 y no con un top fijo: la altura de la barra la
+           marca el logo, asi que un valor fijo lo dejaba pegado arriba. -->
+      <button id="hamburger-btn" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu">
+        <svg id="hamburger-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg id="hamburger-close-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
     </header>
 
     <main class="flex-1 px-4 py-8">
@@ -125,7 +148,7 @@
 
         <!-- Section: Moodle cloner (the original form) -->
         <section id="section-moodle" class="app-section">
-          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
               <div>
                 <h1 class="text-2xl font-semibold text-slate-50">Clonador de Instancias Moodle</h1>
@@ -141,9 +164,9 @@
                     <div class="space-y-4">
                       <div>
                         <label class="block text-xs font-medium text-slate-300 mb-1">Modo de origen</label>
-                        <select name="source_mode" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                          <option value="local" selected>Instancia local (preconfigurada)</option>
-                          <option value="remote">Servidor remoto por SSH</option>
+                        <select name="source_origin" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                          <option value="inventory" selected>Plataforma del inventario</option>
+                          <option value="manual">Servidor manual por SSH</option>
                         </select>
                       </div>
                       <div>
@@ -151,7 +174,7 @@
                         <select name="source_index" id="clone-source-index" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
                           <option value="">Cargando plataformas...</option>
                         </select>
-                        <p class="mt-1 text-xs text-slate-500">Selecciona la instancia que se usara como origen para la clonacion.</p>
+                        <p id="clone-source-hint" class="mt-1 text-xs text-slate-500">Selecciona la instancia que se usara como origen para la clonacion.</p>
                       </div>
                       <div id="remote-source-fields" class="hidden rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
                         <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-300">Origen remoto (SSH)</h3>
@@ -317,10 +340,10 @@
 
         <!-- Section: Course cloner -->
         <section id="section-course" class="app-section hidden">
-          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
             <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between gap-4">
               <div>
-                <h1 class="text-2xl font-semibold text-slate-50">Clonador de cursos</h1>
+                <h1 class="text-2xl font-semibold text-slate-50">Replicador de Cursos</h1>
                 <p class="text-sm text-slate-400 mt-1">Copia cursos Moodle entre plataformas via SSH (backup, transferencia SFTP y restore).</p>
               </div>
               <div id="cc-inventory-status" class="text-xs text-slate-400">Cargando inventario...</div>
@@ -412,6 +435,38 @@
                 </section>
               </form>
 
+              <!-- Progreso de la copia. La copia corre en el servidor y su estado
+                   se consulta a la API, asi que esta tarjeta se puede mostrar
+                   aunque el formulario este recien cargado (tras recargar). -->
+              <div id="cc-progress-card" class="hidden rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                  <div class="flex items-center gap-3">
+                    <div id="cc-pg-spinner" class="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                    <div id="cc-pg-done-icon" class="hidden shrink-0">
+                      <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div>
+                      <div class="flex items-baseline gap-2">
+                        <span id="cc-pg-count" class="text-lg font-semibold text-white tabular-nums">0 / 0</span>
+                        <span class="text-xs text-slate-400">destinos</span>
+                      </div>
+                      <div id="cc-pg-label" class="text-xs text-slate-400 mt-0.5">Preparando...</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3 text-xs">
+                    <span class="text-emerald-400"><span id="cc-pg-ok">0</span> ok</span>
+                    <span class="text-red-400"><span id="cc-pg-err">0</span> con error</span>
+                    <button id="cc-pg-logs-btn" type="button" class="hidden px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Ver logs</button>
+                    <button id="cc-pg-close-btn" type="button" class="hidden px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Nueva copia</button>
+                  </div>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-2.5 mt-3">
+                  <div id="cc-pg-bar" class="h-2.5 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
+                </div>
+                <div id="cc-pg-targets" class="mt-3 space-y-1"></div>
+                <div id="cc-pg-urls" class="hidden mt-4 rounded-lg border border-primary-600/30 bg-primary-900/10 p-3"></div>
+              </div>
+
               <div id="cc-message" class="hidden rounded-lg border px-3 py-2 text-xs"></div>
               <section id="cc-results" class="hidden space-y-3"></section>
             </div>
@@ -426,13 +481,540 @@
                 <h1 class="text-2xl font-semibold text-slate-50">Administrar plataformas</h1>
                 <p class="text-sm text-slate-400 mt-1">Las plataformas se guardan en <span class="font-mono">inventario.json</span>.</p>
               </div>
-              <button id="pf-reset-btn" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar formulario</button>
+              <div class="flex items-center gap-2">
+                <button id="pf-verify-all-btn" type="button" class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-primary-600 font-semibold text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  Verificar todas
+                </button>
+                <button id="pf-verify-failed-btn" type="button" class="hidden text-xs px-3 py-1.5 rounded-lg border border-amber-600/60 text-amber-300 hover:bg-amber-900/20">Reverificar las que requieren revision</button>
+                <button id="pf-add-btn" type="button" class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                  Agregar plataforma
+                </button>
+              </div>
             </div>
 
-            <div class="px-8 py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <!-- Form -->
-              <form id="pf-form" novalidate class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
-                <h2 id="pf-form-title" class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Agregar plataforma</h2>
+            <!-- Resumen de la verificacion masiva -->
+            <div id="pf-verify-summary" class="hidden px-8 pt-4">
+              <div class="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                  <div id="pf-verify-summary-text" class="text-xs text-slate-300"></div>
+                  <div id="pf-verify-counts" class="flex items-center gap-3 text-xs"></div>
+                </div>
+                <div class="mt-2 w-full bg-slate-800 rounded-full h-1.5">
+                  <div id="pf-verify-bar" class="h-1.5 rounded-full bg-primary-600 transition-all duration-300" style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="px-8 py-6">
+              <!-- List -->
+              <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plataformas registradas</h2>
+                  <span id="pf-status" class="text-xs text-slate-400"></span>
+                </div>
+                <div id="pf-message" class="hidden mb-3 rounded-lg border px-3 py-2 text-xs"></div>
+                <!-- Dos tarjetas por fila, de izquierda a derecha y de arriba
+                     abajo. items-start para que una tarjeta con el detalle de la
+                     verificacion desplegado no estire a su vecina de fila. -->
+                <div id="pf-list" class="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+                  <div class="col-span-full text-xs text-slate-500 text-center py-6">Cargando plataformas...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section: Plugin cloner -->
+        <section id="section-plugin" class="app-section hidden">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6">
+              <h1 class="text-2xl font-semibold text-slate-50">Replicador de plugins</h1>
+              <p class="text-sm text-slate-400 mt-1">Instala plugins Moodle (.zip) en multiples plataformas simultaneamente por SSH.</p>
+            </div>
+            <!-- Mismo esqueleto que el Replicador de cursos: un paso por fila a
+                 todo el ancho, con la insignia numerada + titulo + descripcion, y
+                 la accion al final. Antes eran dos columnas, asi que el paso 3
+                 quedaba a la altura del paso 1 y se leia como si fuera paralelo
+                 a los otros dos en vez de posterior. -->
+            <div class="px-8 py-6 space-y-6">
+              <!-- Step 1: Plugin -->
+              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <div class="flex items-start gap-3 mb-4">
+                  <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">1</span>
+                  <div>
+                    <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plugin</h2>
+                    <p class="text-xs text-slate-400 mt-1">Sube el .zip del plugin y confirma su tipo. El tipo se detecta del contenido del archivo.</p>
+                  </div>
+                </div>
+                <!-- gap-12: el triple de la separacion normal (gap-4). Son dos
+                     cosas distintas (el archivo y su tipo), no un par de campos
+                     del mismo grupo. -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-12 items-start">
+                  <div>
+                    <div id="pi-dropzone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 transition-colors">
+                      <input type="file" id="pi-file-input" accept=".zip" class="hidden" />
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mx-auto mb-2 h-10 w-10 text-slate-500">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                      </svg>
+                      <p class="text-sm text-slate-400">Arrastra un archivo <b class="text-slate-300">.zip</b> aqui o haz clic para seleccionar</p>
+                    </div>
+                    <div id="pi-file-info" class="hidden flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-3 mt-3">
+                      <div class="min-w-0">
+                        <span id="pi-file-name" class="text-sm text-slate-200 font-medium truncate block"></span>
+                        <span id="pi-file-size" class="text-xs text-slate-500"></span>
+                      </div>
+                      <button id="pi-file-clear" type="button" class="text-xs text-red-400 hover:text-red-300 ml-3 shrink-0">Quitar</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block">
+                      <span class="block text-xs font-medium text-slate-300 mb-1">Tipo de plugin (frankenstyle)</span>
+                      <select id="pi-type" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                        <option value="">Cargando tipos...</option>
+                      </select>
+                    </label>
+                    <div id="pi-type-hint" class="text-xs text-emerald-400 mt-1 hidden"></div>
+                    <p class="mt-1 text-xs text-slate-500">Define en que subcarpeta de Moodle se instala el plugin.</p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Step 2: Servers -->
+              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <div class="flex items-start justify-between gap-3 mb-4">
+                  <div class="flex items-start gap-3">
+                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">2</span>
+                    <div>
+                      <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plataformas destino</h2>
+                      <p class="text-xs text-slate-400 mt-1">Selecciona una o varias plataformas. El plugin se instala en todas por SSH.</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <span id="pi-server-count" class="text-xs text-slate-500 mr-1">0 seleccionadas</span>
+                    <button id="pi-select-all" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Seleccionar todo</button>
+                    <button id="pi-clear-all" type="button" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar</button>
+                  </div>
+                </div>
+                <!-- Sin max-height ni overflow: la grilla crece con el inventario
+                     y se ven las 35 plataformas de una, igual que en el
+                     Replicador de cursos. -->
+                <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  <div class="text-xs text-slate-500 text-center py-4 col-span-full">Cargando plataformas...</div>
+                </div>
+              </section>
+
+              <!-- Step 3: Install -->
+              <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                  <div class="flex items-start gap-3">
+                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30 text-xs font-semibold">3</span>
+                    <div>
+                      <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Instalar</h2>
+                      <p class="text-xs text-slate-400 mt-1">Se conecta por SSH a cada plataforma, sube el .zip y lo descomprime en su carpeta. Puede tardar varios minutos.</p>
+                    </div>
+                  </div>
+                  <button id="pi-install-btn" type="button" disabled class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    Instalar plugin
+                  </button>
+                </div>
+                <div id="pi-status-bar" class="hidden mt-4">
+                  <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
+                    <div class="flex items-center gap-3">
+                      <div id="pi-spinner" class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                      <div id="pi-done-icon" class="hidden shrink-0">
+                        <svg class="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                      </div>
+                      <span id="pi-count" class="text-sm font-semibold text-white tabular-nums">0 / 0</span>
+                      <span class="text-xs text-slate-400">plataformas</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs">
+                      <span class="text-emerald-400"><span id="pi-ok">0</span> ok</span>
+                      <span class="text-red-400"><span id="pi-err">0</span> con error</span>
+                      <span class="text-sky-300"><span id="pi-running">0</span> en curso</span>
+                      <span id="pi-percent" class="text-slate-400 font-mono">0%</span>
+                    </div>
+                  </div>
+                  <div id="pi-phase" class="text-xs text-slate-400 mb-1">Esperando...</div>
+                  <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div id="pi-progress-bar" class="h-1.5 rounded-full bg-primary-500 transition-all duration-300" style="width:0%"></div>
+                  </div>
+                  <!-- Una tarjetita por plataforma. Son hasta 35 y varias pueden
+                       estar "en curso" al mismo tiempo: la instalacion es paralela. -->
+                  <div id="pi-targets" class="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5"></div>
+                </div>
+                <pre id="pi-output" class="hidden mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 max-h-80 overflow-auto font-mono whitespace-pre-wrap"></pre>
+              </section>
+
+              <!-- Results -->
+              <div id="pi-results" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+                <h2 class="text-sm font-semibold text-slate-200 mb-3">Resultados</h2>
+                <div id="pi-results-list" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section: Alexia cloner -->
+        <section id="section-alexia" class="app-section hidden">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
+              <div>
+                <h1 class="text-2xl font-semibold text-slate-50">Replicador de Cursos desde Alexia</h1>
+                <p class="text-sm text-slate-400 mt-1">Trae cursos de Catalejo a Alexia via SSH: uno por uno, o por lote desde un Excel.</p>
+              </div>
+              <div class="flex items-center gap-3">
+                <div id="ax-status-catalejo" class="flex items-center gap-1.5 text-xs">
+                  <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                  <span class="text-slate-400">Catalejo</span>
+                </div>
+                <div id="ax-status-alexia" class="flex items-center gap-1.5 text-xs">
+                  <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                  <span class="text-slate-400">Alexia</span>
+                </div>
+                <button id="ax-config-toggle" class="text-slate-400 hover:text-slate-200 ml-2 p-1.5 rounded-lg hover:bg-slate-800" title="Configuracion">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Alexia Config Panel (hidden by default) -->
+            <div id="ax-config-panel" class="hidden border-b border-slate-800 px-8 py-5 bg-slate-950/40">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                  <h3 class="text-xs font-semibold text-emerald-400 mb-3 uppercase tracking-wide">Catalejo (Origen)</h3>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Host</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-host" placeholder="10.0.0.1"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Puerto</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-port" value="22" type="number"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-user" placeholder="ubuntu"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-pass" type="password" placeholder="(opcional)"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta clave SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-key" placeholder="~/.ssh/id_ed25519"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password Sudo</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-sudo" type="password" placeholder="(opcional)"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodle</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-moodle" placeholder="/var/www/html/moodle"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodledata</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-data" placeholder="/var/www/moodledata"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario Web</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-webuser" value="www-data"></div>
+                    <div class="flex items-end"><button onclick="window.__axTestConn('catalejo')" class="w-full rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">Probar</button></div>
+                  </div>
+                </div>
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                  <h3 class="text-xs font-semibold text-blue-400 mb-3 uppercase tracking-wide">Alexia (Destino)</h3>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Host</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-host" placeholder="10.0.0.2"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Puerto</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-port" value="22" type="number"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-user" placeholder="ubuntu"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-pass" type="password" placeholder="(opcional)"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta clave SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-key" placeholder="~/.ssh/id_ed25519"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password Sudo</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-sudo" type="password" placeholder="(opcional)"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodle</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-moodle" placeholder="/var/www/html/moodle"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodledata</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-data" placeholder="/var/www/moodledata"></div>
+                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario Web</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-webuser" value="www-data"></div>
+                    <div class="flex items-end"><button onclick="window.__axTestConn('alexia')" class="w-full rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">Probar</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-4 flex justify-end">
+                <button onclick="window.__axSaveConfig()" class="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700">Guardar configuracion</button>
+              </div>
+            </div>
+
+            <!-- Sub-pestanas. La individual se habia quitado en v0.16.0 por
+                 quedar una sola opcion; volvio a hacer falta, asi que se
+                 restauro tal cual desde 0594109 (v0.15.0). El nombre viejo
+                 ("Exportacion Individual") describia mal el flujo: toma un
+                 curso de Catalejo y lo mete en Alexia, o sea importa. -->
+            <div class="border-b border-slate-800 px-8 flex gap-1">
+              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="batch">Cargar datos Alexia</button>
+              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="single">Importacion individual</button>
+            </div>
+
+            <!-- ====== TAB: CARGA MASIVA ====== -->
+            <div id="ax-tab-batch" class="ax-tab-content hidden px-8 py-6">
+              <!-- Upload Zone -->
+              <div id="ax-upload-section">
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-5">
+                  <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    Subir archivo Excel
+                  </h2>
+                  <div id="ax-drop-zone" class="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition-colors">
+                    <svg class="w-10 h-10 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <p class="text-slate-300 text-sm">Arrastra tu archivo <strong class="text-primary-500">.xlsx</strong> aqui</p>
+                    <p class="text-slate-500 text-xs mt-1">o haz clic para seleccionar</p>
+                    <input type="file" id="ax-file-input" accept=".xlsx" class="hidden">
+                  </div>
+                  <div id="ax-upload-loading" class="hidden mt-4 text-center">
+                    <div class="inline-flex items-center gap-2 text-primary-500 text-sm">
+                      <div class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                      Procesando archivo...
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Progreso del lote. Vive fuera de #ax-batch-results a proposito:
+                   el lote corre en el servidor y su estado se consulta a la API,
+                   asi que se tiene que poder mostrar aunque no haya un Excel
+                   cargado en esta pestana — por ejemplo despues de recargar. -->
+              <div id="ax-batch-progress-card" class="hidden rounded-xl border border-slate-800 bg-slate-900/60 p-4 mb-5">
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                  <div class="flex items-center gap-3">
+                    <div id="ax-bp-spinner" class="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                    <div id="ax-bp-done-icon" class="hidden shrink-0">
+                      <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div>
+                      <div class="flex items-baseline gap-2">
+                        <span id="ax-bp-count" class="text-lg font-semibold text-white tabular-nums">0 / 0</span>
+                        <span class="text-xs text-slate-400">cursos</span>
+                      </div>
+                      <div id="ax-bp-label" class="text-xs text-slate-400 mt-0.5">Preparando...</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3 text-xs">
+                    <span class="text-emerald-400"><span id="ax-bp-completed">0</span> completados</span>
+                    <span class="text-red-400"><span id="ax-bp-errors">0</span> errores</span>
+                    <span class="text-slate-400"><span id="ax-bp-pending">0</span> pendientes</span>
+                    <button id="ax-bp-detail-btn" type="button" class="px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Ver detalle</button>
+                    <button id="ax-bp-new-btn" type="button" class="hidden px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Cargar otro Excel</button>
+                  </div>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-2.5 mt-3">
+                  <div id="ax-batch-progress-bar" class="h-2.5 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
+                </div>
+                <div id="ax-batch-progress-pct" class="text-xs text-slate-400 text-right mt-1">0%</div>
+                <div id="ax-batch-steps" class="mt-3 max-h-32 overflow-y-auto space-y-1"></div>
+
+                <!-- Detalle fila por fila, paginado y bajo demanda. Antes la tabla
+                     completa se redibujaba cada 2s con las 700 filas. -->
+                <div id="ax-bp-detail" class="hidden mt-4 border-t border-slate-800 pt-3">
+                  <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                    <div class="flex items-center gap-1.5">
+                      <button type="button" data-ax-rows-filter="" class="ax-rows-filter text-[11px] px-2 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Todas</button>
+                      <button type="button" data-ax-rows-filter="completed" class="ax-rows-filter text-[11px] px-2 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Completadas</button>
+                      <button type="button" data-ax-rows-filter="error" class="ax-rows-filter text-[11px] px-2 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Con error</button>
+                      <button type="button" data-ax-rows-filter="pending" class="ax-rows-filter text-[11px] px-2 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Pendientes</button>
+                    </div>
+                    <div class="flex items-center gap-2 text-[11px] text-slate-400">
+                      <span id="ax-bp-detail-range"></span>
+                      <button id="ax-bp-detail-prev" type="button" class="px-2 py-1 rounded border border-slate-700 hover:bg-slate-800 disabled:opacity-40">Anterior</button>
+                      <button id="ax-bp-detail-next" type="button" class="px-2 py-1 rounded border border-slate-700 hover:bg-slate-800 disabled:opacity-40">Siguiente</button>
+                    </div>
+                  </div>
+                  <div id="ax-bp-detail-list" class="space-y-1 max-h-80 overflow-y-auto"></div>
+                </div>
+              </div>
+
+              <!-- Batch Results (hidden until upload) -->
+              <div id="ax-batch-results" class="hidden">
+                <!-- Summary -->
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 mb-5">
+                  <div class="flex items-center justify-between flex-wrap gap-3">
+                    <div class="flex items-center gap-4">
+                      <div class="flex items-center gap-2">
+                        <span class="text-2xl font-bold text-emerald-400" id="ax-count-exportable">0</span>
+                        <span class="text-xs text-slate-400">exportables</span>
+                      </div>
+                      <div class="h-6 w-px bg-slate-700"></div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-2xl font-bold text-slate-500" id="ax-count-ignored">0</span>
+                        <span class="text-xs text-slate-400">ignoradas</span>
+                      </div>
+                      <div class="h-6 w-px bg-slate-700"></div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold text-white" id="ax-count-selected">0</span>
+                        <span class="text-xs text-slate-400">seleccionadas</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button id="ax-btn-reset" class="px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800">Cambiar archivo</button>
+                      <button id="ax-btn-batch-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        Exportar seleccionados
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Rows Table -->
+                <div class="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+                  <div class="p-3 border-b border-slate-800 flex items-center justify-between">
+                    <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                      <input type="checkbox" id="ax-select-all" checked class="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-primary-500">
+                      Seleccionar todos
+                    </label>
+                    <input class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-table-filter" placeholder="Filtrar..." style="width:180px">
+                  </div>
+                  <div class="overflow-auto" style="max-height: 50vh;">
+                    <table class="w-full border-collapse">
+                      <thead>
+                        <tr class="text-left">
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:36px"></th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Reducido</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">CodOficial</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Centro</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Ejercicio</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Especialidad</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Modalidad</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Shortname</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:90px">Estado</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:36px"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="ax-batch-table-body"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ====== TAB: IMPORTACION INDIVIDUAL ====== -->
+            <div id="ax-tab-single" class="ax-tab-content hidden px-8 py-6">
+              <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div class="lg:col-span-3 space-y-5">
+                  <!-- Course Search -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                      Buscar curso en Catalejo
+                    </h2>
+                    <div class="flex gap-2">
+                      <input class="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-search-input" placeholder="Buscar por nombre, shortname o ID...">
+                      <button id="ax-search-btn" class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 whitespace-nowrap">Buscar</button>
+                    </div>
+                    <div id="ax-search-results" class="mt-2 hidden">
+                      <div class="rounded-lg border border-slate-800 bg-slate-900 max-h-48 overflow-y-auto" id="ax-search-list"></div>
+                    </div>
+                    <div id="ax-selected-course" class="mt-3 hidden">
+                      <div class="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-primary-600/40">
+                        <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        <span class="text-sm text-white" id="ax-selected-course-name"></span>
+                        <span class="text-xs text-slate-400 ml-auto" id="ax-selected-course-id"></span>
+                        <button id="ax-clear-course" class="text-slate-400 hover:text-red-400 ml-2">&times;</button>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Course Data Form -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                      Datos del curso
+                    </h2>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Ejercicio *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-ejercicio" placeholder="2026"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Cat. Ejercicio</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-categoria-ejercicio" placeholder="Opcional, sobreescribe ejercicio en categoría"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">ID Centro *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-id-centro" placeholder="5545"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Nombre Centro</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-nombre-centro" placeholder="Nombre del centro"></div>
+                      <div class="md:col-span-2"><label class="block text-[11px] text-slate-400 mb-0.5">Especialidad *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-especialidad" placeholder="(SYMA33) Coordinacion en emergencias"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Pertenece Curso *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-pertenece-curso" placeholder="1"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Codigo Oficial *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-codigo-oficial" placeholder="1505"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Reducido Grupo *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-reducido-grupo" placeholder="1CEPC-P"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Modalidad</label><div class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm" id="ax-f-modalidad-display"><span class="text-slate-500">Auto-detectada</span></div></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Estudio</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-estudio" placeholder="Estudio"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 1</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat1" placeholder="Mat1"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 2</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat2" placeholder="Mat2"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Area</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-area" placeholder="Area"></div>
+                    </div>
+                    <div class="mt-5 flex justify-end">
+                      <button id="ax-btn-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-700">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        Importar curso a Alexia
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="lg:col-span-2 space-y-5">
+                  <!-- Category Tree Preview -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                      Arbol de categorias
+                    </h2>
+                    <div id="ax-tree-preview" class="text-sm space-y-1">
+                      <p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>
+                    </div>
+                  </div>
+                  <!-- Export Status -->
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 hidden" id="ax-export-status-card">
+                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                      Estado de la importacion
+                    </h2>
+                    <div class="w-full bg-slate-800 rounded-full h-2 mb-4">
+                      <div id="ax-progress-bar" class="h-2 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
+                    </div>
+                    <div id="ax-progress-percent" class="text-xs text-slate-400 text-right -mt-3 mb-3">0%</div>
+                    <div id="ax-export-steps" class="space-y-2 text-sm"></div>
+                    <div id="ax-export-result" class="mt-4 hidden"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tree Preview Modal -->
+            <div id="ax-tree-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
+              <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-sm font-semibold text-slate-100">Arbol de categorias</h3>
+                  <button id="ax-tree-modal-close" class="text-slate-400 hover:text-white">&times;</button>
+                </div>
+                <div id="ax-tree-modal-content" class="text-sm space-y-1"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section: Users (only visible to managers) -->
+        <section id="section-users" class="app-section hidden">
+          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
+            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
+              <div>
+                <h1 class="text-2xl font-semibold text-slate-50">Gestion de usuarios</h1>
+                <p class="text-sm text-slate-400 mt-1">Crea usuarios y asigna permisos por seccion.</p>
+              </div>
+              <button id="new-user-btn" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700">Nuevo usuario</button>
+            </div>
+            <div class="px-8 py-6">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th class="px-3 py-2">Usuario</th>
+                      <th class="px-3 py-2 text-center">Super</th>
+                      <th class="px-3 py-2 text-center">Moodle</th>
+                      <th class="px-3 py-2 text-center">Cursos</th>
+                      <th class="px-3 py-2 text-center">Plugins</th>
+                      <th class="px-3 py-2 text-center">Alexia</th>
+                      <th class="px-3 py-2 text-center">Usuarios</th>
+                      <th class="px-3 py-2 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="users-tbody" class="text-slate-200">
+                    <tr><td colspan="7" class="px-3 py-6 text-center text-slate-500">Cargando...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal de plataforma (crear / editar). El formulario vivia al lado de
+       la lista y se comia la mitad del ancho; ahora la lista usa todo el
+       espacio y el formulario aparece solo cuando se lo pide. -->
+  <div id="pf-modal" class="hidden fixed inset-0 z-40 overflow-y-auto bg-black/60 px-4 py-8">
+    <div class="mx-auto w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-950/60">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+        <h2 id="pf-form-title" class="text-base font-semibold text-slate-50">Agregar plataforma</h2>
+        <button id="pf-modal-close" type="button" class="text-slate-400 hover:text-slate-200" aria-label="Cerrar">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="pf-modal-body" class="px-6 py-5">
+              <form id="pf-form" novalidate class="space-y-4">
                 <input type="hidden" id="pf-editing-index" value="" />
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
@@ -440,8 +1022,13 @@
                     <input id="pf-name" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
                   <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Host SSH</label>
-                    <input id="pf-host" type="text" required class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <label class="block text-xs font-medium text-slate-300 mb-1">URL de la plataforma</label>
+                    <input id="pf-url" type="url" inputmode="url" placeholder="https://ejemplo.awakelab.world" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    <p class="mt-1 text-xs text-slate-500">Direccion publica del Moodle. Se muestra como enlace en la lista.</p>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Direccion IP (host SSH)</label>
+                    <input id="pf-host" type="text" required placeholder="13.167.34.11" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
                   <div>
                     <label class="block text-xs font-medium text-slate-300 mb-1">Puerto SSH</label>
@@ -498,410 +1085,18 @@
                   </div>
                 </div>
                 <div id="pf-form-error" class="hidden text-xs text-red-300 border border-red-600/40 rounded-lg px-3 py-2"></div>
-                <button id="pf-submit" type="submit" class="w-full inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700">Agregar plataforma</button>
+                <div class="flex items-center justify-end gap-2 pt-1">
+                  <button id="pf-reset-btn" type="button" class="text-xs px-3 py-2 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Limpiar</button>
+                  <button id="pf-modal-cancel" type="button" class="text-xs px-3 py-2 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800">Cancelar</button>
+                  <button id="pf-submit" type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700">Agregar plataforma</button>
+                </div>
               </form>
-
-              <!-- List -->
-              <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                <div class="flex items-center justify-between mb-4">
-                  <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Plataformas registradas</h2>
-                  <span id="pf-status" class="text-xs text-slate-400"></span>
-                </div>
-                <div id="pf-message" class="hidden mb-3 rounded-lg border px-3 py-2 text-xs"></div>
-                <div id="pf-list" class="space-y-3">
-                  <div class="text-xs text-slate-500 text-center py-6">Cargando plataformas...</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Section: Plugin cloner -->
-        <section id="section-plugin" class="app-section hidden">
-          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
-            <div class="border-b border-slate-800 px-8 py-6">
-              <h1 class="text-2xl font-semibold text-slate-50">Clonador de plugins</h1>
-              <p class="text-sm text-slate-400 mt-1">Instala plugins Moodle (.zip) en multiples plataformas simultaneamente por SSH.</p>
-            </div>
-            <div class="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <!-- Left: Plugin + Servers -->
-              <div class="space-y-6">
-                <!-- Step 1: Plugin -->
-                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                  <h2 class="text-sm font-semibold text-slate-200 mb-3">1. Plugin</h2>
-                  <div id="pi-dropzone" class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 transition-colors">
-                    <input type="file" id="pi-file-input" accept=".zip" class="hidden" />
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mx-auto mb-2 h-10 w-10 text-slate-500">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                    </svg>
-                    <p class="text-sm text-slate-400">Arrastra un archivo <b class="text-slate-300">.zip</b> aqui o haz clic para seleccionar</p>
-                  </div>
-                  <div id="pi-file-info" class="hidden flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-3 mt-3">
-                    <div class="min-w-0">
-                      <span id="pi-file-name" class="text-sm text-slate-200 font-medium truncate block"></span>
-                      <span id="pi-file-size" class="text-xs text-slate-500"></span>
-                    </div>
-                    <button id="pi-file-clear" type="button" class="text-xs text-red-400 hover:text-red-300 ml-3 shrink-0">Quitar</button>
-                  </div>
-                  <label class="block mt-4">
-                    <span class="text-xs text-slate-400 mb-1 block">Tipo de plugin (frankenstyle)</span>
-                    <select id="pi-type" class="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                      <option value="">Cargando tipos...</option>
-                    </select>
-                  </label>
-                  <div id="pi-type-hint" class="text-xs text-emerald-400 mt-1 hidden"></div>
-                </div>
-                <!-- Step 2: Servers -->
-                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                  <h2 class="text-sm font-semibold text-slate-200 mb-3">2. Plataformas destino</h2>
-                  <div class="flex items-center gap-3 mb-3">
-                    <button id="pi-select-all" type="button" class="text-xs text-primary-500 hover:text-primary-700">Seleccionar todo</button>
-                    <button id="pi-clear-all" type="button" class="text-xs text-slate-500 hover:text-slate-400">Limpiar</button>
-                    <span id="pi-server-count" class="ml-auto text-xs text-slate-500">0 seleccionadas</span>
-                  </div>
-                  <div id="pi-server-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
-                    <div class="text-xs text-slate-500 text-center py-4 col-span-full">Cargando plataformas...</div>
-                  </div>
-                </div>
-              </div>
-              <!-- Right: Actions + Output -->
-              <div class="space-y-6">
-                <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                  <h2 class="text-sm font-semibold text-slate-200 mb-3">3. Instalar</h2>
-                  <button id="pi-install-btn" type="button" disabled class="w-full px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    Instalar plugin
-                  </button>
-                  <div id="pi-status-bar" class="hidden mt-4">
-                    <div class="flex justify-between items-center mb-1">
-                      <span id="pi-phase" class="text-xs text-slate-400">Esperando...</span>
-                      <span id="pi-percent" class="text-xs text-slate-400 font-mono">0%</span>
-                    </div>
-                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                      <div id="pi-progress-bar" class="h-1.5 rounded-full bg-primary-500 transition-all duration-300" style="width:0%"></div>
-                    </div>
-                  </div>
-                  <pre id="pi-output" class="hidden mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 max-h-80 overflow-auto font-mono whitespace-pre-wrap"></pre>
-                </div>
-                <!-- Results -->
-                <div id="pi-results" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-                  <h2 class="text-sm font-semibold text-slate-200 mb-3">Resultados</h2>
-                  <div id="pi-results-list" class="space-y-2"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Section: Alexia cloner -->
-        <section id="section-alexia" class="app-section hidden">
-          <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
-            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
-              <div>
-                <h1 class="text-2xl font-semibold text-slate-50">Clonador Alexia</h1>
-                <p class="text-sm text-slate-400 mt-1">Exporta cursos de Catalejo a Alexia via SSH.</p>
-              </div>
-              <div class="flex items-center gap-3">
-                <div id="ax-status-catalejo" class="flex items-center gap-1.5 text-xs">
-                  <span class="w-2 h-2 rounded-full bg-slate-600"></span>
-                  <span class="text-slate-400">Catalejo</span>
-                </div>
-                <div id="ax-status-alexia" class="flex items-center gap-1.5 text-xs">
-                  <span class="w-2 h-2 rounded-full bg-slate-600"></span>
-                  <span class="text-slate-400">Alexia</span>
-                </div>
-                <button id="ax-config-toggle" class="text-slate-400 hover:text-slate-200 ml-2 p-1.5 rounded-lg hover:bg-slate-800" title="Configuracion">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Alexia Config Panel (hidden by default) -->
-            <div id="ax-config-panel" class="hidden border-b border-slate-800 px-8 py-5 bg-slate-950/40">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                  <h3 class="text-xs font-semibold text-emerald-400 mb-3 uppercase tracking-wide">Catalejo (Origen)</h3>
-                  <div class="grid grid-cols-2 gap-3">
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Host</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-host" placeholder="10.0.0.1"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Puerto</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-port" value="22" type="number"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-user" placeholder="ubuntu"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-pass" type="password" placeholder="(opcional)"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta clave SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-key" placeholder="~/.ssh/id_ed25519"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password Sudo</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-sudo" type="password" placeholder="(opcional)"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodle</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-moodle" placeholder="/var/www/html/moodle"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodledata</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-data" placeholder="/var/www/moodledata"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario Web</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-catalejo-webuser" value="www-data"></div>
-                    <div class="flex items-end"><button onclick="window.__axTestConn('catalejo')" class="w-full rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">Probar</button></div>
-                  </div>
-                </div>
-                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                  <h3 class="text-xs font-semibold text-blue-400 mb-3 uppercase tracking-wide">Alexia (Destino)</h3>
-                  <div class="grid grid-cols-2 gap-3">
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Host</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-host" placeholder="10.0.0.2"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Puerto</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-port" value="22" type="number"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-user" placeholder="ubuntu"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-pass" type="password" placeholder="(opcional)"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta clave SSH</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-key" placeholder="~/.ssh/id_ed25519"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Password Sudo</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-sudo" type="password" placeholder="(opcional)"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodle</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-moodle" placeholder="/var/www/html/moodle"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Ruta Moodledata</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-data" placeholder="/var/www/moodledata"></div>
-                    <div><label class="block text-[11px] text-slate-400 mb-0.5">Usuario Web</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-cfg-alexia-webuser" value="www-data"></div>
-                    <div class="flex items-end"><button onclick="window.__axTestConn('alexia')" class="w-full rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700">Probar</button></div>
-                  </div>
-                </div>
-              </div>
-              <div class="mt-4 flex justify-end">
-                <button onclick="window.__axSaveConfig()" class="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700">Guardar configuracion</button>
-              </div>
-            </div>
-
-            <!-- Alexia Sub-tabs -->
-            <div class="border-b border-slate-800 px-8 flex gap-1">
-              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="batch">Importacion Masiva</button>
-              <button class="ax-tab px-4 py-2.5 text-sm text-slate-400 hover:text-white border-b-2 border-transparent" data-ax-tab="single">Exportacion Individual</button>
-            </div>
-
-            <!-- ====== TAB: BATCH ====== -->
-            <div id="ax-tab-batch" class="ax-tab-content hidden px-8 py-6">
-              <!-- Upload Zone -->
-              <div id="ax-upload-section">
-                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-5">
-                  <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                    Subir archivo Excel
-                  </h2>
-                  <div id="ax-drop-zone" class="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-500/5 transition-colors">
-                    <svg class="w-10 h-10 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    <p class="text-slate-300 text-sm">Arrastra tu archivo <strong class="text-primary-500">.xlsx</strong> aqui</p>
-                    <p class="text-slate-500 text-xs mt-1">o haz clic para seleccionar</p>
-                    <input type="file" id="ax-file-input" accept=".xlsx" class="hidden">
-                  </div>
-                  <div id="ax-upload-loading" class="hidden mt-4 text-center">
-                    <div class="inline-flex items-center gap-2 text-primary-500 text-sm">
-                      <div class="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                      Procesando archivo...
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Batch Results (hidden until upload) -->
-              <div id="ax-batch-results" class="hidden">
-                <!-- Summary -->
-                <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 mb-5">
-                  <div class="flex items-center justify-between flex-wrap gap-3">
-                    <div class="flex items-center gap-4">
-                      <div class="flex items-center gap-2">
-                        <span class="text-2xl font-bold text-emerald-400" id="ax-count-exportable">0</span>
-                        <span class="text-xs text-slate-400">exportables</span>
-                      </div>
-                      <div class="h-6 w-px bg-slate-700"></div>
-                      <div class="flex items-center gap-2">
-                        <span class="text-2xl font-bold text-slate-500" id="ax-count-ignored">0</span>
-                        <span class="text-xs text-slate-400">ignoradas</span>
-                      </div>
-                      <div class="h-6 w-px bg-slate-700"></div>
-                      <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold text-white" id="ax-count-selected">0</span>
-                        <span class="text-xs text-slate-400">seleccionadas</span>
-                      </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <button id="ax-btn-reset" class="px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800">Cambiar archivo</button>
-                      <button id="ax-btn-batch-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                        Exportar seleccionados
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Batch Progress -->
-                <div id="ax-batch-progress-card" class="hidden rounded-xl border border-slate-800 bg-slate-900/60 p-4 mb-5">
-                  <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-sm font-semibold text-white flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                      Progreso de exportacion
-                    </h3>
-                    <div class="flex items-center gap-3 text-xs">
-                      <span class="text-emerald-400"><span id="ax-bp-completed">0</span> completados</span>
-                      <span class="text-red-400"><span id="ax-bp-errors">0</span> errores</span>
-                      <span class="text-slate-400"><span id="ax-bp-pending">0</span> pendientes</span>
-                    </div>
-                  </div>
-                  <div class="w-full bg-slate-800 rounded-full h-2.5">
-                    <div id="ax-batch-progress-bar" class="h-2.5 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
-                  </div>
-                  <div id="ax-batch-progress-pct" class="text-xs text-slate-400 text-right mt-1">0%</div>
-                  <div id="ax-batch-steps" class="mt-3 max-h-32 overflow-y-auto space-y-1"></div>
-                </div>
-
-                <!-- Rows Table -->
-                <div class="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-                  <div class="p-3 border-b border-slate-800 flex items-center justify-between">
-                    <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                      <input type="checkbox" id="ax-select-all" checked class="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-primary-500">
-                      Seleccionar todos
-                    </label>
-                    <input class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-table-filter" placeholder="Filtrar..." style="width:180px">
-                  </div>
-                  <div class="overflow-auto" style="max-height: 50vh;">
-                    <table class="w-full border-collapse">
-                      <thead>
-                        <tr class="text-left">
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:36px"></th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Reducido</th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">CodOficial</th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Centro</th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Ejercicio</th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Especialidad</th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Modalidad</th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Shortname</th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:90px">Estado</th>
-                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:36px"></th>
-                        </tr>
-                      </thead>
-                      <tbody id="ax-batch-table-body"></tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- ====== TAB: SINGLE ====== -->
-            <div id="ax-tab-single" class="ax-tab-content hidden px-8 py-6">
-              <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div class="lg:col-span-3 space-y-5">
-                  <!-- Course Search -->
-                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-                    <h2 class="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                      Buscar Curso en Catalejo
-                    </h2>
-                    <div class="flex gap-2">
-                      <input class="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-search-input" placeholder="Buscar por nombre, shortname o ID...">
-                      <button id="ax-search-btn" class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 whitespace-nowrap">Buscar</button>
-                    </div>
-                    <div id="ax-search-results" class="mt-2 hidden">
-                      <div class="rounded-lg border border-slate-800 bg-slate-900 max-h-48 overflow-y-auto" id="ax-search-list"></div>
-                    </div>
-                    <div id="ax-selected-course" class="mt-3 hidden">
-                      <div class="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-primary-600/40">
-                        <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                        <span class="text-sm text-white" id="ax-selected-course-name"></span>
-                        <span class="text-xs text-slate-400 ml-auto" id="ax-selected-course-id"></span>
-                        <button id="ax-clear-course" class="text-slate-400 hover:text-red-400 ml-2">&times;</button>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Course Data Form -->
-                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                      Datos del Curso
-                    </h2>
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Ejercicio *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-ejercicio" placeholder="2026"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">ID Centro *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-id-centro" placeholder="5545"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Nombre Centro</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-nombre-centro" placeholder="Nombre del centro"></div>
-                      <div class="md:col-span-2"><label class="block text-[11px] text-slate-400 mb-0.5">Especialidad *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-especialidad" placeholder="(SYMA33) Coordinacion en emergencias"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Pertenece Curso *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-pertenece-curso" placeholder="1"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Codigo Oficial *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-codigo-oficial" placeholder="1505"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Reducido Grupo *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-reducido-grupo" placeholder="1CEPC-P"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Modalidad</label><div class="rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm" id="ax-f-modalidad-display"><span class="text-slate-500">Auto-detectada</span></div></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Estudio</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-estudio" placeholder="Estudio"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 1</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat1" placeholder="Mat1"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Materia 2</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-mat2" placeholder="Mat2"></div>
-                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Area</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-area" placeholder="Area"></div>
-                    </div>
-                    <div class="mt-5 flex justify-end">
-                      <button id="ax-btn-export" class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-700">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                        Exportar Curso
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div class="lg:col-span-2 space-y-5">
-                  <!-- Category Tree Preview -->
-                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                      Arbol de Categorias
-                    </h2>
-                    <div id="ax-tree-preview" class="text-sm space-y-1">
-                      <p class="text-slate-500 text-xs italic">Complete los campos para ver la vista previa</p>
-                    </div>
-                  </div>
-                  <!-- Export Status -->
-                  <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 hidden" id="ax-export-status-card">
-                    <h2 class="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                      Estado de Exportacion
-                    </h2>
-                    <div class="w-full bg-slate-800 rounded-full h-2 mb-4">
-                      <div id="ax-progress-bar" class="h-2 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
-                    </div>
-                    <div id="ax-progress-percent" class="text-xs text-slate-400 text-right -mt-3 mb-3">0%</div>
-                    <div id="ax-export-steps" class="space-y-2 text-sm"></div>
-                    <div id="ax-export-result" class="mt-4 hidden"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tree Preview Modal -->
-            <div id="ax-tree-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-              <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
-                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-sm font-semibold text-slate-100">Arbol de categorias</h3>
-                  <button id="ax-tree-modal-close" class="text-slate-400 hover:text-white">&times;</button>
-                </div>
-                <div id="ax-tree-modal-content" class="text-sm space-y-1"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Section: Users (only visible to managers) -->
-        <section id="section-users" class="app-section hidden">
-          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl shadow-slate-900/60">
-            <div class="border-b border-slate-800 px-8 py-6 flex items-center justify-between">
-              <div>
-                <h1 class="text-2xl font-semibold text-slate-50">Gestion de usuarios</h1>
-                <p class="text-sm text-slate-400 mt-1">Crea usuarios y asigna permisos por seccion.</p>
-              </div>
-              <button id="new-user-btn" class="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700">Nuevo usuario</button>
-            </div>
-            <div class="px-8 py-6">
-              <div class="overflow-x-auto">
-                <table class="w-full text-xs text-left">
-                  <thead class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-800">
-                    <tr>
-                      <th class="px-3 py-2">Usuario</th>
-                      <th class="px-3 py-2 text-center">Super</th>
-                      <th class="px-3 py-2 text-center">Moodle</th>
-                      <th class="px-3 py-2 text-center">Cursos</th>
-                      <th class="px-3 py-2 text-center">Plugins</th>
-                      <th class="px-3 py-2 text-center">Alexia</th>
-                      <th class="px-3 py-2 text-center">Usuarios</th>
-                      <th class="px-3 py-2 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody id="users-tbody" class="text-slate-200">
-                    <tr><td colspan="7" class="px-3 py-6 text-center text-slate-500">Cargando...</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </section>
-
       </div>
-    </main>
+    </div>
   </div>
 
   <!-- User editor modal -->
-  <div id="user-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+  <div id="user-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
     <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 id="user-modal-title" class="text-lg font-semibold text-slate-50">Nuevo usuario</h2>
@@ -955,7 +1150,7 @@
   </div>
 
   <!-- Self-account modal: change own password -->
-  <div id="account-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+  <div id="account-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
     <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-slate-50">Mi cuenta</h2>
@@ -980,6 +1175,70 @@
       </form>
     </div>
   </div>
+
+  <!-- Confirmacion de borrado de la BD destino. Se abre solo si la base ya
+       tiene tablas: es una operacion destructiva sobre el mismo cluster Aurora
+       donde vive produccion, asi que exige escribir el nombre de la base. -->
+  <div id="destdb-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
+    <div class="w-full max-w-lg bg-slate-900 border border-amber-700/60 rounded-2xl shadow-2xl shadow-slate-950/60 p-6">
+      <div class="flex items-start gap-3">
+        <svg class="w-6 h-6 text-amber-400 shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="min-w-0">
+          <h3 class="text-lg font-semibold text-slate-50">La base destino ya tiene datos</h3>
+          <p class="text-sm text-slate-300 mt-2">
+            <span class="font-mono text-amber-300" id="destdb-name"></span>
+            existe con <span class="font-semibold text-amber-300" id="destdb-tables"></span> tablas,
+            probablemente de una clonacion anterior que quedo a medias.
+          </p>
+          <p class="text-sm text-slate-400 mt-2">
+            Importar encima no falla, pero sobreescribe solo las tablas que trae el dump y
+            <span class="text-slate-200">deja las que no</span>, asi que la instancia quedaria
+            mezclada con restos desactualizados.
+          </p>
+          <p class="text-sm text-slate-300 mt-3">
+            Para continuar se va a <span class="font-semibold text-red-300">ELIMINAR la base completa</span>
+            y recrearla vacia. Esto es irreversible.
+          </p>
+          <p class="text-xs text-slate-500 mt-2">
+            Alternativa sin borrar nada: cerra esto y cambia el nombre de la base destino.
+          </p>
+          <label class="block text-xs font-medium text-slate-300 mt-4 mb-1">
+            Escribi el nombre de la base para confirmar
+          </label>
+          <input type="text" id="destdb-confirm-input" autocomplete="off" spellcheck="false"
+                 class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm font-mono text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent" />
+        </div>
+      </div>
+      <div class="flex items-center justify-end gap-2 mt-5">
+        <button type="button" id="destdb-cancel" class="px-3 py-2 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-800">Cancelar</button>
+        <button type="button" id="destdb-accept" disabled class="px-4 py-2 rounded-lg bg-red-600 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">Eliminar y clonar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== Sidebar de menu (derecha) ==============================
+       Antes era un panel desplegable dentro del <header>. Ahora es un sidebar
+       fijo que entra desde la derecha y se superpone al fondo con un velo.
+       Vive al final del <body>, fuera del header sticky, para que el `fixed` y
+       el z-index no dependan del contexto de apilamiento de la cabecera.
+       El velo usa un color con alfa, NO backdrop-filter: WebKit dejaba la capa
+       de composicion sin pintar y daba "pantalla oscura sin nada". -->
+  <div id="menu-overlay" class="hidden fixed inset-0 z-40 bg-slate-950/70"></div>
+  <aside id="mobile-menu" aria-hidden="true" class="fixed top-0 right-0 z-50 h-full w-72 max-w-[85vw] translate-x-full transition-transform duration-300 ease-out bg-slate-900 border-l border-slate-800 shadow-2xl shadow-slate-950/80 flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+      <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Menu</span>
+      <button id="menu-close-btn" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white focus:outline-none" aria-label="Cerrar menu">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-1">
+      <div id="menu-user-label" class="px-3 py-1.5 text-xs text-slate-400"></div>
+      <button id="mobile-platforms-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Plataformas</button>
+      <button id="mobile-users-btn" class="hidden w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Usuarios</button>
+      <button id="mobile-account-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-white">Mi cuenta</button>
+      <button id="mobile-logout-btn" class="w-full text-left px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-slate-800 hover:text-red-300">Salir</button>
+    </div>
+  </aside>
 
   <script>
     // ====== Password show/hide toggle ===============================
@@ -1064,10 +1323,10 @@
 
     // ====== View switching ==========================================
     const SECTION_LABELS = {
-      moodle: 'Clonador Moodle',
-      course: 'Clonador de cursos',
-      plugin: 'Clonador de plugins',
-      alexia: 'Clonador Alexia',
+      moodle: 'Moodle',
+      course: 'Cursos',
+      plugin: 'Plugins',
+      alexia: 'Alexia',
       users: 'Gestion de usuarios',
       platforms: 'Administrar plataformas',
     };
@@ -1244,28 +1503,44 @@
       });
     })();
 
-    // ====== Hamburger menu ============================================
+    // ====== Hamburger menu (sidebar derecho) ==========================
     (function() {
       const hamburgerBtn = document.getElementById('hamburger-btn');
       const mobileMenu = document.getElementById('mobile-menu');
+      const overlay = document.getElementById('menu-overlay');
       const iconOpen = document.getElementById('hamburger-icon');
       const iconClose = document.getElementById('hamburger-close-icon');
 
+      // El sidebar nunca se oculta con `hidden`: se desplaza fuera de pantalla
+      // con translate-x-full para que la transicion se vea al abrir y cerrar.
+      // Quien se oculta con `hidden` es el velo, asi no intercepta clicks
+      // cuando el menu esta cerrado.
       function closeMobileMenu() {
-        mobileMenu.classList.add('hidden');
+        mobileMenu.classList.add('translate-x-full');
+        mobileMenu.setAttribute('aria-hidden', 'true');
+        overlay.classList.add('hidden');
+        hamburgerBtn.setAttribute('aria-expanded', 'false');
         iconOpen.classList.remove('hidden');
         iconClose.classList.add('hidden');
       }
 
+      function openMobileMenu() {
+        overlay.classList.remove('hidden');
+        mobileMenu.classList.remove('translate-x-full');
+        mobileMenu.setAttribute('aria-hidden', 'false');
+        hamburgerBtn.setAttribute('aria-expanded', 'true');
+        iconOpen.classList.add('hidden');
+        iconClose.classList.remove('hidden');
+      }
+
       hamburgerBtn.addEventListener('click', () => {
-        const isOpen = !mobileMenu.classList.contains('hidden');
-        if (isOpen) {
-          closeMobileMenu();
-        } else {
-          mobileMenu.classList.remove('hidden');
-          iconOpen.classList.add('hidden');
-          iconClose.classList.remove('hidden');
-        }
+        if (mobileMenu.classList.contains('translate-x-full')) openMobileMenu();
+        else closeMobileMenu();
+      });
+      overlay.addEventListener('click', closeMobileMenu);
+      document.getElementById('menu-close-btn').addEventListener('click', closeMobileMenu);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !mobileMenu.classList.contains('translate-x-full')) closeMobileMenu();
       });
 
       document.getElementById('mobile-account-btn').addEventListener('click', () => {
@@ -2431,7 +2706,6 @@
           destination_use_source_path: false,
         };
         setBusy(true);
-        setMessage('Copia en curso. Mantente en esta pagina hasta recibir el resumen.', 'info');
         try {
           const res = await fetch('/api/cc/copy-course', {
             method: 'POST',
@@ -2444,14 +2718,193 @@
             if (res.status === 403) { toaster.show(data.error || 'Sin permisos.', 'warning'); return; }
             throw new Error(data.error || 'No fue posible copiar el curso.');
           }
-          renderResults(data);
-          setMessage('Proceso finalizado. Revisa el resumen por plataforma.', 'success');
+          // 202: el servidor acuso recibo y sigue trabajando por su cuenta.
+          // attachToCopyJob limpia resultados y mensaje, asi que el aviso va despues.
+          attachToCopyJob(data.job_id);
+          setMessage(`Copia recibida: ${data.total} destino(s). Corre en el servidor, podes cerrar esta pagina.`, 'success');
         } catch (err) {
           setMessage(err.message || 'No fue posible copiar el curso.', 'error');
-        } finally {
           setBusy(false);
+          loadCurrentCopyJob();
         }
       });
+
+      // --- Progreso de la copia (consulta liviana) -------------------------
+      const COPY_POLL_MS = 3000;
+      let ccJobId = null;
+      let ccJobCourseId = null;
+      let ccPollTimer = null;
+      const CC_STAGE = { queued: 'En cola', backup: 'Generando backup del origen',
+                         restore: 'Restaurando en los destinos', done: 'Terminado', error: 'Error' };
+      const CC_STATUS = { pending: 'En cola', running: 'En curso', completed: 'Completada',
+                          failed: 'Fallo', interrupted: 'Interrumpida' };
+      const CC_TARGET = {
+        pending: ['Pendiente', 'text-slate-400 border-slate-700'],
+        running: ['Restaurando', 'text-sky-300 border-sky-700/60'],
+        completed: ['Ok', 'text-emerald-300 border-emerald-700/60'],
+        error: ['Error', 'text-red-300 border-red-700/60'],
+      };
+
+      function isCopyActive(status) { return status === 'pending' || status === 'running'; }
+
+      function attachToCopyJob(jobId) {
+        ccJobId = jobId;
+        clearResults();
+        document.getElementById('cc-progress-card').classList.remove('hidden');
+        pollCopyJob();
+      }
+
+      function pollCopyJob() {
+        if (!ccJobId) return;
+        if (ccPollTimer) clearInterval(ccPollTimer);
+        const tick = async () => {
+          try {
+            const job = await api(`/api/cc/copy-jobs/${ccJobId}`);
+            await renderCopyProgress(job);
+            if (!isCopyActive(job.status)) {
+              clearInterval(ccPollTimer); ccPollTimer = null;
+              setBusy(false);
+            }
+          } catch (e) { console.error('Copy poll error:', e); }
+        };
+        tick();
+        ccPollTimer = setInterval(tick, COPY_POLL_MS);
+      }
+
+      async function renderCopyProgress(job) {
+        const g = id => document.getElementById(id);
+        const active = isCopyActive(job.status);
+        g('cc-pg-count').textContent = `${job.done_count || 0} / ${job.total || 0}`;
+        g('cc-pg-ok').textContent = job.completed_count || 0;
+        g('cc-pg-err').textContent = job.error_count || 0;
+        g('cc-pg-bar').style.width = (job.progress || 0) + '%';
+        g('cc-pg-spinner').classList.toggle('hidden', !active);
+        g('cc-pg-done-icon').classList.toggle('hidden', active);
+        g('cc-pg-close-btn').classList.toggle('hidden', active);
+        g('cc-pg-logs-btn').classList.toggle('hidden', active || !job.has_detail);
+
+        let label;
+        if (active) {
+          label = CC_STAGE[job.stage] || CC_STATUS[job.status] || job.status;
+          if (job.current_target) label += `: ${job.current_target}`;
+        } else if (job.status === 'completed') {
+          label = `Completada — ${job.completed_count || 0} de ${job.total} destino(s) restaurados`;
+        } else {
+          label = `${CC_STATUS[job.status] || job.status}${job.error ? ': ' + job.error : ''}`;
+        }
+        if (job.course_id) { ccJobCourseId = job.course_id; label += `  ·  curso ${job.course_id}`; }
+        g('cc-pg-label').textContent = label;
+
+        // Los destinos son pocos (hasta 35): se traen completos, sin paginar.
+        let data = null;
+        try {
+          data = await api(`/api/cc/copy-jobs/${job.id}/targets`);
+          g('cc-pg-targets').innerHTML = data.targets.map(t => {
+            const [lbl, cls] = CC_TARGET[t.status] || [t.status, 'text-slate-400 border-slate-700'];
+            const detail = t.error || t.message || '';
+            const link = t.result && t.result.course_url
+              ? ` <a href="${escapeHtml(t.result.course_url)}" target="_blank" rel="noopener noreferrer" class="text-primary-400 hover:text-primary-300 underline">abrir</a>`
+              : '';
+            return `<div class="flex items-start gap-2 text-[11px] py-0.5">
+              <span class="px-1.5 py-0.5 rounded-full border ${cls} shrink-0">${lbl}</span>
+              <span class="text-slate-200 shrink-0">${escapeHtml(t.server_name || '')}</span>
+              <span class="text-slate-500 min-w-0">${escapeHtml(detail)}${link}</span>
+            </div>`;
+          }).join('');
+        } catch (e) { /* el progreso ya se pinto; el detalle es secundario */ }
+
+        // --- Bloque de URLs de cursos creados ---
+        const urlsEl = g('cc-pg-urls');
+        if (!active && data && data.targets) {
+          const successTargets = data.targets.filter(t => t.result && t.result.course_url);
+          if (successTargets.length > 0) {
+            const allUrls = successTargets.map(t => t.result.course_url).join('\n');
+            const urlRows = successTargets.map((t, i) => {
+              const url = t.result.course_url;
+              return `<div class="flex items-center gap-2 py-1.5 ${i < successTargets.length - 1 ? 'border-b border-slate-700/50' : ''}">
+                <svg class="w-4 h-4 text-primary-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                <span class="text-xs text-slate-200 font-medium shrink-0">${escapeHtml(t.server_name || '')}</span>
+                <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"
+                   class="text-xs text-primary-400 hover:text-primary-300 underline break-all min-w-0">${escapeHtml(url)}</a>
+                <button type="button" data-copy-url="${escapeHtml(url)}"
+                   class="cc-copy-single-url ml-auto text-[10px] px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700 shrink-0 transition-colors">Copiar</button>
+              </div>`;
+            }).join('');
+            urlsEl.innerHTML = `
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-xs font-semibold text-primary-300 uppercase tracking-wide flex items-center gap-1.5">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                  URLs de cursos creados (${successTargets.length})
+                </h4>
+                <button type="button" id="cc-pg-copy-all-urls" class="text-[10px] px-2.5 py-1 rounded-lg border border-primary-600/50 text-primary-300 hover:bg-primary-800/30 transition-colors">
+                  Copiar todas
+                </button>
+              </div>
+              <div>${urlRows}</div>
+            `;
+            urlsEl.classList.remove('hidden');
+            // Copiar URL individual
+            urlsEl.querySelectorAll('.cc-copy-single-url').forEach(btn => {
+              btn.addEventListener('click', function() {
+                const url = this.getAttribute('data-copy-url');
+                navigator.clipboard.writeText(url).then(() => {
+                  this.textContent = 'Copiado!';
+                  setTimeout(() => this.textContent = 'Copiar', 1500);
+                });
+              });
+            });
+            // Copiar todas las URLs
+            document.getElementById('cc-pg-copy-all-urls').addEventListener('click', function() {
+              navigator.clipboard.writeText(allUrls).then(() => {
+                this.textContent = 'Copiadas!';
+                setTimeout(() => this.textContent = 'Copiar todas', 1500);
+              });
+            });
+          } else {
+            urlsEl.classList.add('hidden');
+          }
+        } else {
+          urlsEl.classList.add('hidden');
+        }
+      }
+
+      document.getElementById('cc-pg-close-btn').addEventListener('click', () => {
+        ccJobId = null;
+        if (ccPollTimer) { clearInterval(ccPollTimer); ccPollTimer = null; }
+        document.getElementById('cc-progress-card').classList.add('hidden');
+        document.getElementById('cc-pg-urls').classList.add('hidden');
+        clearResults();
+        setBusy(false);
+      });
+
+      document.getElementById('cc-pg-logs-btn').addEventListener('click', async () => {
+        if (!ccJobId) return;
+        try {
+          const data = await api(`/api/cc/copy-jobs/${ccJobId}/logs`);
+          renderResults({
+            course_id: ccJobCourseId != null ? ccJobCourseId : '-',
+            source: data.source,
+            results: data.results,
+            summary: {
+              total: data.results.length,
+              success: data.results.filter(r => r.success).length,
+              failed: data.results.filter(r => !r.success).length,
+            },
+          });
+        } catch (e) { toaster.show(e.message || 'No hay logs disponibles', 'warning'); }
+      });
+
+      async function loadCurrentCopyJob() {
+        try {
+          const res = await api('/api/cc/copy-jobs/current');
+          const job = res.job;
+          if (!job) return;
+          ccJobId = job.id;
+          document.getElementById('cc-progress-card').classList.remove('hidden');
+          await renderCopyProgress(job);
+          if (isCopyActive(job.status)) { setBusy(true); pollCopyJob(); }
+        } catch (e) { console.error('No se pudo consultar la copia actual:', e); }
+      }
 
       // ---- Lazy entry point --------------------------------------------
       window.__ccLoad = async function () {
@@ -2459,16 +2912,26 @@
         state.loaded = true;
         setMode('reference-platform');
         await loadServers();
+        // La copia vive en el servidor: al entrar se pregunta si hay una en
+        // curso y se vuelve a mostrar su progreso, igual que en el lote Alexia.
+        loadCurrentCopyJob();
       };
     })();
 
     // ====== Platforms admin =========================================
     (function () {
-      const state = { servers: [], editingIndex: null };
+      // verify: resultado por indice de plataforma. verifyOpen: que detalles
+      // estan desplegados. verifyScope: los indices de la ultima corrida masiva.
+      const state = {
+        servers: [], editingIndex: null,
+        verify: {}, verifyOpen: new Set(), verifyScope: [],
+      };
       const form = document.getElementById('pf-form');
       const formTitle = document.getElementById('pf-form-title');
       const submitBtn = document.getElementById('pf-submit');
       const resetBtn = document.getElementById('pf-reset-btn');
+      const modalEl = document.getElementById('pf-modal');
+      const addBtn = document.getElementById('pf-add-btn');
       const listEl = document.getElementById('pf-list');
       const statusEl = document.getElementById('pf-status');
       const messageEl = document.getElementById('pf-message');
@@ -2498,6 +2961,7 @@
       function collectPayload() {
         return {
           name: val('name'),
+          url: val('url'),
           host: val('host'),
           port: Number.parseInt(val('port') || '22', 10),
           ssh_user: val('ssh_user'),
@@ -2515,7 +2979,8 @@
       }
       function validate(p) {
         if (!p.name) return 'Ingresa el nombre visible.';
-        if (!p.host) return 'Ingresa el host SSH.';
+        if (p.url && !/^https?:\/\/[^\s/]+/.test(p.url)) return 'La URL debe empezar con http:// o https://';
+        if (!p.host) return 'Ingresa la direccion IP (host SSH).';
         if (!p.port || Number.isNaN(p.port) || p.port < 1 || p.port > 65535) return 'Puerto SSH invalido.';
         if (!p.ssh_user) return 'Ingresa el usuario SSH.';
         if (!p.moodle_path) return 'Ingresa la ruta Moodle.';
@@ -2536,8 +3001,34 @@
         sshKeyHint.textContent = 'Opcional.';
         sudoPwdHint.textContent = 'Solo si sudo requiere contrasena.';
         setError('');
+      }
+
+      // ---- Modal del formulario -------------------------------------
+      function openModal() {
+        modalEl.classList.remove('hidden');
+        modalEl.scrollTop = 0;
         document.getElementById('pf-name').focus();
       }
+      function closeModal() {
+        modalEl.classList.add('hidden');
+        // Se limpia siempre al cerrar, incluso con "Cancelar": si no,
+        // state.editingIndex sigue apuntando a la plataforma que se estaba
+        // editando y el formulario conserva sus datos hasta el proximo abrir.
+        resetForm();
+      }
+      function openCreate() { resetForm(); openModal(); }
+
+      addBtn.addEventListener('click', openCreate);
+      document.getElementById('pf-modal-close').addEventListener('click', closeModal);
+      document.getElementById('pf-modal-cancel').addEventListener('click', closeModal);
+      // Cierra al hacer click en el velo, pero no al hacer click dentro del
+      // panel: el velo es este mismo elemento, asi que solo cuenta cuando el
+      // target es el, no un descendiente.
+      modalEl.addEventListener('click', (e) => { if (e.target === modalEl) closeModal(); });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modalEl.classList.contains('hidden')) closeModal();
+      });
+
       function startEdit(index) {
         const s = state.servers.find(x => x.index === index);
         if (!s) return;
@@ -2546,6 +3037,7 @@
         formTitle.textContent = `Editar plataforma: ${s.name}`;
         submitBtn.textContent = 'Actualizar plataforma';
         setVal('name', s.name);
+        setVal('url', s.url || '');
         setVal('host', s.host);
         setVal('port', s.port);
         setVal('ssh_user', s.ssh_user);
@@ -2563,7 +3055,7 @@
         sshKeyHint.textContent = s.has_ssh_key_passphrase ? 'Passphrase guardada. Dejala vacia para conservarla.' : 'Opcional.';
         sudoPwdHint.textContent = s.has_sudo_password ? 'Contrasena sudo guardada. Dejala vacia para conservarla.' : 'Solo si sudo requiere contrasena.';
         setError('');
-        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        openModal();
       }
 
       async function load() {
@@ -2576,43 +3068,65 @@
           render();
         } catch (err) {
           statusEl.textContent = 'Inventario no disponible';
-          listEl.innerHTML = `<div class="text-xs text-red-300 text-center py-6">${esc(err.message)}</div>`;
+          listEl.innerHTML = `<div class="col-span-full text-xs text-red-300 text-center py-6">${esc(err.message)}</div>`;
         }
       }
       function render() {
         if (!state.servers.length) {
-          listEl.innerHTML = '<div class="text-xs text-slate-500 text-center py-6">No hay plataformas.</div>';
+          listEl.innerHTML = '<div class="col-span-full text-xs text-slate-500 text-center py-6">No hay plataformas.</div>';
           return;
+        }
+        // Cada capacidad se deriva en el backend de los campos del inventario
+        // (ver _server_capabilities). Cuando falta algo se lista, porque el
+        // motivo es justamente lo que hay que completar al editarla.
+        function capRow(label, cap) {
+          const c = cap || { ok: false, missing: [] };
+          const icon = c.ok
+            ? '<svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>'
+            : '<svg class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>';
+          const missing = !c.ok && c.missing && c.missing.length
+            ? `<span class="text-slate-500"> — falta ${esc(c.missing.join(', '))}</span>`
+            : '';
+          return `<div class="flex items-start gap-1.5">${icon}<span class="${c.ok ? 'text-slate-300' : 'text-slate-500'}">${label}${missing}</span></div>`;
         }
         listEl.innerHTML = state.servers.map(s => `
           <article class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
             <div class="flex items-start justify-between gap-3">
-              <div>
+              <div class="min-w-0">
                 <div class="text-sm font-medium text-slate-100">${esc(s.name)}</div>
-                <div class="text-[11px] text-slate-400 mt-0.5">${esc(s.host)}:${s.port} · ${esc(s.ssh_user)}</div>
+                ${s.url
+                  ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-primary-400 hover:text-primary-300 underline break-all mt-0.5 inline-block">${esc(s.url)}</a>`
+                  : '<div class="text-[11px] text-slate-600 italic mt-0.5">Sin URL configurada</div>'}
               </div>
-              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 whitespace-nowrap">${esc(s.auth_method)}</span>
+              ${s.has_ssh_key ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 whitespace-nowrap">Llave SSH</span>' : ''}
             </div>
-            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-400">
-              <span class="truncate">Moodle: <span class="text-slate-300">${esc(s.moodle_path)}</span></span>
-              <span>Web: <span class="text-slate-300">${esc(s.web_user)}:${esc(s.web_group)}</span></span>
-              ${s.moodledata_path ? `<span class="truncate sm:col-span-2">Moodledata: <span class="text-slate-300">${esc(s.moodledata_path)}</span></span>` : ''}
-              ${s.vhost_path ? `<span class="truncate sm:col-span-2">Vhost: <span class="text-slate-300">${esc(s.vhost_path)}</span></span>` : ''}
-              <span>Sudo con contrasena: <span class="text-slate-300">${s.sudo_requires_password ? 'Si' : 'No'}</span></span>
-              <span>Contrasena SSH: <span class="text-slate-300">${s.has_ssh_password ? 'Si' : 'No'}</span></span>
+            <div class="mt-2 text-[11px] text-slate-400">
+              Direccion IP: <span class="text-slate-300 font-mono">${esc(s.host)}</span>
+            </div>
+            <div class="mt-2 space-y-1 text-[11px]">
+              ${capRow('Acepta Instalacion Plugin', s.capabilities && s.capabilities.plugin_install)}
+              ${capRow('Acepta Clonacion de Cursos', s.capabilities && s.capabilities.course_clone)}
+              ${capRow('Acepta Clonacion de Plataforma', s.capabilities && s.capabilities.platform_clone)}
             </div>
             <div class="mt-3 flex flex-wrap gap-2">
+              <button class="text-[11px] px-2.5 py-1 rounded border border-primary-600/60 text-primary-300 hover:bg-primary-900/30" data-action="verify" data-index="${s.index}">Verificar</button>
               <button class="text-[11px] px-2.5 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800" data-action="edit" data-index="${s.index}">Editar</button>
               <button class="text-[11px] px-2.5 py-1 rounded border border-red-700/60 text-red-300 hover:bg-red-900/30" data-action="delete" data-index="${s.index}">Eliminar</button>
             </div>
+            <div data-verify-slot="${s.index}"></div>
           </article>
         `).join('');
+        // Repinta los resultados de verificaciones anteriores: render() se
+        // llama tambien despues de guardar o borrar, y perderlos obligaria a
+        // volver a verificar las 35 por un cambio en una.
+        state.servers.forEach(s => paintVerify(s.index));
       }
       listEl.addEventListener('click', async (e) => {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
         const idx = Number.parseInt(btn.dataset.index, 10);
         if (btn.dataset.action === 'edit') return startEdit(idx);
+        if (btn.dataset.action === 'verify') return verifyOne(idx);
         if (btn.dataset.action === 'delete') {
           const s = state.servers.find(x => x.index === idx);
           if (!s) return;
@@ -2650,6 +3164,7 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || 'No fue posible guardar.');
           setMessage(data.message, 'success');
+          closeModal();
           resetForm();
           await load();
         } catch (err) {
@@ -2660,6 +3175,198 @@
         }
       });
       resetBtn.addEventListener('click', resetForm);
+
+      // ====== Verificacion de plataformas ============================
+      // Un request por plataforma (POST /api/cc/admin/servers/<i>/verify) y la
+      // UI resuelve varias en paralelo. Un unico request que verificara las 35
+      // tardaria minutos, se arriesgaria al timeout de nginx y no mostraria
+      // nada hasta el final.
+      const verifyAllBtn = document.getElementById('pf-verify-all-btn');
+      const verifyFailedBtn = document.getElementById('pf-verify-failed-btn');
+      const summaryEl = document.getElementById('pf-verify-summary');
+      const summaryTextEl = document.getElementById('pf-verify-summary-text');
+      const summaryCountsEl = document.getElementById('pf-verify-counts');
+      const summaryBarEl = document.getElementById('pf-verify-bar');
+      const VERIFY_CONCURRENCY = 6;
+      let verifying = false;
+
+      const ICONS = {
+        ok: '<svg class="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>',
+        fail: '<svg class="w-3.5 h-3.5 text-amber-400 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>',
+        skip: '<svg class="w-3.5 h-3.5 text-slate-600 shrink-0 mt-px" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>',
+      };
+
+      function slotFor(index) {
+        return listEl.querySelector(`[data-verify-slot="${index}"]`);
+      }
+
+      // Los resultados se guardan por FIRMA de la plataforma, no por indice: el
+      // indice no la identifica de forma estable (al borrar una, todas las de
+      // abajo corren un lugar y el resultado quedaria pegado a la vecina). Con
+      // la firma, borrar una plataforma no toca los resultados de las demas, y
+      // editar una descarta el suyo — que es lo correcto, porque el resultado
+      // anterior ya no describe los datos nuevos.
+      function sigOf(s) {
+        return [s.name, s.url, s.host, s.port, s.ssh_user, s.ssh_key_path,
+                s.moodle_path, s.moodledata_path, s.vhost_path].join('|');
+      }
+      function stateOf(index) {
+        const server = state.servers.find(x => x.index === index);
+        return server ? state.verify[sigOf(server)] : undefined;
+      }
+
+      function paintVerify(index) {
+        const slot = slotFor(index);
+        if (!slot) return;
+        const server = state.servers.find(x => x.index === index);
+        const sig = server ? sigOf(server) : '';
+        const st = state.verify[sig];
+        if (!st) { slot.innerHTML = ''; return; }
+
+        if (st.running) {
+          slot.innerHTML = `<div class="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
+            <div class="w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+            Verificando...</div>`;
+          return;
+        }
+        if (st.error) {
+          slot.innerHTML = `<div class="mt-2 rounded border border-red-600/40 bg-red-950/20 px-2.5 py-1.5 text-[11px] text-red-300">
+            No se pudo verificar: ${esc(st.error)}</div>`;
+          return;
+        }
+
+        const r = st.result;
+        const isOk = r.status === 'ok';
+        // Cuando requiere revision el detalle se abre solo: es justamente lo
+        // que hay que leer. Cuando pasa, queda plegado para que 35 plataformas
+        // correctas no llenen la pantalla.
+        const open = state.verifyOpen.has(sig) || !isOk;
+        const hora = (r.checked_at || '').slice(11, 16);
+        const badge = isOk
+          ? `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-600/50 text-emerald-300">${ICONS.ok}Paso el test</span>`
+          : `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600/50 text-amber-300">${ICONS.fail}Requiere revision (${r.failed_count})</span>`;
+        const lines = open ? r.checks.map(c => `
+          <div class="flex items-start gap-1.5 py-0.5">
+            ${ICONS[c.status] || ICONS.skip}
+            <span class="${c.status === 'fail' ? 'text-amber-200' : c.status === 'skip' ? 'text-slate-500' : 'text-slate-400'}">
+              <span class="${c.status === 'fail' ? 'font-medium' : ''}">${esc(c.label)}:</span> ${esc(c.detail)}
+            </span>
+          </div>`).join('') : '';
+
+        slot.innerHTML = `
+          <div class="mt-2 rounded border ${isOk ? 'border-emerald-800/50 bg-emerald-950/10' : 'border-amber-700/50 bg-amber-950/10'} px-2.5 py-2">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              ${badge}
+              <div class="flex items-center gap-2 text-[10px] text-slate-500">
+                ${hora ? `<span>${esc(hora)}</span>` : ''}
+                <button type="button" data-verify-toggle="${index}" class="underline hover:text-slate-300">${open ? 'ocultar detalle' : `ver detalle (${r.checks.length})`}</button>
+              </div>
+            </div>
+            ${open ? `<div class="mt-1.5 text-[11px] space-y-0">${lines}</div>` : ''}
+          </div>`;
+      }
+
+      listEl.addEventListener('click', (e) => {
+        const t = e.target.closest('[data-verify-toggle]');
+        if (!t) return;
+        const i = Number.parseInt(t.dataset.verifyToggle, 10);
+        const server = state.servers.find(x => x.index === i);
+        if (!server) return;
+        const sig = sigOf(server);
+        if (state.verifyOpen.has(sig)) state.verifyOpen.delete(sig);
+        else state.verifyOpen.add(sig);
+        paintVerify(i);
+      });
+
+      async function verifyOne(index) {
+        const server = state.servers.find(x => x.index === index);
+        if (!server) return undefined;
+        const sig = sigOf(server);
+        state.verify[sig] = { running: true };
+        paintVerify(index);
+        try {
+          const res = await fetch(`/api/cc/admin/servers/${index}/verify`, { method: 'POST' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+          state.verify[sig] = { result: data };
+        } catch (err) {
+          state.verify[sig] = { error: err.message || 'error desconocido' };
+        }
+        paintVerify(index);
+        refreshFailedBtn();
+        return state.verify[sig];
+      }
+
+      function refreshFailedBtn() {
+        const failed = failedIndexes();
+        verifyFailedBtn.classList.toggle('hidden', failed.length === 0 || verifying);
+        verifyFailedBtn.textContent = `Reverificar las ${failed.length} que requieren revision`;
+      }
+
+      function failedIndexes() {
+        return state.servers
+          .map(s => s.index)
+          .filter(i => {
+            const st = stateOf(i);
+            return st && !st.running && (st.error || (st.result && st.result.status !== 'ok'));
+          });
+      }
+
+      function paintSummary(done, total, finished) {
+        summaryEl.classList.remove('hidden');
+        const scope = state.verifyScope || [];
+        let ok = 0, review = 0, error = 0, pending = 0;
+        scope.forEach(i => {
+          const st = stateOf(i);
+          if (!st || st.running) pending++;
+          else if (st.error) error++;
+          else if (st.result.status === 'ok') ok++;
+          else review++;
+        });
+        summaryTextEl.textContent = finished
+          ? `Verificacion terminada: ${total} plataforma(s) comprobada(s).`
+          : `Verificando ${done} de ${total}...`;
+        summaryCountsEl.innerHTML = [
+          `<span class="text-emerald-300">${ok} paso el test</span>`,
+          `<span class="text-amber-300">${review} requiere${review === 1 ? '' : 'n'} revision</span>`,
+          error ? `<span class="text-red-300">${error} sin poder verificar</span>` : '',
+          pending ? `<span class="text-slate-400">${pending} pendiente${pending === 1 ? '' : 's'}</span>` : '',
+        ].filter(Boolean).join('<span class="text-slate-700">|</span>');
+        summaryBarEl.style.width = total ? `${Math.round((done / total) * 100)}%` : '0%';
+      }
+
+      async function verifyMany(indexes) {
+        if (verifying || !indexes.length) return;
+        verifying = true;
+        verifyAllBtn.disabled = true;
+        verifyFailedBtn.classList.add('hidden');
+        state.verifyScope = indexes.slice();
+        const queue = indexes.slice();
+        const total = indexes.length;
+        let done = 0;
+        paintSummary(0, total, false);
+        const worker = async () => {
+          while (queue.length) {
+            const i = queue.shift();
+            await verifyOne(i);
+            done += 1;
+            paintSummary(done, total, false);
+          }
+        };
+        try {
+          await Promise.all(
+            Array.from({ length: Math.min(VERIFY_CONCURRENCY, total) }, worker)
+          );
+        } finally {
+          verifying = false;
+          verifyAllBtn.disabled = false;
+          paintSummary(total, total, true);
+          refreshFailedBtn();
+        }
+      }
+
+      verifyAllBtn.addEventListener('click', () => verifyMany(state.servers.map(s => s.index)));
+      verifyFailedBtn.addEventListener('click', () => verifyMany(failedIndexes()));
 
       window.__pfLoad = load;
     })();
@@ -2741,17 +3448,17 @@
         return { progress, phase };
       }
 
-      function buildPayload(dryRun) {
+      function buildPayload(dryRun, dropDestDb) {
         const fd = new FormData(form);
         const deployTarget = String(fd.get('deploy_target') || 'local').trim();
-        const sourceMode = String(fd.get('source_mode') || 'local').trim();
+        const sourceOrigin = String(fd.get('source_origin') || 'inventory').trim();
         return {
-          source_mode: sourceMode,
-          source_index: sourceMode === 'local' ? Number.parseInt(String(fd.get('source_index') || '-1'), 10) : undefined,
-          source_host: sourceMode === 'remote' ? String(fd.get('source_host') || '').trim() : '',
-          source_dir: sourceMode === 'remote' ? String(fd.get('source_dir') || '').trim() : '',
-          source_data: sourceMode === 'remote' ? String(fd.get('source_data') || '').trim() : '',
-          source_vhost: sourceMode === 'remote' ? String(fd.get('source_vhost') || '').trim() : '',
+          source_origin: sourceOrigin,
+          source_index: sourceOrigin === 'inventory' ? Number.parseInt(String(fd.get('source_index') || '-1'), 10) : undefined,
+          source_host: sourceOrigin === 'manual' ? String(fd.get('source_host') || '').trim() : '',
+          source_dir: sourceOrigin === 'manual' ? String(fd.get('source_dir') || '').trim() : '',
+          source_data: sourceOrigin === 'manual' ? String(fd.get('source_data') || '').trim() : '',
+          source_vhost: sourceOrigin === 'manual' ? String(fd.get('source_vhost') || '').trim() : '',
           maintenance_source: fd.get('maintenance_source') === 'on',
           new_key: String(fd.get('new_key') || '').trim(),
           new_domain: String(fd.get('new_domain') || '').trim(),
@@ -2768,8 +3475,47 @@
           opt_nginx: fd.get('opt_nginx') === 'on',
           opt_certbot: fd.get('opt_certbot') === 'on',
           opt_cron: fd.get('opt_cron') === 'on',
+          drop_dest_db: dropDestDb,
           dry_run: dryRun
         };
+      }
+
+      // Confirmacion de borrado de la BD destino ------------------------------
+      // Resuelve a true solo si el usuario escribio el nombre de la base y
+      // acepto. Si la base no tiene tablas no se muestra nada y sigue de largo.
+      function confirmDropDestDb(dbName, tables) {
+        const modal = document.getElementById('destdb-modal');
+        const input = document.getElementById('destdb-confirm-input');
+        const accept = document.getElementById('destdb-accept');
+        const cancel = document.getElementById('destdb-cancel');
+        document.getElementById('destdb-name').textContent = dbName;
+        document.getElementById('destdb-tables').textContent = String(tables);
+        input.value = '';
+        accept.disabled = true;
+        modal.classList.remove('hidden');
+        input.focus();
+
+        return new Promise(resolve => {
+          function cleanup(result) {
+            modal.classList.add('hidden');
+            input.removeEventListener('input', onInput);
+            accept.removeEventListener('click', onAccept);
+            cancel.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
+            resolve(result);
+          }
+          function onInput() { accept.disabled = input.value.trim() !== dbName; }
+          function onAccept() { if (!accept.disabled) cleanup(true); }
+          function onCancel() { cleanup(false); }
+          function onKey(e) {
+            if (e.key === 'Escape') cleanup(false);
+            if (e.key === 'Enter' && !accept.disabled) cleanup(true);
+          }
+          input.addEventListener('input', onInput);
+          accept.addEventListener('click', onAccept);
+          cancel.addEventListener('click', onCancel);
+          document.addEventListener('keydown', onKey);
+        });
       }
 
       async function pollJob(jobId) {
@@ -2798,10 +3544,32 @@
       }
 
       async function runClone(dryRun) {
+        let dropDestDb = false;
         if (!hasPermission('can_access_moodle_cloner')) {
           toaster.show('No tienes permiso para usar el clonador Moodle.', 'warning');
           return;
         }
+        // Se consulta ANTES de lanzar el job: si la base destino ya tiene datos
+        // (p.ej. una clonacion anterior que quedo a medias) hay que pedir
+        // permiso explicito para eliminarla, no descubrirlo leyendo el log.
+        const destDbName = String(new FormData(form).get('dest_db') || '').trim();
+        if (/^[A-Za-z0-9_]+$/.test(destDbName)) {
+          try {
+            const st = await api(`/api/clone/dest-db?name=${encodeURIComponent(destDbName)}`);
+            if (st && st.tables > 0) {
+              dropDestDb = await confirmDropDestDb(destDbName, st.tables);
+              if (!dropDestDb) {
+                toaster.show('Cancelado. Cambia el nombre de la base destino si no queres eliminarla.', 'warning');
+                return;
+              }
+            }
+          } catch (err) {
+            // No poder consultarlo no debe bloquear el clonado: el script hace
+            // la misma verificacion y aborta por su cuenta si hace falta.
+            toaster.show(`No se pudo verificar la base destino: ${err.message}`, 'warning');
+          }
+        }
+
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         currentJobId = null;
         outputEl.textContent = '';
@@ -2809,7 +3577,7 @@
         setStatus(dryRun ? 'Iniciando simulacion...' : 'Iniciando clonacion...', 'running');
         setProgress(2, 'Fase: validando parametros', 'running');
         try {
-          const payload = buildPayload(dryRun);
+          const payload = buildPayload(dryRun, dropDestDb);
           const res = await fetch('/api/clone', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2865,8 +3633,9 @@
       const dbInput = form.querySelector('input[name="dest_db"]');
       const deployTargetInput = form.querySelector('select[name="deploy_target"]');
       const remoteHostInput = form.querySelector('input[name="remote_host"]');
-      const sourceModeInput = form.querySelector('select[name="source_mode"]');
+      const sourceModeInput = form.querySelector('select[name="source_origin"]');
       const sourceIndexInput = form.querySelector('select[name="source_index"]');
+      const sourceHintEl = document.getElementById('clone-source-hint');
       const remoteSourceFields = document.getElementById('remote-source-fields');
 
       function suggestFromKey() {
@@ -2894,8 +3663,8 @@
       }
 
       function updateSourceModeUi() {
-        const sourceMode = (sourceModeInput.value || 'local').trim();
-        const isRemoteSource = sourceMode === 'remote';
+        const sourceOrigin = (sourceModeInput.value || 'inventory').trim();
+        const isRemoteSource = sourceOrigin === 'manual';
         remoteSourceFields.classList.toggle('hidden', !isRemoteSource);
         sourceIndexInput.disabled = isRemoteSource;
         sourceIndexInput.classList.toggle('opacity-60', isRemoteSource);
@@ -2906,12 +3675,19 @@
           const res = await fetch('/api/cc/servers');
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(payload.error || 'No se pudo cargar inventario.');
-          const servers = (payload.servers || []).slice().sort(
+          const all = (payload.servers || []).slice().sort(
             (a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' })
           );
+          // Solo las plataformas que aceptan clonacion de plataforma. Este
+          // modulo necesita moodle_path + moodledata_path + vhost_path y llave
+          // SSH (autentica con BatchMode, no acepta contrasena); ofrecer las
+          // demas solo mueve el error al medio del job, cuando el origen ya
+          // quedo en modo mantenimiento.
+          const servers = all.filter(s => s.capabilities && s.capabilities.platform_clone && s.capabilities.platform_clone.ok);
+          const excluded = all.length - servers.length;
           sourceIndexInput.innerHTML = servers.length
             ? '<option value="">Selecciona instancia origen...</option>'
-            : '<option value="">No hay plataformas en el inventario</option>';
+            : '<option value="">No hay plataformas aptas para clonar</option>';
           servers.forEach(s => {
             const o = document.createElement('option');
             o.value = s.index;
@@ -2919,6 +3695,20 @@
             sourceIndexInput.appendChild(o);
           });
           if (servers.length) sourceIndexInput.value = String(servers[0].index);
+          if (sourceHintEl) {
+            if (!all.length) {
+              sourceHintEl.textContent = 'No hay plataformas en el inventario.';
+              sourceHintEl.className = 'mt-1 text-xs text-amber-400';
+            } else if (!servers.length) {
+              sourceHintEl.textContent = `Ninguna de las ${all.length} plataformas del inventario acepta clonacion de plataforma. Completa ruta moodledata, ruta vhost Nginx y llave SSH en Administrar plataformas.`;
+              sourceHintEl.className = 'mt-1 text-xs text-amber-400';
+            } else {
+              sourceHintEl.textContent = excluded
+                ? `Solo se listan las ${servers.length} plataformas que aceptan clonacion de plataforma (${excluded} excluida${excluded === 1 ? '' : 's'} por datos incompletos en el inventario).`
+                : 'Selecciona la instancia que se usara como origen para la clonacion.';
+              sourceHintEl.className = 'mt-1 text-xs text-slate-500';
+            }
+          }
         } catch (err) {
           sourceIndexInput.innerHTML = `<option value="">Error: ${err.message}</option>`;
         }
@@ -2949,7 +3739,6 @@
       const selectedIndexes = new Set();
       let currentJobId = null;
       let pollTimer = null;
-      let numServersForJob = 0;
 
       const dropzone = document.getElementById('pi-dropzone');
       const fileInput = document.getElementById('pi-file-input');
@@ -3000,8 +3789,8 @@
         fileSizeEl.textContent = formatSize(file.size);
         fileInfo.classList.remove('hidden');
         dropzone.classList.add('hidden');
-        inferType(file.name);
         updateInstallBtn();
+        detectType(file);
       }
 
       function clearFile() {
@@ -3013,17 +3802,64 @@
         updateInstallBtn();
       }
 
-      function inferType(filename) {
+      // Conjetura instantanea por nombre, solo para no dejar el selector vacio
+      // mientras viaja la deteccion real. Se acepta el prefijo en cualquier
+      // posicion delimitada para cubrir nombres tipo `moodle-mod_hvp.zip`.
+      function guessTypeFromName(filename) {
         const stem = filename.replace(/\.zip$/i, '').toLowerCase();
-        for (const t of pluginTypes) {
-          if (stem.startsWith(t.key + '_')) {
-            typeSelect.value = t.path;
-            typeHint.textContent = 'Auto-detectado: ' + t.key + ' (' + t.path + ')';
-            typeHint.classList.remove('hidden');
-            return;
-          }
+        const ordered = pluginTypes.slice().sort((a, b) => b.key.length - a.key.length);
+        for (const t of ordered) {
+          if (new RegExp('(?:^|[-.])' + t.key + '_').test(stem)) return t;
         }
-        typeHint.classList.add('hidden');
+        return null;
+      }
+
+      function showTypeHint(text, tone) {
+        typeHint.textContent = text;
+        typeHint.classList.remove('hidden', 'text-slate-500', 'text-emerald-400', 'text-amber-400');
+        typeHint.classList.add(
+          tone === 'ok' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-slate-500'
+        );
+      }
+
+      // El tipo real esta en `$plugin->component` del version.php, dentro del
+      // ZIP: el nombre del archivo y el de la carpeta no son fuentes fiables
+      // (`mod_hvp` viene como carpeta `hvp`). Por eso se manda el archivo al
+      // backend, que lo lee y responde el tipo.
+      async function detectType(file) {
+        const guess = guessTypeFromName(file.name);
+        if (guess) {
+          typeSelect.value = guess.path;
+          updateInstallBtn();
+        }
+        showTypeHint('Detectando tipo de plugin...', 'muted');
+        try {
+          const fd = new FormData();
+          fd.append('plugin_zip', file);
+          const res = await fetch('/api/plugin/detect', { method: 'POST', body: fd });
+          const info = await res.json();
+          if (!res.ok) throw new Error(info.error || `HTTP ${res.status}`);
+          if (file !== selectedFile) return;   // el usuario ya cambio de archivo
+
+          if (info.type_path) {
+            typeSelect.value = info.type_path;
+            const label = info.type_key + ' (/' + info.type_path + ')';
+            if (info.source === 'version.php') {
+              showTypeHint(`Detectado ${label} desde version.php: ${info.component}`, 'ok');
+            } else {
+              showTypeHint(`Tipo probable ${label}, deducido del nombre. Sin version.php legible: verificalo.`, 'warn');
+            }
+          } else {
+            showTypeHint(
+              `No se pudo determinar el tipo${info.folder ? ` (carpeta: ${info.folder})` : ''}. Selecciona el tipo a mano.`,
+              'warn'
+            );
+          }
+        } catch (err) {
+          showTypeHint(`No se pudo detectar el tipo: ${err.message}. Selecciona el tipo a mano.`, 'warn');
+        } finally {
+          updateInstallBtn();
+        }
       }
 
       dropzone.addEventListener('click', () => fileInput.click());
@@ -3111,7 +3947,8 @@
       function setProgress(pct, phase, tone) {
         const safe = Math.max(0, Math.min(100, Math.round(pct)));
         percentEl.textContent = safe + '%';
-        phaseEl.textContent = phase;
+        // phase vacio = no tocar la etiqueta (la escribe renderPluginProgress).
+        if (phase) phaseEl.textContent = phase;
         progressBar.style.width = safe + '%';
         progressBar.classList.remove('bg-primary-500', 'bg-emerald-500', 'bg-red-500');
         if (tone === 'success') progressBar.classList.add('bg-emerald-500');
@@ -3119,17 +3956,81 @@
         else progressBar.classList.add('bg-primary-500');
       }
 
-      function inferProgress(output, status) {
-        const steps = (output.match(/Paso \d+\/5/g) || []).length;
-        const total = numServersForJob * 5;
-        if (status === 'success') return { pct: 100, phase: 'Instalacion completada' };
-        if (status === 'failed') {
-          const p = total > 0 ? Math.min(99, Math.round((steps / total) * 100)) : 50;
-          return { pct: p, phase: 'Error durante la instalacion' };
+      // El progreso ya no se deduce contando "Paso N/5" en el log: viene del
+      // estado persistido, plataforma por plataforma. Con la instalacion en
+      // paralelo el log se intercala y contar pasos dejaba de ser fiable.
+      const PI_TARGET = {
+        pending: ['Pendiente', 'text-slate-400 border-slate-700'],
+        running: ['Instalando', 'text-sky-300 border-sky-700/60'],
+        completed: ['Ok', 'text-emerald-300 border-emerald-700/60'],
+        error: ['Error', 'text-red-300 border-red-700/60'],
+      };
+      const PI_STATUS = { pending: 'En cola', running: 'Instalando', completed: 'Completada',
+                          failed: 'Termino con errores', interrupted: 'Interrumpida' };
+
+      function isPluginActive(status) { return status === 'pending' || status === 'running'; }
+
+      async function renderPluginProgress(job) {
+        const g = id => document.getElementById(id);
+        const active = isPluginActive(job.status);
+        g('pi-count').textContent = `${job.done_count || 0} / ${job.total || 0}`;
+        g('pi-ok').textContent = job.completed_count || 0;
+        g('pi-err').textContent = job.error_count || 0;
+        g('pi-running').textContent = job.running_count || 0;
+        g('pi-percent').textContent = (job.progress || 0) + '%';
+        setProgress(job.progress || 0, '', job.status === 'completed' ? 'success'
+                    : (active ? 'running' : 'error'));
+        g('pi-spinner').classList.toggle('hidden', !active);
+        g('pi-done-icon').classList.toggle('hidden', active);
+
+        let phase = PI_STATUS[job.status] || job.status;
+        if (active) {
+          phase = `${PI_STATUS[job.status]} — hasta ${job.concurrency} plataforma(s) a la vez`;
+        } else if (job.status === 'completed' || job.status === 'failed') {
+          phase = job.message || phase;
+        } else if (job.error) {
+          phase = `${PI_STATUS[job.status]}: ${job.error}`;
         }
-        if (total === 0) return { pct: 5, phase: 'Iniciando...' };
-        const p = Math.min(99, Math.max(5, Math.round((steps / total) * 100)));
-        return { pct: p, phase: steps + '/' + total + ' pasos completados' };
+        if (job.plugin_folder) phase += `  ·  ${job.plugin_folder}`;
+        g('pi-phase').textContent = phase;
+
+        try {
+          const data = await api(`/api/plugin/jobs/${job.id}/targets`);
+          g('pi-targets').innerHTML = data.targets.map(t => {
+            const [lbl, cls] = PI_TARGET[t.status] || [t.status, 'text-slate-400 border-slate-700'];
+            const title = t.error || t.message || '';
+            return `<div class="flex items-center gap-1.5 rounded border ${cls} px-2 py-1 text-[11px] min-w-0" title="${esc(title)}">
+              <span class="shrink-0">${lbl}</span>
+              <span class="text-slate-300 truncate">${esc(t.server_name || '')}</span>
+            </div>`;
+          }).join('');
+        } catch (e) { /* el progreso ya se pinto; el detalle es secundario */ }
+      }
+
+      async function pollPluginProgress(jobId) {
+        try {
+          const job = await api(`/api/plugin/jobs/${jobId}`);
+          await renderPluginProgress(job);
+          return job;
+        } catch (e) { return null; }
+      }
+
+      async function loadCurrentPluginJob() {
+        try {
+          const res = await api('/api/plugin/jobs/current');
+          const job = res.job;
+          if (!job) return;
+          currentJobId = job.id;
+          statusBar.classList.remove('hidden');
+          await renderPluginProgress(job);
+          if (isPluginActive(job.status)) {
+            installBtn.disabled = true;
+            installBtn.textContent = 'Instalando...';
+            outputEl.classList.remove('hidden');
+            await pollJob(currentJobId);
+            pollTimer = setInterval(() => pollJob(currentJobId), 2500);
+          }
+        } catch (e) { console.error('No se pudo consultar la instalacion actual:', e); }
       }
 
       function renderResults(results) {
@@ -3155,24 +4056,17 @@
 
       async function pollJob(jobId) {
         try {
+          // Dos consultas con proposito distinto: el log crudo (en memoria del
+          // proceso) y el progreso estructurado (persistido en la base).
           const data = await api('/api/jobs/' + jobId);
-          const output = data.output || '(sin salida aun)';
-          outputEl.textContent = output;
+          outputEl.textContent = data.output || '(sin salida aun)';
           outputEl.scrollTop = outputEl.scrollHeight;
-          const inf = inferProgress(output, data.status);
-          if (data.status === 'queued' || data.status === 'running') {
-            setProgress(inf.pct, inf.phase, 'running');
-            return;
-          }
+          await pollPluginProgress(jobId);
+          if (data.status === 'queued' || data.status === 'running') return;
           clearInterval(pollTimer);
           pollTimer = null;
           installBtn.disabled = false;
           installBtn.textContent = 'Instalar plugin';
-          if (data.status === 'success') {
-            setProgress(100, 'Instalacion completada', 'success');
-          } else {
-            setProgress(inf.pct, inf.phase, 'error');
-          }
           if (data.results) renderResults(data.results);
           updateInstallBtn();
         } catch (err) {
@@ -3201,7 +4095,6 @@
         resultsList.innerHTML = '';
         setProgress(2, 'Enviando archivo...', 'running');
 
-        numServersForJob = selectedIndexes.size;
 
         const formData = new FormData();
         formData.append('plugin_zip', selectedFile);
@@ -3226,7 +4119,7 @@
           currentJobId = data.job_id;
           setProgress(5, 'Job encolado', 'running');
           await pollJob(currentJobId);
-          pollTimer = setInterval(() => pollJob(currentJobId), 1500);
+          pollTimer = setInterval(() => pollJob(currentJobId), 2500);
         } catch (err) {
           installBtn.disabled = false;
           installBtn.textContent = 'Instalar plugin';
@@ -3240,6 +4133,9 @@
         if (loaded) return;
         loaded = true;
         await Promise.all([loadTypes(), loadServers()]);
+        // La instalacion vive en el servidor: al entrar se pregunta si hay una
+        // en curso y se vuelve a mostrar su progreso.
+        loadCurrentPluginJob();
       };
     })();
 
@@ -3249,9 +4145,9 @@
       let axBatchData = null;
       let axCurrentJobId = null;
       let axPollInterval = null;
+      let axSelectedCourseId = null;
       let axCurrentBatchId = null;
       let axBatchPollInterval = null;
-      let axSelectedCourseId = null;
 
       const $ = id => document.getElementById(id);
 
@@ -3333,7 +4229,7 @@
         btn.addEventListener('click', () => switchAxTab(btn.dataset.axTab));
       });
 
-      // --- Batch Upload ---
+      // --- Carga masiva ---
       const dropZone = $('ax-drop-zone');
       const fileInput = $('ax-file-input');
 
@@ -3369,12 +4265,17 @@
         axBatchData = null;
         axCurrentBatchId = null;
         if (axBatchPollInterval) { clearInterval(axBatchPollInterval); axBatchPollInterval = null; }
+        axDetailState.open = false;
+        $('ax-bp-detail').classList.add('hidden');
+        $('ax-bp-detail-btn').textContent = 'Ver detalle';
         $('ax-batch-results').classList.add('hidden');
         $('ax-upload-section').classList.remove('hidden');
         $('ax-batch-progress-card').classList.add('hidden');
+        $('ax-btn-batch-export').disabled = false;
       }
 
       $('ax-btn-reset').addEventListener('click', resetAxUpload);
+      $('ax-bp-new-btn').addEventListener('click', resetAxUpload);
 
       function renderAxBatchResults() {
         $('ax-upload-section').classList.add('hidden');
@@ -3471,66 +4372,204 @@
       // --- Batch Export ---
       $('ax-btn-batch-export').addEventListener('click', async function () {
         const selected = axBatchData.exportable.filter(r => r._selected);
-        if (!selected.length) { toaster.show('Seleccione al menos una fila', 'warning'); return; }
+        if (!selected.length) { toaster.show('Selecciona al menos una fila', 'warning'); return; }
         this.disabled = true;
         const rows = selected.map(r => ({ form_data: r.form_data, shortname_alexia: r.shortname_alexia, category_path: r.category_path }));
-        selected.forEach(r => { r._status = 'pending'; r._statusLabel = 'Pendiente'; });
-        renderAxTable($('ax-table-filter').value);
-        $('ax-batch-progress-card').classList.remove('hidden');
-        $('ax-batch-steps').innerHTML = '';
-        $('ax-batch-progress-bar').style.width = '0%';
-        $('ax-batch-progress-pct').textContent = '0%';
         try {
+          // El servidor acusa recibo (202) y sigue trabajando en su propio hilo.
+          // A partir de aca el navegador solo consulta progreso: puede cerrarse,
+          // recargarse o irse a otra seccion sin afectar al lote.
           const data = await api('/api/alexia/export-batch', { method: 'POST', body: JSON.stringify({ rows }) });
           if (data.error) { toaster.show(data.error, 'error'); this.disabled = false; return; }
-          axCurrentBatchId = data.batch_id;
-          pollAxBatch();
-        } catch (e) { toaster.show('Error iniciando batch: ' + e.message, 'error'); this.disabled = false; }
+          toaster.show(`Lote recibido: ${data.total} cursos. Corre en el servidor, podes cerrar esta pagina.`, 'success');
+          attachToBatch(data.batch_id);
+        } catch (e) {
+          // 409: ya hay un lote corriendo. El mensaje del backend dice cual.
+          toaster.show(e.message || 'Error iniciando el lote', 'error');
+          this.disabled = false;
+          loadCurrentBatch();
+        }
       });
+
+      // --- Progreso del lote (consulta liviana) ----------------------------
+      // El poll pide solo contadores y estado: unos cientos de bytes. Antes
+      // devolvia las 700 filas y el front redibujaba la tabla entera cada 2s,
+      // que es lo que dejaba la maquina sin recursos.
+      const BATCH_POLL_MS = 3000;
+
+      function attachToBatch(batchId) {
+        axCurrentBatchId = batchId;
+        // La tabla de seleccion ya cumplio su funcion: de aca en adelante el
+        // estado de cada fila lo tiene el servidor, y se consulta en el detalle
+        // paginado. Dejarla visible mostraria 700 filas congeladas en
+        // "Pendiente", que es peor que no mostrarlas.
+        $('ax-batch-results').classList.add('hidden');
+        $('ax-upload-section').classList.add('hidden');
+        $('ax-batch-progress-card').classList.remove('hidden');
+        $('ax-batch-steps').innerHTML = '';
+        pollAxBatch();
+      }
 
       function pollAxBatch() {
         if (!axCurrentBatchId) return;
         if (axBatchPollInterval) clearInterval(axBatchPollInterval);
-        axBatchPollInterval = setInterval(async () => {
+        const tick = async () => {
           try {
-            const job = await api(`/api/alexia/jobs/batch/${axCurrentBatchId}`);
+            const job = await api(`/api/alexia/batches/${axCurrentBatchId}`);
             renderAxBatchProgress(job);
-            if (job.status === 'completed' || job.status === 'failed') {
+            if (!isBatchActive(job.status)) {
               clearInterval(axBatchPollInterval);
               axBatchPollInterval = null;
               $('ax-btn-batch-export').disabled = false;
+              if (axDetailState.open) loadBatchRows(0);
             }
           } catch (e) { console.error('Batch poll error:', e); }
-        }, 2000);
+        };
+        tick();
+        axBatchPollInterval = setInterval(tick, BATCH_POLL_MS);
       }
 
+      function isBatchActive(status) {
+        return status === 'pending' || status === 'running';
+      }
+
+      const BATCH_STATUS_LABEL = {
+        pending: 'En cola',
+        running: 'Replicando',
+        completed: 'Completado',
+        failed: 'Fallo',
+        interrupted: 'Interrumpido',
+      };
+
       function renderAxBatchProgress(job) {
-        $('ax-batch-progress-bar').style.width = job.progress + '%';
-        $('ax-batch-progress-pct').textContent = job.progress + '%';
+        const done = job.done_count || 0;
+        const total = job.total || 0;
+        const active = isBatchActive(job.status);
+        $('ax-bp-count').textContent = `${done} / ${total}`;
         $('ax-bp-completed').textContent = job.completed_count || 0;
         $('ax-bp-errors').textContent = job.error_count || 0;
-        $('ax-bp-pending').textContent = (job.total - (job.completed_count || 0) - (job.error_count || 0));
+        $('ax-bp-pending').textContent = job.pending_count != null ? job.pending_count : Math.max(total - done, 0);
+        $('ax-batch-progress-bar').style.width = (job.progress || 0) + '%';
+        $('ax-batch-progress-pct').textContent = (job.progress || 0) + '%';
+        $('ax-bp-spinner').classList.toggle('hidden', !active);
+        $('ax-bp-done-icon').classList.toggle('hidden', active);
+        $('ax-bp-new-btn').classList.toggle('hidden', active);
+
+        let label = BATCH_STATUS_LABEL[job.status] || job.status;
+        if (active && job.current_shortname) label += `: ${job.current_shortname}`;
+        if (job.status === 'completed') {
+          label = `Completado — ${job.completed_count || 0} replicados, ${job.error_count || 0} con error`;
+        } else if (job.status === 'failed' || job.status === 'interrupted') {
+          label = `${BATCH_STATUS_LABEL[job.status]}${job.error ? ': ' + job.error : ''}`;
+        }
+        $('ax-bp-label').textContent = label;
+
         const stepsEl = $('ax-batch-steps');
-        stepsEl.innerHTML = (job.steps || []).slice(-8).map(s =>
-          `<div class="text-xs text-slate-400 flex items-center gap-1.5"><span class="text-primary-500">&rsaquo;</span> ${escapeHtml(s.message)}</div>`
-        ).join('');
-        stepsEl.scrollTop = stepsEl.scrollHeight;
-        if (job.rows && axBatchData) {
-          const selected = axBatchData.exportable.filter(r => r._selected);
-          const labels = { pending:'Pendiente', searching:'Buscando...', backing_up:'Backup...', restoring:'Restaurando...', completed:'Completado', error:'Error' };
-          job.rows.forEach((jr, i) => {
-            if (i < selected.length) {
-              selected[i]._status = jr.status;
-              selected[i]._statusLabel = labels[jr.status] || jr.status;
-              if (jr.error) selected[i]._error = jr.error;
-              if (jr.result) selected[i]._result = jr.result;
-            }
-          });
-          renderAxTable($('ax-table-filter').value);
+        const steps = job.steps || [];
+        if (steps.length) {
+          stepsEl.innerHTML = steps.map(st =>
+            `<div class="text-xs text-slate-400 flex items-start gap-1.5"><span class="text-primary-500">&rsaquo;</span> ${escapeHtml(st.message)}</div>`
+          ).join('');
+          stepsEl.scrollTop = stepsEl.scrollHeight;
+        } else if (!job.live && active) {
+          // Estado "running" en la base pero sin job en memoria: el proceso se
+          // reinicio y todavia no lo retomo, o lo esta retomando.
+          stepsEl.innerHTML = '<div class="text-xs text-amber-400">El proceso del servidor se reinicio; el lote se reanuda solo desde la ultima fila pendiente.</div>';
         }
       }
 
-      // --- Single Export ---
+      // --- Al entrar: volver a engancharse al lote que este corriendo -------
+      async function loadCurrentBatch() {
+        try {
+          const res = await api('/api/alexia/batches/current');
+          const job = res.batch;
+          if (!job) return;
+          axCurrentBatchId = job.id;
+          $('ax-batch-progress-card').classList.remove('hidden');
+          renderAxBatchProgress(job);
+          if (isBatchActive(job.status)) {
+            // Con un lote corriendo no se puede lanzar otro (el backend
+            // responde 409), asi que la zona de subida se oculta en vez de
+            // invitar a intentarlo.
+            $('ax-upload-section').classList.add('hidden');
+            $('ax-batch-results').classList.add('hidden');
+            $('ax-btn-batch-export').disabled = true;
+            pollAxBatch();
+          }
+        } catch (e) { console.error('No se pudo consultar el lote actual:', e); }
+      }
+
+      // --- Detalle fila por fila, paginado y bajo demanda ------------------
+      const axDetailState = { open: false, offset: 0, limit: 50, status: '', matched: 0 };
+      const AX_ROW_STATUS = {
+        pending: ['Pendiente', 'text-slate-400 border-slate-700'],
+        searching: ['Buscando', 'text-sky-300 border-sky-700/60'],
+        backing_up: ['Backup', 'text-sky-300 border-sky-700/60'],
+        restoring: ['Restaurando', 'text-sky-300 border-sky-700/60'],
+        completed: ['Completado', 'text-emerald-300 border-emerald-700/60'],
+        error: ['Error', 'text-red-300 border-red-700/60'],
+      };
+
+      $('ax-bp-detail-btn').addEventListener('click', () => {
+        axDetailState.open = !axDetailState.open;
+        $('ax-bp-detail').classList.toggle('hidden', !axDetailState.open);
+        $('ax-bp-detail-btn').textContent = axDetailState.open ? 'Ocultar detalle' : 'Ver detalle';
+        if (axDetailState.open) loadBatchRows(0);
+      });
+
+      document.querySelectorAll('.ax-rows-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+          axDetailState.status = btn.dataset.axRowsFilter || '';
+          document.querySelectorAll('.ax-rows-filter').forEach(b => {
+            const on = (b.dataset.axRowsFilter || '') === axDetailState.status;
+            b.classList.toggle('bg-slate-800', on);
+            b.classList.toggle('text-white', on);
+          });
+          loadBatchRows(0);
+        });
+      });
+
+      $('ax-bp-detail-prev').addEventListener('click', () => loadBatchRows(Math.max(axDetailState.offset - axDetailState.limit, 0)));
+      $('ax-bp-detail-next').addEventListener('click', () => loadBatchRows(axDetailState.offset + axDetailState.limit));
+
+      async function loadBatchRows(offset) {
+        if (!axCurrentBatchId) return;
+        const listEl = $('ax-bp-detail-list');
+        listEl.innerHTML = '<div class="text-xs text-slate-500 py-3 text-center">Cargando...</div>';
+        try {
+          const qs = new URLSearchParams({ offset: offset, limit: axDetailState.limit });
+          if (axDetailState.status) qs.set('status', axDetailState.status);
+          const data = await api(`/api/alexia/batches/${axCurrentBatchId}/rows?${qs}`);
+          axDetailState.offset = data.offset;
+          axDetailState.matched = data.matched;
+          if (!data.rows.length) {
+            listEl.innerHTML = '<div class="text-xs text-slate-500 py-3 text-center">Sin filas para este filtro.</div>';
+          } else {
+            listEl.innerHTML = data.rows.map(r => {
+              const [label, cls] = AX_ROW_STATUS[r.status] || [r.status, 'text-slate-400 border-slate-700'];
+              const detail = r.error || r.message || '';
+              const link = r.result && r.result.course_url
+                ? ` <a href="${escapeHtml(r.result.course_url)}" target="_blank" rel="noopener noreferrer" class="text-primary-400 hover:text-primary-300 underline">abrir</a>`
+                : '';
+              return `<div class="flex items-start gap-2 text-[11px] py-1 border-b border-slate-800/40 last:border-0">
+                <span class="text-slate-600 tabular-nums w-10 shrink-0 text-right">${r.index + 1}</span>
+                <span class="px-1.5 py-0.5 rounded-full border ${cls} shrink-0">${label}</span>
+                <code class="text-primary-300 shrink-0">${escapeHtml(r.shortname_alexia || '')}</code>
+                <span class="text-slate-400 min-w-0">${escapeHtml(detail)}${link}</span>
+              </div>`;
+            }).join('');
+          }
+          const from = data.matched ? data.offset + 1 : 0;
+          const to = Math.min(data.offset + data.limit, data.matched);
+          $('ax-bp-detail-range').textContent = `${from}-${to} de ${data.matched}`;
+          $('ax-bp-detail-prev').disabled = data.offset <= 0;
+          $('ax-bp-detail-next').disabled = data.offset + data.limit >= data.matched;
+        } catch (e) {
+          listEl.innerHTML = `<div class="text-xs text-red-300 py-3 text-center">${escapeHtml(e.message || 'Error cargando el detalle')}</div>`;
+        }
+      }
+
+      // --- Importacion individual ---------------------------------
       $('ax-search-btn').addEventListener('click', searchAxCourses);
       $('ax-search-input').addEventListener('keydown', e => { if (e.key === 'Enter') searchAxCourses(); });
 
@@ -3577,6 +4616,8 @@
 
       function updateAxTree() {
         const ejercicio = $('ax-f-ejercicio').value.trim();
+        const categoriaEjercicio = $('ax-f-categoria-ejercicio').value.trim();
+        const ejercicioCategoria = categoriaEjercicio || ejercicio;
         const idCentro = $('ax-f-id-centro').value.trim();
         const reducido = $('ax-f-reducido-grupo').value.trim();
         const especialidad = $('ax-f-especialidad').value.trim();
@@ -3592,7 +4633,7 @@
         }
         const tree = $('ax-tree-preview');
         const levels = [
-          { label: 'Ejercicio', value: ejercicio },
+          { label: 'Ejercicio', value: ejercicioCategoria },
           { label: 'ID Centro', value: idCentro },
           { label: 'Modalidad', value: modalidad },
           { label: 'Especialidad', value: especialidad },
@@ -3625,14 +4666,15 @@
         tree.innerHTML = html;
       }
 
-      ['ax-f-ejercicio', 'ax-f-id-centro', 'ax-f-especialidad', 'ax-f-pertenece-curso', 'ax-f-codigo-oficial', 'ax-f-reducido-grupo'].forEach(id => {
+      ['ax-f-ejercicio', 'ax-f-categoria-ejercicio', 'ax-f-id-centro', 'ax-f-especialidad', 'ax-f-pertenece-curso', 'ax-f-codigo-oficial', 'ax-f-reducido-grupo'].forEach(id => {
         $(id).addEventListener('input', updateAxTree);
       });
 
       $('ax-btn-export').addEventListener('click', async function () {
-        if (!axSelectedCourseId) { toaster.show('Seleccione un curso de Catalejo primero', 'warning'); return; }
+        if (!axSelectedCourseId) { toaster.show('Selecciona un curso de Catalejo primero', 'warning'); return; }
         const fields = {
           ejercicio: $('ax-f-ejercicio').value.trim(),
+          categoria_ejercicio: $('ax-f-categoria-ejercicio').value.trim(),
           id_centro: $('ax-f-id-centro').value.trim(),
           nombre_centro: $('ax-f-nombre-centro').value.trim(),
           especialidad: $('ax-f-especialidad').value.trim(),
@@ -3696,7 +4738,7 @@
           resultEl.innerHTML = `<div class="bg-slate-800 border border-emerald-600/40 rounded-lg p-4">
             <div class="flex items-center gap-2 mb-2">
               <svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-              <span class="text-emerald-300 font-semibold text-sm">Curso exportado exitosamente</span>
+              <span class="text-emerald-300 font-semibold text-sm">Curso importado correctamente</span>
             </div>
             <div class="text-xs text-slate-300 space-y-1">
               <p><strong class="text-slate-100">Curso:</strong> ${escapeHtml(job.result.course_fullname)}</p>
@@ -3708,7 +4750,7 @@
           resultEl.innerHTML = `<div class="bg-slate-800 border border-red-600/40 rounded-lg p-4">
             <div class="flex items-center gap-2 mb-1">
               <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
-              <span class="text-red-400 font-semibold text-sm">Error en la exportacion</span>
+              <span class="text-red-400 font-semibold text-sm">Error en la importacion</span>
             </div>
             <p class="text-xs text-red-300 mt-1">${escapeHtml(job.error)}</p></div>`;
         }
@@ -3721,6 +4763,10 @@
         switchAxTab('batch');
         await loadAxConfig();
         updateAxTree();
+        // El lote vive en el servidor: al entrar se pregunta si hay uno en
+        // curso y se vuelve a mostrar su progreso. Asi el estado sobrevive a
+        // recargar el navegador o cambiar de seccion.
+        loadCurrentBatch();
       };
     })();
 

@@ -7,10 +7,15 @@ responsible for turning these into responses.
 from __future__ import annotations
 
 import json
+import re
 import tempfile
+import threading
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+import db
+import platform_check
 from course_copier import (
     INVENTORY_FILE,
     copy_course_between_servers,
@@ -67,6 +72,44 @@ def _as_bool(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "si", "sí", "on"}
 
 
+def _server_capabilities(server: dict[str, Any]) -> dict[str, Any]:
+    """Qué módulos puede usar esta plataforma, y qué le falta si no puede.
+
+    Se deriva de los campos del inventario en vez de guardarse como flags
+    aparte: una entrada a la que le falta 'vhost_path' *no puede* servir de
+    origen al clonador de instancias, y guardar un booleano suelto que diga lo
+    contrario solo mueve el error a la mitad del job.
+
+    Instalación de plugins y clonación de cursos comparten requisitos porque
+    ambos hablan por paramiko contra 'moodle_path' con 'web_user' (paramiko
+    acepta llave *o* contraseña). El clonador de instancias es más exigente:
+    autentica con ``ssh -o BatchMode=yes -i <clave>``, así que 'ssh_password'
+    no le sirve, y además necesita 'moodledata_path' y 'vhost_path' para
+    copiar los archivos y el vhost de Nginx.
+    """
+    def missing_of(fields: tuple[str, ...]) -> list[str]:
+        return [f for f in fields if not str(server.get(f) or "").strip()]
+
+    ssh_any = missing_of(("host", "ssh_user"))
+    if not (server.get("ssh_key_path") or server.get("ssh_password")):
+        ssh_any.append("ssh_key_path o ssh_password")
+
+    moodle_ssh = ssh_any + missing_of(("moodle_path", "web_user"))
+    platform = (
+        missing_of(("host", "ssh_user", "ssh_key_path"))
+        + missing_of(("moodle_path", "moodledata_path", "vhost_path"))
+    )
+
+    def cap(missing: list[str]) -> dict[str, Any]:
+        return {"ok": not missing, "missing": missing}
+
+    return {
+        "plugin_install": cap(list(moodle_ssh)),
+        "course_clone": cap(list(moodle_ssh)),
+        "platform_clone": cap(platform),
+    }
+
+
 def _public_server(server: dict[str, Any], index: int) -> dict[str, Any]:
     if server.get("ssh_key_path"):
         auth_method = "Llave SSH"
@@ -77,6 +120,7 @@ def _public_server(server: dict[str, Any], index: int) -> dict[str, Any]:
     return {
         "index": index,
         "name": server["name"],
+        "url": str(server.get("url") or "").strip(),
         "host": server["host"],
         "port": int(server.get("port", 22)),
         "ssh_user": server["ssh_user"],
@@ -87,6 +131,8 @@ def _public_server(server: dict[str, Any], index: int) -> dict[str, Any]:
         "web_group": server.get("web_group") or server["web_user"],
         "sudo_requires_password": bool(server.get("sudo_requires_password", False)),
         "auth_method": auth_method,
+        "has_ssh_key": bool(server.get("ssh_key_path")),
+        "capabilities": _server_capabilities(server),
     }
 
 
@@ -133,6 +179,13 @@ def _server_from_payload(
         return value
 
     name = read_text("name", required=True)
+    url = read_text("url").rstrip("/")
+    if url and not re.fullmatch(r"https?://[^\s/]+(/[^\s]*)?", url):
+        raise CourseRouteError(
+            400,
+            "La URL de la plataforma debe empezar con http:// o https:// "
+            "(por ejemplo https://ejemplo.awakelab.world).",
+        )
     host = read_text("host", required=True)
     ssh_user = read_text("ssh_user", required=True)
     moodle_path = read_text("moodle_path", required=True).rstrip("/")
@@ -151,6 +204,7 @@ def _server_from_payload(
 
     server = {
         "name": name,
+        "url": url,
         "host": host,
         "port": port,
         "ssh_user": ssh_user,
@@ -284,6 +338,16 @@ def admin_update_server(server_index: int, payload: dict[str, Any]) -> dict[str,
     }
 
 
+def admin_verify_server(server_index: int) -> dict[str, Any]:
+    """Verifica una sola plataforma. La UI llama a este endpoint una vez por
+    plataforma y resuelve varias en paralelo, en vez de un unico request que
+    verifique las 35: asi cada resultado aparece en cuanto esta listo y ningun
+    request queda colgado detras del servidor mas lento."""
+    servers = _load_servers()
+    server = _select_server(servers, server_index)
+    return platform_check.verify_server(server, server_index)
+
+
 def admin_delete_server(server_index: int) -> dict[str, Any]:
     servers = _load_servers()
     if len(servers) <= 1:
@@ -381,8 +445,11 @@ def _coerce_category_ids(
     return out
 
 
-def copy_course(payload: dict[str, Any]) -> dict[str, Any]:
-    """Run a course copy from source to one or more destinations.
+def plan_copy(payload: dict[str, Any]) -> dict[str, Any]:
+    """Valida el payload y resuelve origen y destinos. No ejecuta nada.
+
+    Se separo de la ejecucion para que el request pueda validar y responder
+    enseguida, y la copia corra en un hilo aparte.
 
     Expected JSON body:
         source_index: int
@@ -460,21 +527,196 @@ def copy_course(payload: dict[str, Any]) -> dict[str, Any]:
             d["destination_category_id"] = category_ids[idx]
         destination_servers.append(d)
 
-    with tempfile.TemporaryDirectory(prefix="moodle_course_transfer_") as tmp_dir:
-        source_result, results = copy_course_between_servers(
-            source_server=source_server,
-            destination_servers=destination_servers,
-            course_id=course_id,
-            local_work_dir=Path(tmp_dir),
-        )
-
     return {
         "course_id": course_id,
-        "source": _serialize_result(source_result),
-        "summary": {
-            "total": len(results),
-            "success": sum(1 for r in results if r.success),
-            "failed": sum(1 for r in results if not r.success),
-        },
-        "results": [_serialize_result(r) for r in results],
+        "source_server": source_server,
+        "destination_servers": destination_servers,
     }
+
+
+# --- Copia de curso como job en background ------------------------------
+# Antes esto corria dentro del request: la copia hace backup + SFTP + restore
+# por destino, tarda minutos, y el navegador tenia que quedarse esperando con
+# un "no cierres esta pagina". Mas alla de la incomodidad, cualquier proxy con
+# un read timeout por debajo de la duracion real corta la respuesta mientras el
+# trabajo sigue, y el usuario nunca se enteraba de como termino.
+
+_copy_jobs: dict[str, dict[str, Any]] = {}
+_copy_jobs_lock = threading.Lock()
+
+
+def _copy_job_event(job_id: str, total: int):
+    """Traductor de eventos de course_copier a filas en la base."""
+    def handler(name: str, data: dict[str, Any]) -> None:
+        try:
+            if name == "backup_start":
+                db.course_copy_set_status(
+                    job_id, "running", stage="backup",
+                    message=f"Generando backup del curso {data.get('course_id')} en {data.get('source')}",
+                )
+            elif name == "backup_done":
+                if data.get("success"):
+                    db.course_copy_set_status(
+                        job_id, "running", stage="restore",
+                        message=f"Backup listo. Restaurando en {total} destino(s).",
+                    )
+            elif name == "target_start":
+                db.course_copy_update_target(
+                    job_id, data["index"], "running", message="Restaurando...",
+                )
+            elif name == "target_done":
+                result = data["result"]
+                payload = None
+                if result.success:
+                    payload = {
+                        "course_id": result.data.get("course_id"),
+                        "course_url": result.data.get("course_url"),
+                        "category_id": result.data.get("category_id"),
+                        "category_name": result.data.get("category_name"),
+                    }
+                db.course_copy_update_target(
+                    job_id, data["index"],
+                    "completed" if result.success else "error",
+                    message="Restaurado" if result.success else None,
+                    result=payload,
+                    error=(result.error_detail or None) if not result.success else None,
+                )
+        except Exception as exc:  # noqa: BLE001 - reportar no debe matar la copia
+            print(f"[cc] no se pudo persistir el evento {name} de {job_id}: {exc}", flush=True)
+    return handler
+
+
+def _run_copy_job(job_id: str, plan: dict[str, Any]) -> None:
+    course_id = plan["course_id"]
+    source_server = plan["source_server"]
+    destination_servers = plan["destination_servers"]
+    on_event = _copy_job_event(job_id, len(destination_servers))
+    try:
+        with tempfile.TemporaryDirectory(prefix="moodle_course_transfer_") as tmp_dir:
+            source_result, results = copy_course_between_servers(
+                source_server=source_server,
+                destination_servers=destination_servers,
+                course_id=course_id,
+                local_work_dir=Path(tmp_dir),
+                on_event=on_event,
+            )
+        with _copy_jobs_lock:
+            entry = _copy_jobs.get(job_id)
+            if entry is not None:
+                entry["source"] = _serialize_result(source_result)
+                entry["results"] = [_serialize_result(r) for r in results]
+        if not source_result.success:
+            db.course_copy_set_status(
+                job_id, "failed", stage="backup",
+                message="El backup del curso origen fallo; no se toco ningun destino.",
+                error=source_result.error_detail or "El backup fallo.",
+                finished=True,
+            )
+            return
+        ok = sum(1 for r in results if r.success)
+        db.course_copy_set_status(
+            job_id, "completed", stage="done",
+            message=f"{ok} de {len(results)} destino(s) restaurados.",
+            finished=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        db.course_copy_set_status(
+            job_id, "failed", stage="error", error=str(exc), finished=True,
+        )
+
+
+def start_copy(payload: dict[str, Any], started_by: Optional[str] = None) -> dict[str, Any]:
+    """Valida, registra el job y devuelve enseguida. La copia sigue en un hilo."""
+    active = db.course_copy_latest(active_only=True)
+    if active:
+        raise CourseRouteError(
+            409,
+            f"Ya hay una copia en curso ({active['done_count']}/{active['total']} destinos, "
+            f"curso {active['course_id']}). Espera a que termine antes de lanzar otra.",
+        )
+
+    plan = plan_copy(payload)
+    destinations = plan["destination_servers"]
+    job_id = uuid.uuid4().hex[:12]
+    db.course_copy_create(
+        job_id,
+        course_id=plan["course_id"],
+        source_name=str(plan["source_server"].get("name") or ""),
+        targets=[
+            {
+                "server_index": None,
+                "server_name": str(d.get("name") or ""),
+                "server_host": str(d.get("host") or ""),
+            }
+            for d in destinations
+        ],
+        started_by=started_by,
+    )
+    with _copy_jobs_lock:
+        _copy_jobs[job_id] = {"id": job_id, "source": None, "results": None}
+    threading.Thread(target=_run_copy_job, args=(job_id, plan), daemon=True).start()
+    return {
+        "job_id": job_id,
+        "course_id": plan["course_id"],
+        "total": len(destinations),
+        "status": "pending",
+    }
+
+
+def get_copy_job(job_id: str) -> Optional[dict[str, Any]]:
+    progress = db.course_copy_progress(job_id)
+    if progress is None:
+        return None
+    with _copy_jobs_lock:
+        entry = _copy_jobs.get(job_id)
+    progress["live"] = entry is not None
+    # Los logs por comando solo existen en memoria y son enormes: se entregan
+    # aparte, no en la consulta de progreso.
+    progress["has_detail"] = bool(entry and entry.get("results"))
+    return progress
+
+
+def get_latest_copy_job() -> Optional[dict[str, Any]]:
+    progress = db.course_copy_latest()
+    return get_copy_job(progress["id"]) if progress else None
+
+
+def get_copy_targets(job_id: str) -> dict[str, Any]:
+    if db.course_copy_progress(job_id) is None:
+        raise CourseRouteError(404, "Copia no encontrada.")
+    return {"job_id": job_id, "targets": db.course_copy_targets(job_id)}
+
+
+def get_copy_logs(job_id: str) -> dict[str, Any]:
+    """Resultado completo con los logs de comandos, si el job sigue en memoria."""
+    with _copy_jobs_lock:
+        entry = _copy_jobs.get(job_id)
+    if not entry or not entry.get("results"):
+        raise CourseRouteError(
+            404,
+            "No hay logs en memoria para esta copia (el proceso se reinicio, o "
+            "la copia todavia no termino). El resumen por destino sigue disponible.",
+        )
+    return {"job_id": job_id, "source": entry["source"], "results": entry["results"]}
+
+
+def mark_interrupted_copy_jobs() -> list[str]:
+    """Cierra las copias que quedaron a medias por un reinicio del proceso.
+
+    A diferencia de los lotes de Alexia, aca NO se reanuda: el .mbz del backup
+    vive en un TemporaryDirectory local que desaparece con el proceso, asi que
+    no hay nada desde donde continuar. Se marcan y hay que relanzarlas.
+    """
+    try:
+        stale = db.course_copy_unfinished()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[cc] no se pudieron revisar copias a medias: {exc}", flush=True)
+        return []
+    for job_id in stale:
+        db.course_copy_set_status(
+            job_id, "interrupted",
+            error="El proceso del servidor se reinicio durante la copia. "
+                  "El backup temporal se perdio: hay que relanzarla.",
+            finished=True,
+        )
+    return stale
