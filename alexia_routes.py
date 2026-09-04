@@ -1284,7 +1284,7 @@ def upload_excel(file_data: bytes) -> dict:
             os.remove(temp_path)
 
 
-def start_batch(rows: list) -> dict:
+def start_batch(rows: list, started_by: Optional[str] = None) -> dict:
     if not rows:
         raise AlexiaRouteError(400, "No hay filas para exportar")
     batch_id = uuid.uuid4().hex[:12]
