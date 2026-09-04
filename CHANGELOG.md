@@ -5,6 +5,15 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.25.0 - 2026-09-04
+
+Nuevo campo opcional "Categoría Ejercicio" en el clonador Alexia.
+
+- **Nueva columna Excel `CategoriaEjercicio`** (opcional): si la celda tiene valor, se usa como primer nivel de la ruta de categorías en Moodle en lugar del campo Ejercicio. Si está vacía, se sigue usando Ejercicio como antes.
+- **El shortname (nombre corto) no cambia**: siempre usa el campo Ejercicio original, independientemente de si CategoriaEjercicio está lleno.
+- **Nuevo campo en el formulario individual**: "Cat. Ejercicio" aparece después de Ejercicio; es opcional. El árbol de categorías refleja el override en tiempo real.
+- Sin cambios de deploy necesarios.
+
 ## v0.24.0 - 2026-08-31
 
 El Replicador de plugins instala en varias plataformas a la vez (tope configurable, 8 por defecto) y gana progreso persistido plataforma por plataforma.

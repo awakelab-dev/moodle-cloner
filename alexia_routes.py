@@ -568,8 +568,10 @@ def _derive_modalidad(reducido_grupo):
 
 def _build_category_path(form_data):
     modalidad = _derive_modalidad(form_data.get("reducido_grupo", ""))
+    cat_ejercicio = str(form_data.get("categoria_ejercicio", "")).strip()
+    ejercicio_val = cat_ejercicio if cat_ejercicio else str(form_data.get("ejercicio", "")).strip()
     return [
-        str(form_data.get("ejercicio", "")).strip(),
+        ejercicio_val,
         str(form_data.get("id_centro", "")).strip(),
         modalidad,
         str(form_data.get("especialidad", "")).strip(),
@@ -1064,6 +1066,7 @@ def _parse_excel(file_path: str) -> Tuple[list, list]:
         reducido = cell("Reducido  Grupo(seccion)")
         id_centro = cell("IdCentro")
         ejercicio = cell("Ejercicio")
+        categoria_ejercicio = cell("CategoriaEjercicio")
         especialidad = cell("Especialidad")
         pertenece_curso = cell("PerteneceCurso")
 
@@ -1071,6 +1074,7 @@ def _parse_excel(file_path: str) -> Tuple[list, list]:
             "nombre_centro": cell("Nombre Centro"),
             "id_centro": id_centro,
             "ejercicio": ejercicio,
+            "categoria_ejercicio": categoria_ejercicio,
             "reducido_grupo": reducido,
             "estudio": cell("Estudio"),
             "mat1": cell("Mat1"),
@@ -1214,6 +1218,7 @@ def upload_excel(file_data: bytes) -> dict:
                 "nombre_centro": fd.get("nombre_centro", ""),
                 "id_centro": fd.get("id_centro", ""),
                 "ejercicio": fd.get("ejercicio", ""),
+                "categoria_ejercicio": fd.get("categoria_ejercicio", ""),
                 "reducido_grupo": fd.get("reducido_grupo", ""),
                 "estudio": fd.get("estudio", ""),
                 "codigo_oficial": fd.get("codigo_oficial", ""),

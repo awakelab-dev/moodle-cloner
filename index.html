@@ -464,6 +464,7 @@
                   <div id="cc-pg-bar" class="h-2.5 rounded-full bg-primary-600 transition-all duration-500" style="width:0%"></div>
                 </div>
                 <div id="cc-pg-targets" class="mt-3 space-y-1"></div>
+                <div id="cc-pg-urls" class="hidden mt-4 rounded-lg border border-primary-600/30 bg-primary-900/10 p-3"></div>
               </div>
 
               <div id="cc-message" class="hidden rounded-lg border px-3 py-2 text-xs"></div>
@@ -901,6 +902,7 @@
                     </h2>
                     <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div><label class="block text-[11px] text-slate-400 mb-0.5">Ejercicio *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-ejercicio" placeholder="2026"></div>
+                      <div><label class="block text-[11px] text-slate-400 mb-0.5">Cat. Ejercicio</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-categoria-ejercicio" placeholder="Opcional, sobreescribe ejercicio en categoría"></div>
                       <div><label class="block text-[11px] text-slate-400 mb-0.5">ID Centro *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-id-centro" placeholder="5545"></div>
                       <div><label class="block text-[11px] text-slate-400 mb-0.5">Nombre Centro</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-nombre-centro" placeholder="Nombre del centro"></div>
                       <div class="md:col-span-2"><label class="block text-[11px] text-slate-400 mb-0.5">Especialidad *</label><input class="w-full rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500" id="ax-f-especialidad" placeholder="(SYMA33) Coordinacion en emergencias"></div>
@@ -2794,8 +2796,9 @@
         g('cc-pg-label').textContent = label;
 
         // Los destinos son pocos (hasta 35): se traen completos, sin paginar.
+        let data = null;
         try {
-          const data = await api(`/api/cc/copy-jobs/${job.id}/targets`);
+          data = await api(`/api/cc/copy-jobs/${job.id}/targets`);
           g('cc-pg-targets').innerHTML = data.targets.map(t => {
             const [lbl, cls] = CC_TARGET[t.status] || [t.status, 'text-slate-400 border-slate-700'];
             const detail = t.error || t.message || '';
@@ -2809,12 +2812,67 @@
             </div>`;
           }).join('');
         } catch (e) { /* el progreso ya se pinto; el detalle es secundario */ }
+
+        // --- Bloque de URLs de cursos creados ---
+        const urlsEl = g('cc-pg-urls');
+        if (!active && data && data.targets) {
+          const successTargets = data.targets.filter(t => t.result && t.result.course_url);
+          if (successTargets.length > 0) {
+            const allUrls = successTargets.map(t => t.result.course_url).join('\n');
+            const urlRows = successTargets.map((t, i) => {
+              const url = t.result.course_url;
+              return `<div class="flex items-center gap-2 py-1.5 ${i < successTargets.length - 1 ? 'border-b border-slate-700/50' : ''}">
+                <svg class="w-4 h-4 text-primary-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                <span class="text-xs text-slate-200 font-medium shrink-0">${escapeHtml(t.server_name || '')}</span>
+                <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"
+                   class="text-xs text-primary-400 hover:text-primary-300 underline break-all min-w-0">${escapeHtml(url)}</a>
+                <button type="button" data-copy-url="${escapeHtml(url)}"
+                   class="cc-copy-single-url ml-auto text-[10px] px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:bg-slate-700 shrink-0 transition-colors">Copiar</button>
+              </div>`;
+            }).join('');
+            urlsEl.innerHTML = `
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-xs font-semibold text-primary-300 uppercase tracking-wide flex items-center gap-1.5">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                  URLs de cursos creados (${successTargets.length})
+                </h4>
+                <button type="button" id="cc-pg-copy-all-urls" class="text-[10px] px-2.5 py-1 rounded-lg border border-primary-600/50 text-primary-300 hover:bg-primary-800/30 transition-colors">
+                  Copiar todas
+                </button>
+              </div>
+              <div>${urlRows}</div>
+            `;
+            urlsEl.classList.remove('hidden');
+            // Copiar URL individual
+            urlsEl.querySelectorAll('.cc-copy-single-url').forEach(btn => {
+              btn.addEventListener('click', function() {
+                const url = this.getAttribute('data-copy-url');
+                navigator.clipboard.writeText(url).then(() => {
+                  this.textContent = 'Copiado!';
+                  setTimeout(() => this.textContent = 'Copiar', 1500);
+                });
+              });
+            });
+            // Copiar todas las URLs
+            document.getElementById('cc-pg-copy-all-urls').addEventListener('click', function() {
+              navigator.clipboard.writeText(allUrls).then(() => {
+                this.textContent = 'Copiadas!';
+                setTimeout(() => this.textContent = 'Copiar todas', 1500);
+              });
+            });
+          } else {
+            urlsEl.classList.add('hidden');
+          }
+        } else {
+          urlsEl.classList.add('hidden');
+        }
       }
 
       document.getElementById('cc-pg-close-btn').addEventListener('click', () => {
         ccJobId = null;
         if (ccPollTimer) { clearInterval(ccPollTimer); ccPollTimer = null; }
         document.getElementById('cc-progress-card').classList.add('hidden');
+        document.getElementById('cc-pg-urls').classList.add('hidden');
         clearResults();
         setBusy(false);
       });
@@ -4558,6 +4616,8 @@
 
       function updateAxTree() {
         const ejercicio = $('ax-f-ejercicio').value.trim();
+        const categoriaEjercicio = $('ax-f-categoria-ejercicio').value.trim();
+        const ejercicioCategoria = categoriaEjercicio || ejercicio;
         const idCentro = $('ax-f-id-centro').value.trim();
         const reducido = $('ax-f-reducido-grupo').value.trim();
         const especialidad = $('ax-f-especialidad').value.trim();
@@ -4573,7 +4633,7 @@
         }
         const tree = $('ax-tree-preview');
         const levels = [
-          { label: 'Ejercicio', value: ejercicio },
+          { label: 'Ejercicio', value: ejercicioCategoria },
           { label: 'ID Centro', value: idCentro },
           { label: 'Modalidad', value: modalidad },
           { label: 'Especialidad', value: especialidad },
@@ -4606,7 +4666,7 @@
         tree.innerHTML = html;
       }
 
-      ['ax-f-ejercicio', 'ax-f-id-centro', 'ax-f-especialidad', 'ax-f-pertenece-curso', 'ax-f-codigo-oficial', 'ax-f-reducido-grupo'].forEach(id => {
+      ['ax-f-ejercicio', 'ax-f-categoria-ejercicio', 'ax-f-id-centro', 'ax-f-especialidad', 'ax-f-pertenece-curso', 'ax-f-codigo-oficial', 'ax-f-reducido-grupo'].forEach(id => {
         $(id).addEventListener('input', updateAxTree);
       });
 
@@ -4614,6 +4674,7 @@
         if (!axSelectedCourseId) { toaster.show('Selecciona un curso de Catalejo primero', 'warning'); return; }
         const fields = {
           ejercicio: $('ax-f-ejercicio').value.trim(),
+          categoria_ejercicio: $('ax-f-categoria-ejercicio').value.trim(),
           id_centro: $('ax-f-id-centro').value.trim(),
           nombre_centro: $('ax-f-nombre-centro').value.trim(),
           especialidad: $('ax-f-especialidad').value.trim(),
