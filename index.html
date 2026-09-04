@@ -857,6 +857,7 @@
                           <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Especialidad</th>
                           <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Modalidad</th>
                           <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Shortname</th>
+                          <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10">Cat. Ejercicio</th>
                           <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:90px">Estado</th>
                           <th class="px-2.5 py-2 bg-slate-950/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wide sticky top-0 z-10" style="width:36px"></th>
                         </tr>
@@ -4312,13 +4313,14 @@
             <td class="px-2.5 py-1.5 text-xs text-slate-300 max-w-[160px] truncate" title="${escapeHtml(r.especialidad)}">${escapeHtml(r.especialidad)}</td>
             <td class="px-2.5 py-1.5">${modBadge}</td>
             <td class="px-2.5 py-1.5 text-xs max-w-[160px] truncate" title="${escapeHtml(r.shortname_alexia)}"><code class="text-primary-300">${escapeHtml(r.shortname_alexia)}</code></td>
+            <td class="px-2.5 py-1.5 text-xs text-slate-300">${escapeHtml(r.form_data?.categoria_ejercicio || '')}</td>
             <td class="px-2.5 py-1.5"><span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${statusClass}">${statusLabel}</span></td>
             <td class="px-2.5 py-1.5"><button data-ax-tree="${i}" class="ax-tree-btn text-slate-500 hover:text-primary-400" title="Ver arbol">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
             </button></td>
           </tr>`;
         });
-        if (!html) html = '<tr><td colspan="10" class="text-center text-slate-500 py-6 text-xs">No se encontraron filas</td></tr>';
+        if (!html) html = '<tr><td colspan="11" class="text-center text-slate-500 py-6 text-xs">No se encontraron filas</td></tr>';
         tbody.innerHTML = html;
         tbody.querySelectorAll('.ax-row-check').forEach(cb => {
           cb.addEventListener('change', () => {
