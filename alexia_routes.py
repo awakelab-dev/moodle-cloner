@@ -15,8 +15,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import paramiko
 
-import db
-
 try:
     import openpyxl
 except ImportError:
@@ -608,9 +606,10 @@ def _derive_modalidad(reducido_grupo):
 def _build_category_path(form_data):
     modalidad = _derive_modalidad(form_data.get("reducido_grupo", ""))
     cat_ejercicio = str(form_data.get("categoria_ejercicio", "")).strip()
-    ejercicio_val = cat_ejercicio if cat_ejercicio else str(form_data.get("ejercicio", "")).strip()
+    ejercicio = str(form_data.get("ejercicio", "")).strip()
+    primer_nivel = cat_ejercicio if cat_ejercicio else ejercicio
     return [
-        ejercicio_val,
+        primer_nivel,
         str(form_data.get("id_centro", "")).strip(),
         modalidad,
         str(form_data.get("especialidad", "")).strip(),
@@ -870,10 +869,6 @@ def _run_batch_export(job: _ExportBatchJob):
         last_mbz_remote = None
 
         for row_status in job.rows:
-            # Al reanudar un lote cortado, las filas ya resueltas se saltan.
-            if row_status.status in ("completed", "error"):
-                continue
-
             # --- Check cancellation before each row ---
             if job.cancelled:
                 row_status.status = "error"
@@ -1066,14 +1061,7 @@ REQUIRED_FIELDS = [
 
 def _parse_excel(file_path: str) -> Tuple[list, list]:
     if openpyxl is None:
-        # Mensaje accionable: el original decia solo "no esta instalado", que no
-        # dice donde ni como resolverlo. Es una dependencia de sistema, no un bug.
-        raise RuntimeError(
-            "openpyxl no esta instalado en el servidor, asi que no se puede leer el Excel. "
-            "Instalalo con: sudo apt-get install -y python3-openpyxl "
-            "(en Ubuntu 24.04 el pip del sistema esta externally-managed, por eso la via apt). "
-            "Despues reinicia con: pm2 restart moodle-cloner-api"
-        )
+        raise RuntimeError("openpyxl no esta instalado")
 
     wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
     ws = wb.active
@@ -1121,7 +1109,6 @@ def _parse_excel(file_path: str) -> Tuple[list, list]:
         reducido = cell("Reducido  Grupo(seccion)")
         id_centro = cell("IdCentro")
         ejercicio = cell("Ejercicio")
-        categoria_ejercicio = cell("CategoriaEjercicio")
         especialidad = cell("Especialidad")
         pertenece_curso = cell("PerteneceCurso")
 
@@ -1129,7 +1116,6 @@ def _parse_excel(file_path: str) -> Tuple[list, list]:
             "nombre_centro": cell("Nombre Centro"),
             "id_centro": id_centro,
             "ejercicio": ejercicio,
-            "categoria_ejercicio": categoria_ejercicio,
             "reducido_grupo": reducido,
             "estudio": cell("Estudio"),
             "mat1": cell("Mat1"),
@@ -1139,6 +1125,7 @@ def _parse_excel(file_path: str) -> Tuple[list, list]:
             "modalidad_excel": cell("Modalidad"),
             "especialidad": especialidad,
             "pertenece_curso": pertenece_curso,
+            "categoria_ejercicio": cell("Categoria Ejercicio"),
         }
 
         missing_fields = [f for f in REQUIRED_FIELDS if not form_data.get(f)]
@@ -1273,7 +1260,6 @@ def upload_excel(file_data: bytes) -> dict:
                 "nombre_centro": fd.get("nombre_centro", ""),
                 "id_centro": fd.get("id_centro", ""),
                 "ejercicio": fd.get("ejercicio", ""),
-                "categoria_ejercicio": fd.get("categoria_ejercicio", ""),
                 "reducido_grupo": fd.get("reducido_grupo", ""),
                 "estudio": fd.get("estudio", ""),
                 "codigo_oficial": fd.get("codigo_oficial", ""),
@@ -1298,118 +1284,24 @@ def upload_excel(file_data: bytes) -> dict:
             os.remove(temp_path)
 
 
-# Cada cuantos segundos se vuelca el estado del lote a la base. El lote dura
-# horas, asi que 2s de desfase no se notan, y a cambio el bucle de exportacion
-# no paga una escritura por cada cambio de estado.
-BATCH_PERSIST_INTERVAL = 2.0
-_BATCH_TERMINAL = ("completed", "failed")
-
-
-def _row_signature(row: _BatchRowStatus) -> tuple:
-    return (
-        row.status,
-        row.message,
-        row.error,
-        json.dumps(row.result, sort_keys=True, ensure_ascii=False) if row.result else None,
-    )
-
-
-def _flush_batch(job: "_ExportBatchJob", last: Dict[int, tuple]) -> None:
-    """Vuelca a la base lo que cambio desde el volcado anterior."""
-    dirty = []
-    for row in job.rows:
-        sig = _row_signature(row)
-        if last.get(row.index) != sig:
-            dirty.append(row.to_dict())
-            last[row.index] = sig
-    if dirty:
-        db.alexia_batch_update_rows(job.id, dirty)
-    current = next(
-        (r.shortname_alexia for r in job.rows if r.status not in ("completed", "error")),
-        None,
-    )
-    db.alexia_batch_set_status(
-        job.id,
-        job.status,
-        error=job.error,
-        current_shortname=current,
-        finished=job.status in _BATCH_TERMINAL,
-    )
-
-
-def _persist_batch(job: "_ExportBatchJob") -> None:
-    """Hilo aparte que espeja el job en memoria a la base.
-
-    Se hace asi, y no escribiendo en cada mutacion, para no tener que tocar las
-    ~10 asignaciones de estado repartidas por el bucle de exportacion: cualquiera
-    que se olvidara dejaria el progreso desincronizado en silencio.
-    """
-    last: Dict[int, tuple] = {}
-    while True:
-        terminal = job.status in _BATCH_TERMINAL
-        try:
-            _flush_batch(job, last)
-        except Exception as exc:  # noqa: BLE001 - persistir no debe matar el lote
-            print(f"[alexia] no se pudo persistir el lote {job.id}: {exc}", flush=True)
-        if terminal:
-            return
-        time.sleep(BATCH_PERSIST_INTERVAL)
-
-
-def _launch_batch(job: "_ExportBatchJob") -> None:
-    with _batch_jobs_lock:
-        _batch_jobs[job.id] = job
-    threading.Thread(target=_run_batch_export, args=(job,), daemon=True).start()
-    threading.Thread(target=_persist_batch, args=(job,), daemon=True).start()
-
-
-def start_batch(rows: list, started_by: Optional[str] = None) -> dict:
+def start_batch(rows: list) -> dict:
     if not rows:
         raise AlexiaRouteError(400, "No hay filas para exportar")
-
-    # Un solo lote a la vez: la copia es secuencial a proposito para no saturar
-    # la API de Moodle, y dos lotes en paralelo anularian esa garantia.
-    active = db.alexia_batch_latest(active_only=True)
-    if active:
-        raise AlexiaRouteError(
-            409,
-            f"Ya hay un lote en curso ({active['done_count']}/{active['total']} cursos). "
-            "Espera a que termine antes de lanzar otro.",
-        )
-
     batch_id = uuid.uuid4().hex[:12]
     job = _ExportBatchJob(batch_id, rows)
-    db.alexia_batch_create(batch_id, rows, started_by)
-    _launch_batch(job)
-    return {"batch_id": batch_id, "total": len(rows), "status": "pending"}
+    with _batch_jobs_lock:
+        _batch_jobs[batch_id] = job
+    t = threading.Thread(target=_run_batch_export, args=(job,), daemon=True)
+    t.start()
+    return {"batch_id": batch_id}
 
 
 def get_batch_job(batch_id: str) -> Optional[dict]:
-    """Progreso del lote, leido de la base.
-
-    La base es la fuente de verdad: sobrevive al reinicio del proceso y no
-    depende de que el navegador conserve el batch_id. Del job en memoria solo se
-    agrega la cola del log, que es informativa.
-    """
-    progress = db.alexia_batch_progress(batch_id)
-    if progress is None:
-        return None
     with _batch_jobs_lock:
         job = _batch_jobs.get(batch_id)
-    progress["steps"] = job.steps[-8:] if job is not None else []
-    progress["live"] = job is not None
-    return progress
-
-
-def get_latest_batch() -> Optional[dict]:
-    """El lote en curso, o el ultimo que corrio. Con esto el navegador vuelve a
-    engancharse al progreso despues de recargarse, sin recordar ningun id."""
-    progress = db.alexia_batch_latest()
-    if progress is None:
+    if not job:
         return None
-    return get_batch_job(progress["id"])
-
-
+    return job.to_dict()
 
 
 def cancel_batch(batch_id: str) -> Optional[dict]:
@@ -1428,59 +1320,3 @@ def list_batch_jobs() -> list:
     with _batch_jobs_lock:
         jobs = list(_batch_jobs.values())
     return [j.to_dict() for j in sorted(jobs, key=lambda j: j.id, reverse=True)]
-
-
-
-def get_batch_rows(batch_id: str, offset: int = 0, limit: int = 50,
-                   status: Optional[str] = None) -> dict:
-    if db.alexia_batch_progress(batch_id) is None:
-        raise AlexiaRouteError(404, "Lote no encontrado")
-    return db.alexia_batch_rows(batch_id, offset=offset, limit=limit, status=status)
-
-
-def resume_unfinished_batches() -> List[str]:
-    """Retoma un lote que quedo a medias por un reinicio del proceso.
-
-    Los hilos son daemon: cuando pm2 reinicia la app, el lote muere donde
-    estaba y su estado queda "running" en la base. Se reanuda el mas antiguo
-    desde la primera fila pendiente; si hubiera mas de uno a medias, los otros
-    se marcan "interrupted" para no romper la regla de un lote a la vez.
-    """
-    try:
-        pending_ids = db.alexia_batches_unfinished()
-    except Exception as exc:  # noqa: BLE001 - el arranque no debe caerse por esto
-        print(f"[alexia] no se pudieron buscar lotes a medias: {exc}", flush=True)
-        return []
-
-    resumed: List[str] = []
-    for position, batch_id in enumerate(pending_ids):
-        if position > 0:
-            db.alexia_batch_set_status(
-                batch_id, "interrupted",
-                error="Interrumpido por un reinicio; habia otro lote reanudandose.",
-                finished=True,
-            )
-            continue
-        saved = db.alexia_batch_pending_rows(batch_id)
-        if not saved:
-            db.alexia_batch_set_status(batch_id, "interrupted", finished=True)
-            continue
-        if all(r["status"] in ("completed", "error") for r in saved):
-            db.alexia_batch_set_status(batch_id, "completed", finished=True)
-            continue
-        job = _ExportBatchJob(batch_id, saved)
-        for row, saved_row in zip(job.rows, saved):
-            # Lo que quedo a medio camino (searching/backing_up/restoring) vuelve
-            # a "pending" para reintentarse: no se sabe hasta donde llego.
-            row.status = saved_row["status"] if saved_row["status"] in ("completed", "error") else "pending"
-        job.update_progress()
-        # El mensaje se arma ANTES de lanzar el hilo: si no, el worker ya avanzo
-        # una fila y el numero reportado no es el estado con el que se retomo.
-        print(
-            f"[alexia] reanudando lote {batch_id}: "
-            f"{job.completed_count + job.error_count}/{job.total} ya procesados",
-            flush=True,
-        )
-        _launch_batch(job)
-        resumed.append(batch_id)
-    return resumed
