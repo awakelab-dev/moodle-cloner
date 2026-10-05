@@ -643,6 +643,9 @@
                   <!-- Una tarjetita por plataforma. Son hasta 35 y varias pueden
                        estar "en curso" al mismo tiempo: la instalacion es paralela. -->
                   <div id="pi-targets" class="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5"></div>
+                  <!-- El motivo de cada fallo, a la vista: antes solo estaba en
+                       el tooltip de la tarjetita y la UI decia solo "Error". -->
+                  <div id="pi-target-errors" class="mt-3 space-y-2"></div>
                 </div>
                 <pre id="pi-output" class="hidden mt-3 bg-slate-950/80 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 max-h-80 overflow-auto font-mono whitespace-pre-wrap"></pre>
               </section>
@@ -3999,12 +4002,15 @@
           const data = await api(`/api/plugin/jobs/${job.id}/targets`);
           g('pi-targets').innerHTML = data.targets.map(t => {
             const [lbl, cls] = PI_TARGET[t.status] || [t.status, 'text-slate-400 border-slate-700'];
-            const title = t.error || t.message || '';
+            const title = (t.error || t.message || '').split('\n')[0];
             return `<div class="flex items-center gap-1.5 rounded border ${cls} px-2 py-1 text-[11px] min-w-0" title="${esc(title)}">
               <span class="shrink-0">${lbl}</span>
               <span class="text-slate-300 truncate">${esc(t.server_name || '')}</span>
             </div>`;
           }).join('');
+          g('pi-target-errors').innerHTML = data.targets
+            .filter(t => t.status === 'error')
+            .map(t => errorDetailBlock(t.server_name, t.error)).join('');
         } catch (e) { /* el progreso ya se pinto; el detalle es secundario */ }
       }
 
@@ -4034,6 +4040,31 @@
         } catch (e) { console.error('No se pudo consultar la instalacion actual:', e); }
       }
 
+      // Primera linea = que paso, en palabras; el resto (comando y salida del
+      // servidor) va plegado para quien tenga que diagnosticarlo.
+      function errorLines(text) {
+        const lines = String(text || '').trim().split('\n');
+        const head = lines[0] || 'Fallo sin detalle: revisa el log del trabajo.';
+        const rest = lines.slice(1).join('\n').trim();
+        return { head, rest };
+      }
+
+      function errorDetailsHtml(rest) {
+        return rest
+          ? `<details class="mt-1"><summary class="text-[11px] text-slate-400 cursor-pointer select-none">Ver detalle tecnico</summary>
+              <pre class="mt-1 bg-slate-950/80 border border-slate-800 rounded p-2 text-[11px] text-slate-300 max-h-60 overflow-auto font-mono whitespace-pre-wrap">${esc(rest)}</pre>
+            </details>`
+          : '';
+      }
+
+      function errorDetailBlock(serverName, text) {
+        const { head, rest } = errorLines(text);
+        return `<div class="rounded-lg border border-red-600/40 bg-red-500/10 px-3 py-2 min-w-0">
+          <p class="text-xs text-red-200 break-words"><strong>${esc(serverName || '')}:</strong> ${esc(head)}</p>
+          ${errorDetailsHtml(rest)}
+        </div>`;
+      }
+
       function renderResults(results) {
         if (!results || !results.length) return;
         resultsEl.classList.remove('hidden');
@@ -4042,9 +4073,10 @@
           const icon = r.success
             ? '<span class="text-emerald-400 text-lg mr-2">&#10003;</span>'
             : '<span class="text-red-400 text-lg mr-2">&#10007;</span>';
-          const detail = r.error_detail
-            ? `<p class="text-xs text-red-300 mt-1 break-words">${esc(r.error_detail.split('\n')[0])}</p>`
-            : '';
+          const { head, rest } = errorLines(r.error_detail);
+          const detail = r.success
+            ? ''
+            : `<p class="text-xs text-red-300 mt-1 break-words">${esc(head)}</p>${errorDetailsHtml(rest)}`;
           return `<div class="border ${color} rounded-lg px-4 py-3 flex items-start">
             ${icon}
             <div class="min-w-0">

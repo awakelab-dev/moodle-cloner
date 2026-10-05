@@ -577,18 +577,24 @@ def run_plugin_job(
             )
             results_by_index[index] = plugin_routes.serialize_result(result)
             status_icon = "OK" if result.success else "ERROR"
-            first_line = result.error_detail.split(chr(10))[0] if result.error_detail else ""
+            detail = (result.error_detail or "").strip()
+            if not result.success and not detail:
+                detail = "Fallo sin detalle: revisa el log del trabajo."
+            first_line = detail.split(chr(10))[0] if detail else ""
             append_job_output(
                 job_id,
                 f"  {result.server_name}: {status_icon}"
                 + (f" - {first_line}" if first_line else "")
-                + "\n",
+                + "\n"
+                + ("".join(f"    {ln}\n" for ln in detail.split(chr(10))[1:]) if not result.success else ""),
             )
+            # Se guarda el detalle completo, no solo la primera linea: la UI
+            # ensena la primera y deja desplegar el resto.
             _set_target(
                 index,
                 "completed" if result.success else "error",
                 message="Instalado" if result.success else None,
-                error=first_line or None if not result.success else None,
+                error=detail[:8000] if not result.success else None,
             )
 
         with ThreadPoolExecutor(max_workers=concurrency) as executor:

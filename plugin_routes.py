@@ -118,20 +118,64 @@ def _q(value: str) -> str:
 
 # --- ZIP helpers ---------------------------------------------------------
 
-def detect_plugin_folder_name(zip_path: Path) -> str:
+_PLUGIN_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def plugin_root_in_zip(zip_path: Path) -> str:
+    """Carpeta del ZIP que contiene el version.php del plugin.
+
+    Devuelve el nombre de la carpeta envolvente, o `""` si el ZIP trae los
+    archivos sueltos en la raiz. Esto ultimo es lo que tumbo plataforma-ibecon
+    el 2026-10-05: se descomprimia directo en `blocks/` y los archivos del
+    plugin pisaban los del core (`blocks/edit_form.php`, `blocks/classes/...`).
+    """
+    top_level_items: set[str] = set()
+    root_version = False
     try:
         with zipfile.ZipFile(zip_path, "r") as archive:
-            top_level_items: set[str] = set()
             for member in archive.namelist():
-                clean = member.lstrip("/").strip()
+                clean = _normalize_zip_member_name(member)
                 if not clean or clean.startswith("__MACOSX/"):
                     continue
                 top_level_items.add(clean.split("/", 1)[0])
-            if len(top_level_items) == 1:
-                return top_level_items.pop()
+                if clean.lower() == "version.php":
+                    root_version = True
     except zipfile.BadZipFile as exc:
         raise ValueError("El archivo no es un ZIP valido.") from exc
-    return zip_path.stem
+    if root_version:
+        return ""
+    if len(top_level_items) == 1:
+        return next(iter(top_level_items))
+    raise ValueError(
+        "El ZIP no tiene una unica carpeta de plugin ni un version.php en la raiz."
+    )
+
+
+def detect_plugin_folder_name(zip_path: Path) -> str:
+    """Nombre de la carpeta del plugin dentro de su tipo (`blocks/<esto>`).
+
+    Si el ZIP viene envuelto en una carpeta, es esa carpeta. Si trae los archivos
+    sueltos, sale del `$plugin->component` (`block_configurable_reports` ->
+    `configurable_reports`): el nombre del ZIP no sirve, suele ser algo como
+    `moodle-block_configurable_reports-main`.
+    """
+    root = plugin_root_in_zip(zip_path)
+    if root:
+        name = root
+    else:
+        component = read_plugin_component(zip_path)
+        if not component:
+            raise ValueError(
+                "El ZIP trae los archivos sueltos y su version.php no declara "
+                "$plugin->component: no se puede saber el nombre de la carpeta."
+            )
+        name = component.split("_", 1)[1]
+    if not _PLUGIN_NAME_RE.match(name):
+        raise ValueError(
+            f"Nombre de carpeta de plugin no valido: {name!r} "
+            "(solo minusculas, digitos y _, empezando por letra)."
+        )
+    return name
 
 
 _COMPONENT_RE = re.compile(
@@ -379,6 +423,58 @@ def _safe_cleanup(
         cleanup_errors.append(f"{step}: {exc}")
 
 
+# --- Mensajes de error ---------------------------------------------------
+
+# Lo que significa, para quien usa la app, que falle cada paso. Sin esto la UI
+# solo decia "Error Ibecon": el mensaje era la primera linea de stderr, que en
+# `upgrade.php` suele venir vacia (PHP deja el error real al final).
+_STEP_HINTS: Dict[str, str] = {
+    "Paso 1 - Capturar owner/permisos originales":
+        "No se pudo leer la carpeta del tipo de plugin en el servidor "
+        "(revisa la ruta de Moodle de la plataforma)",
+    "Paso 1 - Dar escritura temporal":
+        "No se pudo dar permiso de escritura en la carpeta del tipo de plugin",
+    "Paso 2 - Descomprimir ZIP en temporal":
+        "No se pudo descomprimir el ZIP en el servidor",
+    "Paso 2 - Verificar version.php del plugin":
+        "El ZIP no trae version.php donde se esperaba: no parece un plugin de Moodle",
+    "Paso 2 - Copiar plugin a su carpeta":
+        "No se pudo copiar el plugin a su carpeta",
+    "Paso 3 - Ejecutar upgrade.php":
+        "Los archivos se copiaron pero la actualizacion de Moodle (upgrade.php) fallo. "
+        "Comprueba que la plataforma abre y revisa Administracion > Notificaciones",
+    "Paso 4 - Ejecutar purge_caches.php":
+        "El plugin se instalo pero no se pudieron purgar las caches",
+}
+
+_RELEVANT_LINE_RE = re.compile(
+    r"error|exception|excepci[oó]n|!!!|fatal|denied|denegado|no such|cannot|"
+    r"failed|not found|invalid",
+    re.IGNORECASE,
+)
+
+
+def describe_failure(log: CommandLog) -> str:
+    """Primera linea: que paso, en palabras. Debajo: la salida completa del comando.
+
+    De la salida se elige la ultima linea que parece un error y, si ninguna lo
+    parece, la ultima no vacia: en PHP el mensaje util va al final.
+    """
+    output = "\n".join(t for t in (log.stderr.strip(), log.stdout.strip()) if t)
+    lines = [ln.strip() for ln in output.splitlines() if ln.strip()]
+    hint = _STEP_HINTS.get(log.step)
+    relevant = next(
+        (ln for ln in reversed(lines) if _RELEVANT_LINE_RE.search(ln)),
+        lines[-1] if lines else None,
+    )
+    if relevant:
+        headline = f"{hint or log.step}: {relevant[:300]}"
+    else:
+        headline = hint or f"{log.step}: codigo de salida {log.exit_status}"
+    tail = "\n".join(lines[-40:])
+    return f"{headline}\n[{log.step}] $ {log.command}" + (f"\n{tail}" if tail else "")
+
+
 # --- Core install flow ---------------------------------------------------
 
 def install_plugin_on_server(
@@ -404,8 +500,24 @@ def install_plugin_on_server(
     remote_zip = posixpath.join(
         REMOTE_TMP_DIR, f"{uuid.uuid4().hex}_{local_zip_path.name}",
     )
+    staging_dir = posixpath.join(REMOTE_TMP_DIR, f"plugin_stage_{uuid.uuid4().hex}")
     upgrade_script = posixpath.join(moodle_path, "admin", "cli", "upgrade.php")
     purge_script = posixpath.join(moodle_path, "admin", "cli", "purge_caches.php")
+
+    # Nunca se escribe fuera de `<tipo>/<carpeta>`: un nombre vacio, "." o con
+    # barras haria que el plugin cayera encima del directorio del tipo.
+    if (
+        not _PLUGIN_NAME_RE.match(plugin_folder_name)
+        or posixpath.dirname(plugin_target_dir) != target_dir
+    ):
+        result.error_detail = f"Carpeta de plugin no valida: {plugin_folder_name!r}"
+        return result
+    try:
+        zip_root = plugin_root_in_zip(local_zip_path)
+    except ValueError as exc:
+        result.error_detail = str(exc)
+        return result
+    staging_source = posixpath.join(staging_dir, zip_root) if zip_root else staging_dir
 
     ssh: Optional[paramiko.SSHClient] = None
     sftp: Optional[paramiko.SFTPClient] = None
@@ -441,16 +553,31 @@ def install_plugin_on_server(
 
         emit(f"  {result.server_name}: Paso 2/5 (subir ZIP + descomprimir)\n")
         sftp.put(str(local_zip_path), remote_zip)
+        # Se descomprime en un temporal y solo se copia la carpeta del plugin a
+        # `<tipo>/<carpeta>`. Descomprimir directo en `<tipo>/` dejaba caer en
+        # el core cualquier ZIP sin carpeta envolvente.
         _exec(
             result, ssh,
-            step="Paso 2 - Descomprimir ZIP",
-            command=f"sudo unzip -o {_q(remote_zip)} -d {_q(target_dir)}",
+            step="Paso 2 - Descomprimir ZIP en temporal",
+            command=(
+                f"sudo mkdir -p {_q(staging_dir)} && "
+                f"sudo unzip -q -o {_q(remote_zip)} -d {_q(staging_dir)}"
+            ),
             sudo_password=sudo_password,
         )
         _exec(
             result, ssh,
-            step="Paso 2 - Verificar carpeta plugin",
-            command=f"sudo test -d {_q(plugin_target_dir)}",
+            step="Paso 2 - Verificar version.php del plugin",
+            command=f"sudo test -f {_q(posixpath.join(staging_source, 'version.php'))}",
+            sudo_password=sudo_password,
+        )
+        _exec(
+            result, ssh,
+            step="Paso 2 - Copiar plugin a su carpeta",
+            command=(
+                f"sudo mkdir -p {_q(plugin_target_dir)} && "
+                f"sudo cp -a {_q(staging_source + '/.')} {_q(plugin_target_dir + '/')}"
+            ),
             sudo_password=sudo_password,
         )
         _exec(
@@ -491,11 +618,9 @@ def install_plugin_on_server(
         )
 
     except RemoteCommandError as exc:
-        exact_stderr = exc.log.stderr.rstrip("\n")
-        fallback = exc.log.stdout.rstrip("\n")
-        result.error_detail = exact_stderr if exact_stderr else (fallback or str(exc))
+        result.error_detail = describe_failure(exc.log)
     except Exception as exc:
-        result.error_detail = str(exc)
+        result.error_detail = f"Error inesperado: {type(exc).__name__}: {exc}"
     finally:
         if ssh is not None:
             emit(f"  {result.server_name}: Paso 5/5 (restaurar permisos)\n")
@@ -546,6 +671,13 @@ def install_plugin_on_server(
                     sudo_password=sudo_password,
                 )
 
+            _safe_cleanup(
+                result, ssh,
+                step="Paso 5 - Limpiar directorio temporal",
+                command=f"sudo rm -rf {_q(staging_dir)}",
+                cleanup_errors=cleanup_errors,
+                sudo_password=sudo_password,
+            )
             _safe_cleanup(
                 result, ssh,
                 step="Paso 5 - Limpiar ZIP temporal",

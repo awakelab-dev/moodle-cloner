@@ -5,6 +5,26 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.26.0 - 2026-10-05
+
+Fix: el Replicador de plugins ya no puede descomprimir un ZIP encima del core de Moodle, y los fallos se explican en la UI en vez de decir solo "Error <plataforma>".
+
+**Mensajes de error.** El 2026-10-05 hubo tres intentos fallidos en Ibecon: uno guardo `Paso 2 - Verificar carpeta plugin: exit status 1` y los otros dos un error **vacio**, y en la UI el motivo solo estaba en el tooltip de la tarjetita. Causas: el mensaje era la primera linea de stderr (en `upgrade.php` suele ser una linea en blanco: PHP deja el error real al final), se perdia el nombre del paso, y solo se persistia esa primera linea.
+
+- **Nuevo `describe_failure`** en `plugin_routes.py`: la primera linea dice en palabras que fallo (`_STEP_HINTS`, uno por paso) seguido de la linea relevante de la salida (la ultima que parece un error, o la ultima no vacia); debajo van el comando y las ultimas 40 lineas de salida.
+- **Se persiste el detalle completo** en `plugin_install_targets.error` (hasta 8000 caracteres) y se vuelca tambien al log del trabajo.
+- **UI:** bajo las tarjetitas de plataforma aparece un bloque por cada plataforma con error, con el motivo visible y un desplegable "Ver detalle tecnico". La lista de Resultados usa el mismo formato.
+- Un fallo sin ningun detalle muestra "Fallo sin detalle: revisa el log del trabajo." en vez de nada.
+
+**Instalacion segura:**
+
+- **Que paso.** El instalador hacia `unzip -o <zip> -d <moodle>/<tipo>/` y daba por hecho que el ZIP traia una unica carpeta. Un ZIP de `block_configurable_reports` con los archivos sueltos en la raiz se descomprimio directo en `blocks/` de plataforma-ibecon: unos 45 archivos de root sin permiso de lectura para el servidor web y 3 archivos del core pisados (`blocks/edit_form.php`, `blocks/classes/external.php`, `blocks/classes/privacy/provider.php`). La plataforma quedo dando error 500. El paso "Verificar carpeta plugin" fallaba despues de descomprimir y no limpiaba nada.
+- **Ahora se descomprime en un temporal** (`/tmp/plugin_stage_<uuid>`), se comprueba que hay `version.php` y solo se copia la carpeta del plugin a `<tipo>/<carpeta>`. Se mantiene la semantica de sobrescribir sobre una instalacion existente (los archivos locales que no vienen en el ZIP se conservan). El temporal se borra siempre en el paso 5.
+- **ZIP sin carpeta envolvente:** se acepta si trae `version.php` en la raiz, y el nombre de la carpeta sale de `$plugin->component` (`block_configurable_reports` -> `configurable_reports`), no del nombre del ZIP.
+- **ZIP irreconocible** (varias carpetas y sin `version.php` en la raiz): se rechaza al detectar, antes de subir nada.
+- **Guarda en `install_plugin_on_server`:** el nombre de carpeta tiene que cumplir `^[a-z][a-z0-9_]*$`; un nombre vacio, `.` o con barras se rechaza sin conectar.
+- Sin cambios de deploy ni de esquema: `git pull` + `pm2 restart moodle-cloner-api`.
+
 ## v0.25.0 - 2026-09-04
 
 Nuevo campo opcional "Categoría Ejercicio" en el clonador Alexia.
