@@ -5,6 +5,17 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.26.2 - 2026-10-15
+
+Fix: vuelve la persistencia de los lotes de Alexia en MySQL y la reanudacion tras un reinicio, que se habian perdido en v0.25.2.
+
+El commit `f13fc95` (v0.25.2, "Usar Categoria Ejercicio como primer nivel...") reescribio `alexia_routes.py` desde una copia anterior a `a02d1e1` ("Process in background") y borro 178 lineas: el volcado del lote a MySQL, el lote en curso, la reanudacion y la regla de un lote a la vez. Los commits siguientes (`1cc08e2`, `cb49d51`) parchearon `started_by` y `get_batch_rows` en memoria, pero el resto seguia faltando. Sintomas: en cada arranque, `WARNING: no se pudieron reanudar lotes de Alexia: module 'alexia_routes' has no attribute 'resume_unfinished_batches'`; `GET /api/alexia/batches/current` fallaba porque `get_latest_batch` no existia; el progreso solo vivia en memoria y un `pm2 restart` perdia el lote.
+
+- **Restaurado** desde v0.25.1 (`85f70ea`): `_persist_batch` / `_flush_batch` / `_launch_batch`, `get_latest_batch`, `resume_unfinished_batches`, `get_batch_job` y `get_batch_rows` leyendo de MySQL, el 409 si ya hay un lote en curso, el salto de filas ya resueltas al reanudar y el mensaje accionable cuando falta `openpyxl`.
+- **Se conserva lo de v0.25.2:** la cabecera del Excel `Categoria Ejercicio` (con espacio) como primer nivel del arbol de categorias. Ahora se acepta tambien `CategoriaEjercicio` (la forma de v0.25.0), y `categoria_ejercicio` vuelve a la vista previa del Excel.
+- Probado con MariaDB: lote de 10 filas cortado en la 4, reanudado sin repetir filas hasta `completed 10/10`; segundo lote rechazado con 409; Excel con las dos cabeceras.
+- Sin pasos de deploy extra: las tablas `alexia_batches` y `alexia_batch_rows` ya existen desde v0.22.0. `git pull` + `pm2 restart moodle-cloner-api`.
+
 ## v0.26.1 - 2026-10-15
 
 Fix: el clonador de instancias ya reemplaza las URLs en la BD cuando el dominio nuevo es mas largo que el original.
