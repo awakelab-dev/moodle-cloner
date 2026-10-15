@@ -548,7 +548,7 @@ $c = file_get_contents($conf);
 if ($c === false) { fwrite(STDERR, "Cannot read $conf\n"); exit(1); }
 foreach ($map as $k => $v) {
     if ($v === '') continue;
-    $pattern = "~(\\$CFG->" . preg_quote($k, "~") . "\\s*=\\s*)'[^'\\\\]*';~m";
+    $pattern = "~(\\\$CFG->" . preg_quote($k, "~") . "\\s*=\\s*)'[^'\\\\]*';~m";
     $replace = "\$1'".addslashes($v)."';";
     $count = 0;
     $c2 = preg_replace($pattern, $replace, $c, 1, $count);
@@ -719,13 +719,15 @@ else
 fi
 
 if bool_true "$ENABLE_REPLACE"; then
+  # --shorten: sin el, replace.php aborta ("cannotfit") cuando la URL nueva es mas larga
+  # que la original. Solo recorta un valor si tras el reemplazo no cabe en su columna.
   if [[ -n "${SRC_WWWROOT:-}" && "$SRC_WWWROOT" != "$NEW_URL" ]]; then
     log "Replacing URLs in DB: $SRC_WWWROOT -> $NEW_URL ..."
 
     if [[ "$DEPLOY_TARGET" == "local" ]]; then
       pushd "$DEST_DIR" >/dev/null
       set +e
-      sudo -u www-data "$PHP_CLI" admin/tool/replace/cli/replace.php --non-interactive --search="$SRC_WWWROOT" --replace="$NEW_URL"
+      sudo -u www-data "$PHP_CLI" admin/tool/replace/cli/replace.php --non-interactive --shorten --search="$SRC_WWWROOT" --replace="$NEW_URL"
       REPLACE_RC=$?
       set -e
       popd >/dev/null
@@ -734,7 +736,7 @@ if bool_true "$ENABLE_REPLACE"; then
       # remote_sudo_bash (root) needed because $DEST_DIR is chowned to www-data and the
       # source-side perms (often 750) leave the ubuntu SSH user without execute on the dir.
       # We escalate to root for the cd, then drop to www-data for the PHP CLI itself.
-      remote_sudo_bash "cd $(quote_shell "$DEST_DIR") && sudo -u www-data $(quote_shell "$PHP_CLI") admin/tool/replace/cli/replace.php --non-interactive --search=$(quote_shell "$SRC_WWWROOT") --replace=$(quote_shell "$NEW_URL")"
+      remote_sudo_bash "cd $(quote_shell "$DEST_DIR") && sudo -u www-data $(quote_shell "$PHP_CLI") admin/tool/replace/cli/replace.php --non-interactive --shorten --search=$(quote_shell "$SRC_WWWROOT") --replace=$(quote_shell "$NEW_URL")"
       REPLACE_RC=$?
       set -e
     fi

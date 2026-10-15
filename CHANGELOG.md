@@ -5,6 +5,14 @@ Every code iteration must bump the version in `VERSION` and add an entry below.
 
 Format: `YYYY-MM-DD - vX.Y.Z - Short description` followed by a bulleted list.
 
+## v0.26.1 - 2026-10-15
+
+Fix: el clonador de instancias ya reemplaza las URLs en la BD cuando el dominio nuevo es mas largo que el original.
+
+- **`replace.php` con `--shorten`** en las dos llamadas de `moodle-clone-web.sh` (destino local y remoto). Sin el, Moodle aborta con "El reemplazo es mas largo que el original y no se permite el acortamiento" y el sitio clonado queda con enlaces, imagenes y textos apuntando al dominio de origen. Paso el 2026-10-15 al clonar `virtualahkformacion.com` (31 caracteres) a `virtualcamacoesformacion.com` (36); clones anteriores funcionaban porque el dominio nuevo no era mas largo. `--shorten` solo recorta un valor si tras el reemplazo no cabe en su columna.
+- **`config_patch.php` sin avisos `Undefined variable $CFG`.** El patron usaba `"\\$CFG->"` entre comillas dobles y PHP interpolaba `$CFG` (vacio). El reemplazo funcionaba por casualidad (casaba `->wwwroot = '...'`); ahora el patron busca `$CFG->` literal y el log queda limpio.
+- Sin pasos de deploy extra: `git pull` + `pm2 restart moodle-cloner-api`.
+
 ## v0.26.0 - 2026-10-05
 
 Fix: el Replicador de plugins ya no puede descomprimir un ZIP encima del core de Moodle, y los fallos se explican en la UI en vez de decir solo "Error <plataforma>".
